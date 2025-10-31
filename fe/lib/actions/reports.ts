@@ -55,7 +55,15 @@ export async function getMonthlyReport(month: number, year: number) {
     {} as Record<string, { name: string; icon: string; type: string; total: number; count: number }>,
   )
 
-  const categories = Object.values(categoryBreakdown).sort((a, b) => b.total - a.total)
+  const categories = (
+    Object.values(categoryBreakdown) as Array<{
+      name: string
+      icon: string
+      type: string
+      total: number
+      count: number
+    }>
+  ).sort((a, b) => b.total - a.total)
 
   // Group by payment method
   const paymentMethodBreakdown = transactions.reduce(
@@ -78,7 +86,13 @@ export async function getMonthlyReport(month: number, year: number) {
     {} as Record<string, { method: string; total: number; count: number }>,
   )
 
-  const paymentMethods = Object.values(paymentMethodBreakdown).sort((a, b) => b.total - a.total)
+  const paymentMethods = (
+    Object.values(paymentMethodBreakdown) as Array<{
+      method: string
+      total: number
+      count: number
+    }>
+  ).sort((a, b) => b.total - a.total)
 
   // Daily spending trend
   const dailyTrend = transactions.reduce(
@@ -104,7 +118,13 @@ export async function getMonthlyReport(month: number, year: number) {
     {} as Record<string, { date: string; income: number; expenses: number }>,
   )
 
-  const trend = Object.values(dailyTrend).sort((a, b) => a.date.localeCompare(b.date))
+  const trend = (
+    Object.values(dailyTrend) as Array<{
+      date: string
+      income: number
+      expenses: number
+    }>
+  ).sort((a, b) => a.date.localeCompare(b.date))
 
   return {
     income,
