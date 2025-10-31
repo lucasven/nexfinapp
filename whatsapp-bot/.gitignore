@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+auth-state/
+*.log
+.DS_Store
+

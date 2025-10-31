@@ -1,0 +1,13 @@
+# Railway Cron Configuration
+# This file configures scheduled tasks for the WhatsApp bot
+
+jobs:
+  - name: cleanup-parsers
+    schedule: "0 3 * * *"  # Run daily at 3 AM UTC
+    command: npm run cleanup-parsers
+    description: "Daily cleanup of learned patterns - removes duplicates, archives low-usage patterns, and consolidates similar patterns"
+    
+  - name: health-check
+    schedule: "*/30 * * * *"  # Run every 30 minutes
+    command: echo "Bot is running - $(date)"
+    description: "Simple health check to ensure the bot process is alive"

@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["tesseract", "tesseract-data"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
+
