@@ -177,7 +177,7 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
             </div>
             {formData.is_primary && (
               <p className="text-xs text-muted-foreground -mt-3">
-                The primary number is required to generate group invites. Only one number can be primary.
+                Only one number can be primary.
               </p>
             )}
 

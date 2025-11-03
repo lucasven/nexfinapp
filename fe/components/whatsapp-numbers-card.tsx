@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { WhatsAppNumberDialog } from "./whatsapp-number-dialog"
-import { GroupInviteDialog } from "./group-invite-dialog"
 import { getAuthorizedNumbers, deleteAuthorizedNumber } from "@/lib/actions/profile"
 import type { AuthorizedWhatsAppNumber } from "@/lib/types"
-import { PlusIcon, EditIcon, TrashIcon, UsersIcon } from "lucide-react"
+import { EditIcon, TrashIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export function WhatsAppNumbersCard() {
@@ -44,8 +43,6 @@ export function WhatsAppNumbersCard() {
     }
   }
 
-  const primaryNumber = numbers.find((n) => n.is_primary)
-
   return (
     <Card>
       <CardHeader>
@@ -63,7 +60,6 @@ export function WhatsAppNumbersCard() {
         ) : numbers.length === 0 ? (
           <div className="text-center py-8 space-y-4">
             <p className="text-muted-foreground">No WhatsApp numbers added yet.</p>
-            <p className="text-sm text-muted-foreground">Add your primary number to enable group invites.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -95,20 +91,6 @@ export function WhatsAppNumbersCard() {
                 </div>
               </div>
             ))}
-
-            <div className="pt-4 border-t">
-              <GroupInviteDialog primaryNumber={primaryNumber}>
-                <Button variant="outline" className="w-full" disabled={!primaryNumber}>
-                  <UsersIcon className="h-4 w-4 mr-2" />
-                  Generate Group Invite
-                </Button>
-              </GroupInviteDialog>
-              {!primaryNumber && (
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  You need to set a primary WhatsApp number to generate group invites
-                </p>
-              )}
-            </div>
           </div>
         )}
       </CardContent>

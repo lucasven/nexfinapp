@@ -22,22 +22,36 @@ export async function checkAuthorization(whatsappNumber: string): Promise<Author
     const supabase = getSupabaseClient()
 
     // First, try to get from authorized_whatsapp_numbers table
+    console.log('[checkAuthorization] Checking authorization for WhatsApp number:', whatsappNumber)
     const { data: authorizedNumber, error: authError } = await supabase
       .from('authorized_whatsapp_numbers')
-      .select('*, user_profiles!inner(user_id)')
+      .select('*')
       .eq('whatsapp_number', whatsappNumber)
-      .single()
-
-    if (authError || !authorizedNumber) {
+      .maybeSingle() // Use maybeSingle() instead of single() to avoid PGRST116 error
+    
+    console.log('[checkAuthorization] Query result:', { 
+      found: !!authorizedNumber, 
+      error: authError,
+      userId: authorizedNumber?.user_id 
+    })
+    
+    // Check if there was a real error (not just "no rows")
+    if (authError) {
+      console.error('[checkAuthorization] Database error:', authError)
+    }
+    
+    if (!authorizedNumber) {
+      console.log('[checkAuthorization] Number not in authorized list, checking legacy sessions...')
       // If not found in authorized numbers, check if there's a session (backward compatibility)
       const { data: session } = await supabase
         .from('whatsapp_sessions')
         .select('user_id')
         .eq('whatsapp_number', whatsappNumber)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
       if (session) {
+        console.log('[checkAuthorization] Found legacy session for user:', session.user_id)
         // Legacy user - grant full permissions for backward compatibility
         return {
           authorized: true,
@@ -53,15 +67,17 @@ export async function checkAuthorization(whatsappNumber: string): Promise<Author
         }
       }
 
+      console.log('[checkAuthorization] Number not authorized')
       return {
         authorized: false,
         error: 'WhatsApp number not authorized. Please contact the account owner to add your number.',
       }
     }
 
+    console.log('[checkAuthorization] Authorized! User ID:', authorizedNumber.user_id)
     return {
       authorized: true,
-      userId: (authorizedNumber as any).user_profiles?.user_id || authorizedNumber.user_id,
+      userId: authorizedNumber.user_id,
       permissions: authorizedNumber.permissions as AuthorizationResult['permissions'],
     }
   } catch (error) {

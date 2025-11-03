@@ -20,12 +20,16 @@ export async function getProfile(): Promise<UserProfile | null> {
 
   if (error && error.code !== "PGRST116") throw error // PGRST116 = no rows returned
 
+  // Get display name from auth metadata
+  const authDisplayName = user.user_metadata?.display_name
+
   // Create profile if it doesn't exist
   if (!data) {
     const { data: newProfile, error: insertError } = await supabase
       .from("user_profiles")
       .insert({
         user_id: user.id,
+        display_name: authDisplayName || null,
       })
       .select()
       .single()
@@ -34,10 +38,29 @@ export async function getProfile(): Promise<UserProfile | null> {
     return newProfile
   }
 
+  // Sync display name from auth metadata if profile doesn't have one but auth does
+  if (!data.display_name && authDisplayName) {
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from("user_profiles")
+      .update({
+        display_name: authDisplayName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error("Error syncing display name from auth:", updateError)
+      return data
+    }
+    return updatedProfile
+  }
+
   return data
 }
 
-export async function updateProfile(data: { username?: string; display_name?: string }) {
+export async function updateProfile(data: { display_name?: string }) {
   const supabase = await getSupabaseServerClient()
 
   const {
@@ -48,6 +71,7 @@ export async function updateProfile(data: { username?: string; display_name?: st
   // Ensure profile exists
   await getProfile()
 
+  // Update the user_profiles table
   const { data: profile, error } = await supabase
     .from("user_profiles")
     .update({
@@ -59,6 +83,20 @@ export async function updateProfile(data: { username?: string; display_name?: st
     .single()
 
   if (error) throw error
+
+  // Sync display name with Supabase Auth user metadata
+  if (data.display_name !== undefined) {
+    const { error: authError } = await supabase.auth.updateUser({
+      data: {
+        display_name: data.display_name,
+      },
+    })
+
+    if (authError) {
+      console.error("Error syncing display name to auth:", authError)
+      // Don't throw - profile was updated successfully, just log the auth sync issue
+    }
+  }
 
   revalidatePath("/profile")
   return profile

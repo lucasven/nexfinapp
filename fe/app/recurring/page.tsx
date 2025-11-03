@@ -45,7 +45,7 @@ export default async function RecurringPage() {
             <p className="text-muted-foreground mt-1">Manage your monthly recurring expenses and income</p>
           </div>
           <RecurringDialog categories={categories} />
-          <UserMenu userEmail={user?.email} />
+          <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">

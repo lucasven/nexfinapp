@@ -44,7 +44,7 @@ export default async function HomePage() {
               </Link>
             </Button>
             <TransactionDialog categories={categories} />
-            <UserMenu userEmail={user?.email} />
+            <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
           </div>
         </div>
 

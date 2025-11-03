@@ -16,9 +16,10 @@ import Link from "next/link"
 
 interface UserMenuProps {
   userEmail?: string
+  displayName?: string
 }
 
-export function UserMenu({ userEmail }: UserMenuProps) {
+export function UserMenu({ userEmail, displayName }: UserMenuProps) {
   const router = useRouter()
 
   const handleLogout = async () => {
@@ -38,7 +39,7 @@ export function UserMenu({ userEmail }: UserMenuProps) {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">Account</span>
+            <span className="text-sm font-medium">{displayName || "Account"}</span>
             {userEmail && <span className="text-xs text-muted-foreground">{userEmail}</span>}
           </div>
         </DropdownMenuLabel>

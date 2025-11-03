@@ -135,17 +135,38 @@ If the bot is not running or unavailable:
 
 ### Authorization in Bot
 
-The bot checks authorization before executing any command:
+#### Automatic Authentication
+
+When an incoming message is received, the bot automatically authenticates users based on their WhatsApp number:
+
+1. **Auto-Auth Flow**: If the WhatsApp number exists in `authorized_whatsapp_numbers`, the bot automatically creates a session for that user
+2. **Fallback Login**: If the number is not authorized, the user can still log in using email/password with the command: `Login: email@example.com password123`
+3. **Session Management**: Once authenticated (either automatically or via login), sessions last 24 hours
+
+#### Permission Enforcement
+
+The bot enforces granular permissions for each action:
 
 ```typescript
-// Check if WhatsApp number is authorized
+// Check if WhatsApp number is authorized and get permissions
 const auth = await checkAuthorization(whatsappNumber)
 
 // Validate permission for specific action
 if (!hasPermission(auth.permissions, 'add')) {
-  return 'Unauthorized'
+  return 'You do not have permission to add transactions'
 }
 ```
+
+**Permission to Action Mapping:**
+
+- **View Permission**: Show expenses, list transactions, show budgets
+- **Add Permission**: Add expenses/income, add recurring payments, add categories
+- **Edit Permission**: Edit transactions (coming soon)
+- **Delete Permission**: Delete recurring payments
+- **Manage Budgets**: Set/edit budgets
+- **View Reports**: Access financial reports
+
+If a user tries to execute an action they don't have permission for, they'll receive a friendly message in Portuguese explaining they need to contact the account owner.
 
 ## Testing
 
@@ -177,6 +198,20 @@ if (!hasPermission(auth.permissions, 'add')) {
 
 Now both numbers can interact with the bot according to their permissions!
 
+### 4. Test Permission System
+
+1. Add a number with limited permissions (e.g., only "View")
+2. Try to send a command like "Gastei R$50 em comida" from that number
+3. The bot will respond with a permission denied message
+4. Send "Mostrar minhas despesas" - this should work if "View" is enabled
+5. Update the number's permissions in the profile page to test different scenarios
+
+**Testing Tips:**
+- Authorized numbers are automatically authenticated - no login required
+- Each number gets permissions based on their profile settings
+- The bot normalizes phone numbers (removes non-digits) for lookups
+- Permission denied messages are in Portuguese and user-friendly
+
 ## Troubleshooting
 
 ### "Bot service not available"
@@ -195,6 +230,13 @@ Now both numbers can interact with the bot according to their permissions!
 - Check if the WhatsApp number is added in the profile
 - Verify permissions are enabled
 - Check bot logs for authorization errors
+- Ensure the phone number format matches (the bot auto-normalizes to digits-only)
+
+### "Permission denied" errors
+
+- Check the number's permissions in the profile page
+- Verify which permissions are required for the action (see Permission to Action Mapping above)
+- Update permissions and try again - changes take effect immediately
 
 ### Group invite not working
 
