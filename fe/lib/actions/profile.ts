@@ -2,7 +2,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import type { UserProfile, AuthorizedWhatsAppNumber, WhatsAppGroupInvite } from "@/lib/types"
+import type { UserProfile, AuthorizedWhatsAppNumber } from "@/lib/types"
 
 export async function getProfile(): Promise<UserProfile | null> {
   const supabase = await getSupabaseServerClient()
@@ -37,7 +37,7 @@ export async function getProfile(): Promise<UserProfile | null> {
   return data
 }
 
-export async function updateProfile(data: { display_name?: string }) {
+export async function updateProfile(data: { username?: string; display_name?: string }) {
   const supabase = await getSupabaseServerClient()
 
   const {
@@ -179,25 +179,3 @@ export async function deleteAuthorizedNumber(id: string) {
 
   revalidatePath("/profile")
 }
-
-export async function getGroupInvite(): Promise<WhatsAppGroupInvite | null> {
-  const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
-
-  const { data, error } = await supabase
-    .from("whatsapp_group_invites")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return data
-}
-

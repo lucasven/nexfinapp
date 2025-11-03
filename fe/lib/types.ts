@@ -73,6 +73,7 @@ export interface RecurringPayment {
 export interface UserProfile {
   id: string
   user_id: string
+  username: string | null
   display_name: string | null
   created_at: string
   updated_at: string
@@ -92,17 +93,6 @@ export interface AuthorizedWhatsAppNumber {
     can_manage_budgets: boolean
     can_view_reports: boolean
   }
-  created_at: string
-  updated_at: string
-}
-
-export interface WhatsAppGroupInvite {
-  id: string
-  user_id: string
-  group_jid: string | null
-  invite_code: string | null
-  invite_link: string | null
-  is_active: boolean
   created_at: string
   updated_at: string
 }

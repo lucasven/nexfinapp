@@ -15,6 +15,7 @@ export function ProfileSettingsCard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [email, setEmail] = useState<string>("")
+  const [username, setUsername] = useState<string>("")
   const [displayName, setDisplayName] = useState<string>("")
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export function ProfileSettingsCard() {
       try {
         const profileData = await getProfile()
         setProfile(profileData)
+        setUsername(profileData?.username || "")
         setDisplayName(profileData?.display_name || "")
 
         // Get email from auth
@@ -42,7 +44,10 @@ export function ProfileSettingsCard() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const updated = await updateProfile({ display_name: displayName || undefined })
+      const updated = await updateProfile({ 
+        username: username || undefined, 
+        display_name: displayName || undefined 
+      })
       setProfile(updated)
     } catch (error) {
       console.error("Error updating profile:", error)
@@ -81,6 +86,18 @@ export function ProfileSettingsCard() {
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Enter your username"
+          />
+          <p className="text-xs text-muted-foreground">Unique identifier for your account.</p>
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="display-name">Display Name</Label>
           <Input
             id="display-name"
@@ -91,7 +108,7 @@ export function ProfileSettingsCard() {
           />
         </div>
 
-        <Button onClick={handleSave} disabled={saving || displayName === profile?.display_name}>
+        <Button onClick={handleSave} disabled={saving || (username === profile?.username && displayName === profile?.display_name)}>
           {saving ? (
             <>
               <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
