@@ -14,6 +14,7 @@ import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
 import { handleMessage } from './handlers/message-handler'
+import { createUserGroup, processPendingInviteRequests } from './services/group-manager'
 
 dotenv.config()
 
@@ -93,6 +94,15 @@ async function connectToWhatsApp() {
 
   // Save credentials whenever they update
   sock.ev.on('creds.update', saveCreds)
+
+  // Start periodic processing of pending invite requests
+  setInterval(() => {
+    if (sock && sock.user) {
+      processPendingInviteRequests(sock).catch(error => {
+        console.error('Error processing pending invites:', error)
+      })
+    }
+  }, 60000) // Check every minute
 
   // Listen for new messages
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -212,19 +222,76 @@ connectToWhatsApp().catch(error => {
   process.exit(1)
 })
 
-// Health check endpoint (for Railway)
+// HTTP server for health checks and API endpoints
 const http = require('http')
 const PORT = process.env.PORT || 3001
 
-http.createServer((req: any, res: any) => {
+http.createServer(async (req: any, res: any) => {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200)
+    res.end()
+    return
+  }
+
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }))
+  } else if (req.url === '/api/generate-invite' && req.method === 'POST') {
+    // Handle group invite generation
+    let body = ''
+    req.on('data', (chunk: any) => {
+      body += chunk.toString()
+    })
+    
+    req.on('end', async () => {
+      try {
+        if (!sock || !sock.user) {
+          res.writeHead(503, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Bot not connected' }))
+          return
+        }
+
+        const data = JSON.parse(body)
+        const { userId, whatsappNumber } = data
+        
+        if (!userId || !whatsappNumber) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Missing userId or whatsappNumber' }))
+          return
+        }
+
+        const result = await createUserGroup(sock, whatsappNumber, userId)
+        
+        if (result) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({
+            groupJid: result.groupJid,
+            inviteCode: result.inviteCode,
+            inviteLink: result.inviteLink,
+          }))
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Failed to create group' }))
+        }
+      } catch (error) {
+        console.error('Error in generate-invite endpoint:', error)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Internal server error' }))
+      }
+    })
   } else {
     res.writeHead(404)
     res.end()
   }
 }).listen(PORT, () => {
-  console.log(`🏥 Health check server running on port ${PORT}`)
+  console.log(`🏥 HTTP server running on port ${PORT}`)
+  console.log(`   Health check: http://localhost:${PORT}/health`)
+  console.log(`   API endpoint: http://localhost:${PORT}/api/generate-invite`)
 })
 

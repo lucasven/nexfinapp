@@ -10,8 +10,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { LogOutIcon, UserIcon } from "lucide-react"
+import { LogOutIcon, UserIcon, SettingsIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 interface UserMenuProps {
   userEmail?: string
@@ -41,6 +42,13 @@ export function UserMenu({ userEmail }: UserMenuProps) {
             {userEmail && <span className="text-xs text-muted-foreground">{userEmail}</span>}
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/profile">
+            <SettingsIcon className="h-4 w-4 mr-2" />
+            Profile Settings
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOutIcon className="h-4 w-4 mr-2" />

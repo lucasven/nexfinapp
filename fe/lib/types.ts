@@ -69,3 +69,40 @@ export interface RecurringPayment {
   created_at: string
   recurring_transaction?: RecurringTransaction
 }
+
+export interface UserProfile {
+  id: string
+  user_id: string
+  display_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AuthorizedWhatsAppNumber {
+  id: string
+  user_id: string
+  whatsapp_number: string
+  name: string
+  is_primary: boolean
+  permissions: {
+    can_view: boolean
+    can_add: boolean
+    can_edit: boolean
+    can_delete: boolean
+    can_manage_budgets: boolean
+    can_view_reports: boolean
+  }
+  created_at: string
+  updated_at: string
+}
+
+export interface WhatsAppGroupInvite {
+  id: string
+  user_id: string
+  group_jid: string | null
+  invite_code: string | null
+  invite_link: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
