@@ -134,10 +134,13 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       messageText = msg.videoMessage.caption || ''
     }
 
-    // Get sender number
-    const sender = isGroup && message.key.participant
+    // Get sender number (normalize by stripping non-digits)
+    const rawSender = isGroup && message.key.participant
       ? message.key.participant.split('@')[0]
       : from.split('@')[0]
+    
+    // Normalize phone number - keep only digits
+    const sender = rawSender.replace(/\D/g, '')
 
     // Check for image
     const hasImage = !!msg?.imageMessage
@@ -212,11 +215,23 @@ connectToWhatsApp().catch(error => {
   process.exit(1)
 })
 
-// Health check endpoint (for Railway)
+// HTTP server for health checks and API endpoints
 const http = require('http')
 const PORT = process.env.PORT || 3001
 
-http.createServer((req: any, res: any) => {
+http.createServer(async (req: any, res: any) => {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200)
+    res.end()
+    return
+  }
+
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }))
@@ -225,6 +240,7 @@ http.createServer((req: any, res: any) => {
     res.end()
   }
 }).listen(PORT, () => {
-  console.log(`🏥 Health check server running on port ${PORT}`)
+  console.log(`🏥 HTTP server running on port ${PORT}`)
+  console.log(`   Health check: http://localhost:${PORT}/health`)
 })
 

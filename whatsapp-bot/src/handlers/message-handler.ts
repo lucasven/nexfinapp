@@ -1,6 +1,6 @@
 import { MessageContext } from '../types'
 import { parseIntent } from '../nlp/intent-parser'
-import { getUserSession, updateUserActivity } from '../auth/session-manager'
+import { getUserSession, updateUserActivity, createUserSession } from '../auth/session-manager'
 import { handleLogin, handleLogout } from './auth'
 import { handleAddExpense, handleShowExpenses } from './expenses'
 import { handleSetBudget, handleShowBudgets } from './budgets'
@@ -18,6 +18,7 @@ import { storeCorrectionState, getAndClearCorrectionState, hasCorrectionState } 
 import { hasPendingTransaction, handleDuplicateConfirmation, storePendingTransaction } from './duplicate-confirmation'
 import { detectCorrectionIntent } from '../services/correction-detector'
 import { handleTransactionCorrection } from './transaction-corrections'
+import { checkAuthorization, hasPermission } from '../middleware/authorization'
 
 /**
  * Helper function to get category ID from category name
@@ -37,6 +38,29 @@ async function getCategoryId(categoryName: string): Promise<string | null> {
     console.error('Error looking up category ID:', error)
     return null
   }
+}
+
+/**
+ * Helper function to auto-authenticate using authorized WhatsApp numbers
+ * Returns existing session or creates one if the number is authorized
+ */
+async function getOrCreateSession(whatsappNumber: string): Promise<any | null> {
+  // Check for existing session first
+  let session = await getUserSession(whatsappNumber)
+  if (session) {
+    return session
+  }
+
+  // Try auto-authentication via authorized_whatsapp_numbers
+  const authResult = await checkAuthorization(whatsappNumber)
+  if (authResult.authorized && authResult.userId) {
+    console.log(`Auto-authenticating WhatsApp number: ${whatsappNumber}`)
+    await createUserSession(whatsappNumber, authResult.userId)
+    session = await getUserSession(whatsappNumber)
+    return session
+  }
+
+  return null
 }
 
 export async function handleMessage(context: MessageContext): Promise<string | string[] | null> {
@@ -95,8 +119,8 @@ async function handleTextMessage(whatsappNumber: string, message: string): Promi
       return getCommandHelp(command.args[0])
     }
     
-    // Check authentication for other commands
-    const session = await getUserSession(whatsappNumber)
+    // Check authentication for other commands (auto-auth if authorized)
+    const session = await getOrCreateSession(whatsappNumber)
     if (!session) {
       return messages.loginPrompt
     }
@@ -110,8 +134,8 @@ async function handleTextMessage(whatsappNumber: string, message: string): Promi
     }
   }
 
-  // 2. Try learned patterns (requires authentication)
-  const session = await getUserSession(whatsappNumber)
+  // 2. Try learned patterns (requires authentication, auto-auth if authorized)
+  let session = await getOrCreateSession(whatsappNumber)
   if (session) {
     await updateUserActivity(whatsappNumber)
     
@@ -135,9 +159,12 @@ async function handleTextMessage(whatsappNumber: string, message: string): Promi
     return messages.welcome
   }
   
-  // Check authentication for other actions
+  // Check authentication for other actions (auto-auth if authorized)
   if (!session && localResult.action !== 'unknown') {
-    return messages.loginPrompt
+    session = await getOrCreateSession(whatsappNumber)
+    if (!session) {
+      return messages.loginPrompt
+    }
   }
   
   if (session) {
@@ -196,9 +223,78 @@ async function handleTextMessage(whatsappNumber: string, message: string): Promi
 }
 
 /**
+ * Map intent actions to required permissions
+ */
+const ACTION_PERMISSION_MAP: Record<string, 'view' | 'add' | 'edit' | 'delete' | 'manage_budgets' | 'view_reports' | null> = {
+  // View permissions
+  'show_expenses': 'view',
+  'list_transactions': 'view',
+  'show_budget': 'view',
+  'list_budgets': 'view',
+  
+  // Add permissions
+  'add_expense': 'add',
+  'add_income': 'add',
+  'add_recurring': 'add',
+  'add_category': 'add',
+  
+  // Edit permissions (currently no edit actions defined)
+  
+  // Delete permissions
+  'delete_recurring': 'delete',
+  
+  // Budget management
+  'set_budget': 'manage_budgets',
+  
+  // Reports
+  'show_report': 'view_reports',
+  
+  // Actions that don't require special permissions
+  'logout': null,
+  'show_help': null,
+  'list_categories': null,
+}
+
+/**
+ * Get action description in Portuguese for permission denied messages
+ */
+function getActionDescription(action: string): string {
+  const descriptions: Record<string, string> = {
+    'show_expenses': 'visualizar despesas',
+    'list_transactions': 'listar transações',
+    'show_budget': 'visualizar orçamentos',
+    'list_budgets': 'listar orçamentos',
+    'add_expense': 'adicionar despesas',
+    'add_income': 'adicionar receitas',
+    'add_recurring': 'adicionar pagamentos recorrentes',
+    'add_category': 'adicionar categorias',
+    'delete_recurring': 'deletar pagamentos recorrentes',
+    'set_budget': 'gerenciar orçamentos',
+    'show_report': 'visualizar relatórios',
+  }
+  return descriptions[action] || 'realizar esta ação'
+}
+
+/**
  * Execute a parsed intent
  */
 async function executeIntent(whatsappNumber: string, intent: any): Promise<string | string[]> {
+  // Check permissions for this action
+  const requiredPermission = ACTION_PERMISSION_MAP[intent.action]
+  
+  if (requiredPermission) {
+    const authResult = await checkAuthorization(whatsappNumber)
+    
+    if (!authResult.authorized) {
+      return messages.unauthorizedNumber
+    }
+    
+    if (!hasPermission(authResult.permissions, requiredPermission)) {
+      const actionDesc = getActionDescription(intent.action)
+      return messages.permissionDenied(actionDesc)
+    }
+  }
+
   // Handle multiple transactions
   if (intent.entities.transactions && intent.entities.transactions.length > 1) {
     return await handleMultipleTransactions(whatsappNumber, intent.entities.transactions)
@@ -341,7 +437,7 @@ async function handleMultipleTransactions(whatsappNumber: string, transactions: 
  * Handle user correction of AI result
  */
 async function handleUserCorrection(whatsappNumber: string, correctionMessage: string): Promise<string | string[]> {
-  const session = await getUserSession(whatsappNumber)
+  const session = await getOrCreateSession(whatsappNumber)
   if (!session) {
     return messages.loginPrompt
   }
@@ -407,8 +503,8 @@ async function handleImageMessage(
   imageBuffer: Buffer, 
   caption?: string
 ): Promise<string | string[]> {
-  // Check authentication
-  const session = await getUserSession(whatsappNumber)
+  // Check authentication (auto-auth if authorized)
+  const session = await getOrCreateSession(whatsappNumber)
   
   if (!session) {
     return messages.loginPrompt

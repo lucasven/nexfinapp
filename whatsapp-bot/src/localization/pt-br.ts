@@ -40,6 +40,8 @@ Você também pode me enviar fotos de SMS bancários ou extratos!`,
   logoutSuccess: '👋 Você foi desconectado com sucesso!',
   notAuthenticated: '🔒 Você precisa fazer login primeiro. Use:\n"Login: seu-email@example.com sua-senha"',
   sessionExpired: '⏰ Sua sessão expirou. Por favor, faça login novamente.',
+  unauthorizedNumber: '🚫 Este número WhatsApp não está autorizado. Entre em contato com o proprietário da conta para adicionar seu número.',
+  permissionDenied: (action: string) => `🔒 Você não tem permissão para ${action}. Entre em contato com o proprietário da conta para ajustar suas permissões.`,
 
   // Expense messages
   expenseAdded: (amount: number, category: string, date: string) => 
