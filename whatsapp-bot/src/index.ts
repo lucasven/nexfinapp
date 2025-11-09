@@ -221,13 +221,8 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
   }
 }
 
-// Start the bot
-connectToWhatsApp().catch(error => {
-  console.error('Error starting bot:', error)
-  process.exit(1)
-})
-
 // HTTP server for health checks and API endpoints
+// Start this FIRST so Railway health checks pass even if WhatsApp connection fails
 const http = require('http')
 const PORT = process.env.PORT || 3001
 
@@ -254,5 +249,12 @@ http.createServer(async (req: any, res: any) => {
 }).listen(PORT, () => {
   console.log(`🏥 HTTP server running on port ${PORT}`)
   console.log(`   Health check: http://localhost:${PORT}/health`)
+  
+  // Start the WhatsApp bot AFTER the health check server is ready
+  connectToWhatsApp().catch(error => {
+    console.error('⚠️ Error starting WhatsApp bot:', error)
+    console.error('   Health check server is still running')
+    // Don't exit - keep the server running for health checks
+  })
 })
 
