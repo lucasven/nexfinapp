@@ -246,9 +246,9 @@ http.createServer(async (req: any, res: any) => {
     res.writeHead(404)
     res.end()
   }
-}).listen(PORT, () => {
+}).listen(PORT, '0.0.0.0', () => {
   console.log(`🏥 HTTP server running on port ${PORT}`)
-  console.log(`   Health check: http://localhost:${PORT}/health`)
+  console.log(`   Health check: http://0.0.0.0:${PORT}/health`)
   
   // Start the WhatsApp bot AFTER the health check server is ready
   connectToWhatsApp().catch(error => {
