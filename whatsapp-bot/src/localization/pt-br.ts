@@ -1,6 +1,8 @@
-export const messages = {
+import { Messages, FormatHelpers } from './types'
+
+export const messages: Messages = {
   // Welcome and help messages
-  welcome: `👋 Olá! Bem-vindo ao Rastreador de Despesas!
+  welcome: `👋 Olá! Bem-vindo ao NexFinApp!
 
 Sou seu assistente para gerenciar suas finanças. Aqui está o que posso fazer:
 
@@ -28,6 +30,7 @@ Sou seu assistente para gerenciar suas finanças. Aqui está o que posso fazer:
 • "Adicionar categoria Academia"
 
 🔐 *Autenticação*
+• Sua sessão inicia automaticamente pelo número do WhatsApp. Caso precise fazer login manualmente, use:
 • "Login: meuemail@example.com senha123"
 • "Sair"
 
@@ -85,6 +88,7 @@ Você também pode me enviar fotos de SMS bancários ou extratos!`,
 
   // Error messages
   unknownCommand: '❓ Desculpe, não entendi. Digite "ajuda" para ver os comandos disponíveis.',
+  aiLimitExceeded: '⚠️ Você atingiu o limite diário de uso de IA. Use comandos explícitos como: /add 50 comida',
   genericError: '❌ Ocorreu um erro. Por favor, tente novamente.',
   invalidDate: '❌ Data inválida. Use formatos como "hoje", "ontem", "01/12/2024".',
   missingCategory: '❌ Por favor, especifique uma categoria válida.',
@@ -107,6 +111,36 @@ Você também pode me enviar fotos de SMS bancários ou extratos!`,
   correctionInvalidAction: '❌ Tipo de correção não reconhecido. Use "remover", "arrumar" ou "corrigir" seguido do ID da transação.',
   correctionMissingId: '❌ ID da transação não encontrado. Use o ID de 6 caracteres que aparece quando você adiciona uma transação.',
 
+  // NEW: Transaction Management
+  transactionDeleted: (id: string) => `✅ Transação ${id} deletada com sucesso.`,
+  transactionEdited: (id: string, field: string) => `✅ Transação ${id} atualizada: ${field} modificado.`,
+  transactionDetails: (id: string, amount: number, category: string, date: string) => 
+    `📋 Detalhes da transação ${id}:\n\n💵 Valor: R$ ${amount.toFixed(2)}\n📁 Categoria: ${category}\n📅 Data: ${date}`,
+  undoSuccess: '↩️ Ação desfeita com sucesso!',
+  undoNotAvailable: '❌ Não há ações recentes para desfazer.',
+
+  // NEW: Category Management
+  categoryRemoved: (name: string) => `✅ Categoria "${name}" removida com sucesso.`,
+  categoryInUse: (name: string, count: number) => 
+    `⚠️ A categoria "${name}" está sendo usada em ${count} transaç${count === 1 ? 'ão' : 'ões'}. Remova ou reclassifique as transações primeiro.`,
+  categoryNotFound: (name: string) => `❌ Categoria "${name}" não encontrada.`,
+  cannotDeleteDefaultCategory: '❌ Não é possível deletar categorias padrão do sistema.',
+
+  // NEW: Recurring Management
+  recurringEdited: (name: string) => `✅ Pagamento recorrente "${name}" atualizado com sucesso.`,
+  expenseConvertedToRecurring: (id: string, day: number) => 
+    `✅ Transação ${id} convertida em pagamento recorrente para todo dia ${day}.`,
+  recurringNotFound: (name: string) => `❌ Pagamento recorrente "${name}" não encontrado.`,
+
+  // NEW: Budget Management
+  budgetDeleted: (category: string) => `✅ Orçamento da categoria "${category}" removido com sucesso.`,
+  budgetNotFound: (category: string) => `❌ Orçamento para "${category}" não encontrado.`,
+
+  // NEW: Analysis & Search
+  analysisResult: '📊 Análise Financeira:\n\n',
+  quickStatsHeader: (period: string) => `📈 Resumo - ${period}:\n\n`,
+  searchNoResults: '❌ Nenhuma transação encontrada com esses critérios.',
+
   // Confirmation messages
   confirmYes: ['sim', 's', 'yes', 'y', 'confirmar', 'ok'],
   confirmNo: ['não', 'nao', 'n', 'no', 'cancelar'],
@@ -117,6 +151,77 @@ Você também pode me enviar fotos de SMS bancários ou extratos!`,
     yesterday: ['ontem'],
     thisMonth: ['este mês', 'esse mês', 'mês atual'],
     lastMonth: ['mês passado', 'último mês']
+  },
+  
+  // Command help texts
+  commandHelp: {
+    add: `
+/add <valor> <categoria> [data] [descrição] [método_pagamento]
+
+Exemplos:
+/add 50 comida
+/add 30 transporte 15/10
+/add 100 mercado ontem cartão
+/add 25.50 farmácia "compras de remédios" pix
+    `,
+    budget: `
+/budget <categoria> <valor> [período]
+
+Exemplos:
+/budget comida 500
+/budget transporte 200 mês
+/budget lazer 1000 ano
+    `,
+    recurring: `
+/recurring <nome> <valor> dia <dia>
+
+Exemplos:
+/recurring aluguel 1200 dia 5
+/recurring salário 5000 dia 1
+/recurring academia 80 dia 15
+    `,
+    report: `
+/report [período] [categoria]
+
+Exemplos:
+/report
+/report este mês
+/report janeiro 2024
+/report comida
+    `,
+    list: `
+/list [tipo]
+
+Tipos: categories, recurring, budgets, transactions
+
+Exemplos:
+/list
+/list categories
+/list recurring
+    `,
+    categories: `
+/categories [ação] [nome]
+
+Ações: add, remove
+
+Exemplos:
+/categories
+/categories add "casa e decoração"
+/categories remove transporte
+    `,
+    help: `
+Comandos disponíveis:
+
+/add - Adicionar despesa
+/budget - Definir orçamento
+/recurring - Adicionar despesa recorrente
+/report - Ver relatórios
+/list - Listar itens
+/categories - Gerenciar categorias
+/help - Mostrar esta ajuda
+
+Use /help <comando> para detalhes específicos.
+    `
   }
 }
 
@@ -138,5 +243,11 @@ export const getMonthName = (month: number): string => {
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ]
   return months[month - 1] || ''
+}
+
+export const formatHelpers: FormatHelpers = {
+  formatCurrency,
+  formatDate,
+  getMonthName
 }
 

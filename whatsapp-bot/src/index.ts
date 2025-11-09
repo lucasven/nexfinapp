@@ -13,7 +13,7 @@ import pino from 'pino'
 import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
-import { handleMessage } from './handlers/message-handler'
+import { handleMessage } from './handlers/message-handler-v2'
 
 dotenv.config()
 
@@ -134,6 +134,17 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       messageText = msg.videoMessage.caption || ''
     }
 
+    // Extract quoted message if present (for reply context)
+    let quotedMessage: string | undefined
+    if (msg?.extendedTextMessage?.contextInfo?.quotedMessage) {
+      const quoted = msg.extendedTextMessage.contextInfo.quotedMessage
+      if (quoted.conversation) {
+        quotedMessage = quoted.conversation
+      } else if (quoted.extendedTextMessage?.text) {
+        quotedMessage = quoted.extendedTextMessage.text
+      }
+    }
+
     // Get sender number (normalize by stripping non-digits)
     const rawSender = isGroup && message.key.participant
       ? message.key.participant.split('@')[0]
@@ -164,7 +175,8 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       isGroup,
       message: messageText,
       hasImage,
-      imageBuffer
+      imageBuffer,
+      quotedMessage
     })
 
     // Send response if we have one

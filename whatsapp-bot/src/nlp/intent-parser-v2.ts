@@ -1,73 +1,75 @@
-import { ParsedIntent } from '../types'
+/**
+ * Intent Parser V2
+ * Simplified parser that ONLY handles explicit commands (starting with /)
+ * Natural language is handled by LLM in message handler
+ */
 
-export interface Command {
-  type: 'add' | 'budget' | 'recurring' | 'report' | 'list' | 'help' | 'categories'
-  args: string[]
-  raw: string
-}
+import { ParsedIntent } from '../types'
 
 /**
  * Parse explicit commands starting with /
+ * Returns intent with high confidence if valid command, unknown otherwise
  */
-export function parseCommand(message: string): Command | null {
+export function parseIntent(message: string, customDate?: Date): ParsedIntent {
   const trimmed = message.trim()
   
+  // Only handle explicit commands
   if (!trimmed.startsWith('/')) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0,
+      entities: {}
+    }
   }
   
   const parts = trimmed.split(/\s+/)
   const command = parts[0].substring(1).toLowerCase() // Remove the /
   const args = parts.slice(1)
   
-  // Validate command type
-  const validCommands = ['add', 'budget', 'recurring', 'report', 'list', 'help', 'categories']
-  if (!validCommands.includes(command)) {
-    return null
-  }
-  
-  return {
-    type: command as Command['type'],
-    args,
-    raw: message.trimStart() // Remove leading spaces but preserve trailing spaces
-  }
-}
-
-/**
- * Execute a parsed command and return the appropriate intent
- */
-export function executeCommand(command: Command): ParsedIntent | null {
-  switch (command.type) {
+  // Route to appropriate command parser
+  switch (command) {
     case 'add':
-      return parseAddCommand(command.args)
+      return parseAddCommand(args, customDate)
     case 'budget':
-      return parseBudgetCommand(command.args)
+      return parseBudgetCommand(args)
     case 'recurring':
-      return parseRecurringCommand(command.args)
+      return parseRecurringCommand(args)
     case 'report':
-      return parseReportCommand(command.args)
+      return parseReportCommand(args, customDate)
     case 'list':
-      return parseListCommand(command.args)
+      return parseListCommand(args)
     case 'help':
-      return parseHelpCommand(command.args)
+      return parseHelpCommand(args)
     case 'categories':
-      return parseCategoriesCommand(command.args)
+      return parseCategoriesCommand(args)
     default:
-      return null
+      return {
+        action: 'unknown',
+        confidence: 0.3,
+        entities: {}
+      }
   }
 }
 
 /**
  * Parse /add command: /add <valor> <categoria> [data] [descrição] [método_pagamento]
  */
-function parseAddCommand(args: string[]): ParsedIntent | null {
+function parseAddCommand(args: string[], customDate?: Date): ParsedIntent {
   if (args.length < 2) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   const amount = parseAmount(args[0])
   if (amount === null) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   const category = args[1]
@@ -80,10 +82,10 @@ function parseAddCommand(args: string[]): ParsedIntent | null {
     const arg = args[i]
     
     // Check if it's a date (DD/MM/YYYY or DD/MM)
-    if (isDate(arg)) {
-      date = parseDate(arg)
+    if (isDateFormat(arg)) {
+      date = parseDateString(arg, customDate)
     }
-    // Check if it's a payment method (starts with uppercase or contains common payment terms)
+    // Check if it's a payment method
     else if (isPaymentMethod(arg)) {
       paymentMethod = arg
     }
@@ -95,7 +97,7 @@ function parseAddCommand(args: string[]): ParsedIntent | null {
   
   return {
     action: 'add_expense',
-    confidence: 1.0,
+    confidence: 0.95,
     entities: {
       amount,
       category,
@@ -109,16 +111,32 @@ function parseAddCommand(args: string[]): ParsedIntent | null {
 /**
  * Parse /budget command: /budget <categoria> <valor> [mes/ano]
  */
-function parseBudgetCommand(args: string[]): ParsedIntent | null {
+function parseBudgetCommand(args: string[]): ParsedIntent {
+  if (args.length === 0) {
+    return {
+      action: 'show_budget',
+      confidence: 0.95,
+      entities: {}
+    }
+  }
+  
   if (args.length < 2) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   const category = args[0]
   const amount = parseAmount(args[1])
   
   if (amount === null) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   let period: string | undefined
@@ -128,7 +146,7 @@ function parseBudgetCommand(args: string[]): ParsedIntent | null {
   
   return {
     action: 'set_budget',
-    confidence: 1.0,
+    confidence: 0.95,
     entities: {
       category,
       amount,
@@ -140,36 +158,61 @@ function parseBudgetCommand(args: string[]): ParsedIntent | null {
 /**
  * Parse /recurring command: /recurring <nome> <valor> dia <dia>
  */
-function parseRecurringCommand(args: string[]): ParsedIntent | null {
+function parseRecurringCommand(args: string[]): ParsedIntent {
+  if (args.length === 0) {
+    return {
+      action: 'show_recurring',
+      confidence: 0.95,
+      entities: {}
+    }
+  }
+  
   if (args.length < 4) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   const name = args[0]
   const amount = parseAmount(args[1])
   
   if (amount === null) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   // Look for "dia" keyword
   const diaIndex = args.findIndex(arg => arg.toLowerCase() === 'dia')
   if (diaIndex === -1 || diaIndex + 1 >= args.length) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   const day = parseInt(args[diaIndex + 1])
   if (isNaN(day) || day < 1 || day > 31) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   return {
     action: 'add_recurring',
-    confidence: 1.0,
+    confidence: 0.95,
     entities: {
       description: name,
       amount,
-      date: day.toString()
+      date: day.toString(),
+      dayOfMonth: day
     }
   }
 }
@@ -177,7 +220,7 @@ function parseRecurringCommand(args: string[]): ParsedIntent | null {
 /**
  * Parse /report command: /report [mes] [ano] [categoria]
  */
-function parseReportCommand(args: string[]): ParsedIntent | null {
+function parseReportCommand(args: string[], customDate?: Date): ParsedIntent {
   let period: string | undefined
   let category: string | undefined
   
@@ -200,7 +243,7 @@ function parseReportCommand(args: string[]): ParsedIntent | null {
   
   return {
     action: 'show_report',
-    confidence: 1.0,
+    confidence: 0.95,
     entities: {
       description: period || 'este mês',
       category
@@ -209,14 +252,18 @@ function parseReportCommand(args: string[]): ParsedIntent | null {
 }
 
 /**
- * Parse /list command: /list [categories|recurring|budgets]
+ * Parse /list command: /list [categories|recurring|budgets|transactions]
  */
-function parseListCommand(args: string[]): ParsedIntent | null {
+function parseListCommand(args: string[]): ParsedIntent {
   const type = args.length > 0 ? args[0].toLowerCase() : 'default'
   
   const validTypes = ['categories', 'recurring', 'budgets', 'transactions']
   if (args.length > 0 && !validTypes.includes(type)) {
-    return null
+    return {
+      action: 'unknown',
+      confidence: 0.5,
+      entities: {}
+    }
   }
   
   // Map list types to their corresponding actions
@@ -230,7 +277,7 @@ function parseListCommand(args: string[]): ParsedIntent | null {
   
   return {
     action: actionMap[type],
-    confidence: 1.0,
+    confidence: 0.95,
     entities: {}
   } as ParsedIntent
 }
@@ -238,12 +285,12 @@ function parseListCommand(args: string[]): ParsedIntent | null {
 /**
  * Parse /help command: /help [comando]
  */
-function parseHelpCommand(args: string[]): ParsedIntent | null {
+function parseHelpCommand(args: string[]): ParsedIntent {
   const command = args.length > 0 ? args[0].toLowerCase() : undefined
   
   return {
     action: 'help',
-    confidence: 1.0,
+    confidence: 0.95,
     entities: {
       description: command
     }
@@ -253,11 +300,11 @@ function parseHelpCommand(args: string[]): ParsedIntent | null {
 /**
  * Parse /categories command: /categories [add|remove] [nome]
  */
-function parseCategoriesCommand(args: string[]): ParsedIntent | null {
+function parseCategoriesCommand(args: string[]): ParsedIntent {
   if (args.length === 0) {
     return {
       action: 'list_categories',
-      confidence: 1.0,
+      confidence: 0.95,
       entities: {}
     }
   }
@@ -268,26 +315,39 @@ function parseCategoriesCommand(args: string[]): ParsedIntent | null {
   if (action === 'add' && name) {
     return {
       action: 'add_category',
-      confidence: 1.0,
+      confidence: 0.95,
       entities: {
         category: name
       }
     }
-  } else if (action === 'remove' && name) {
-    // For now, map remove to add_category since remove_category is not in the type
-    return {
-      action: 'add_category',
-      confidence: 1.0,
-      entities: {
-        category: name
-      }
-    } as ParsedIntent
   }
   
-  return null
+  return {
+    action: 'list_categories',
+    confidence: 0.7,
+    entities: {}
+  }
 }
 
-// Helper functions
+/**
+ * Get help text for commands
+ */
+export function getCommandHelp(command?: string): string {
+  // Import here to avoid circular dependencies
+  const { messages } = require('../localization/pt-br')
+  
+  const helpTexts = messages.commandHelp
+  
+  if (command && command in helpTexts) {
+    return helpTexts[command as keyof typeof helpTexts]
+  }
+  
+  return helpTexts.help
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 function parseAmount(amountStr: string): number | null {
   // Remove currency symbols and normalize
@@ -301,16 +361,16 @@ function parseAmount(amountStr: string): number | null {
   return amount
 }
 
-function isDate(str: string): boolean {
+function isDateFormat(str: string): boolean {
   // Check for DD/MM/YYYY or DD/MM format
   return /^\d{1,2}\/\d{1,2}(\/\d{4})?$/.test(str)
 }
 
-function parseDate(dateStr: string): string {
+function parseDateString(dateStr: string, customDate?: Date): string {
   const parts = dateStr.split('/')
   const day = parts[0].padStart(2, '0')
   const month = parts[1].padStart(2, '0')
-  const year = parts[2] || new Date().getFullYear().toString()
+  const year = parts[2] || (customDate || new Date()).getFullYear().toString()
   
   return `${year}-${month}-${day}`
 }
@@ -343,83 +403,3 @@ function isYear(str: string): boolean {
   return !isNaN(year) && year >= 2000 && year <= 2100
 }
 
-/**
- * Get help text for commands
- */
-export function getCommandHelp(command?: string): string {
-  const helpTexts = {
-    add: `
-/add <valor> <categoria> [data] [descrição] [método_pagamento]
-
-Exemplos:
-/add 50 comida
-/add 30 transporte 15/10
-/add 100 mercado ontem cartão
-/add 25.50 farmácia "compras de remédios" pix
-    `,
-    budget: `
-/budget <categoria> <valor> [período]
-
-Exemplos:
-/budget comida 500
-/budget transporte 200 mês
-/budget lazer 1000 ano
-    `,
-    recurring: `
-/recurring <nome> <valor> dia <dia>
-
-Exemplos:
-/recurring aluguel 1200 dia 5
-/recurring salário 5000 dia 1
-/recurring academia 80 dia 15
-    `,
-    report: `
-/report [período] [categoria]
-
-Exemplos:
-/report
-/report este mês
-/report janeiro 2024
-/report comida
-    `,
-    list: `
-/list [tipo]
-
-Tipos: categories, recurring, budgets, transactions
-
-Exemplos:
-/list
-/list categories
-/list recurring
-    `,
-    categories: `
-/categories [ação] [nome]
-
-Ações: add, remove
-
-Exemplos:
-/categories
-/categories add "casa e decoração"
-/categories remove transporte
-    `,
-    help: `
-Comandos disponíveis:
-
-/add - Adicionar despesa
-/budget - Definir orçamento
-/recurring - Adicionar despesa recorrente
-/report - Ver relatórios
-/list - Listar itens
-/categories - Gerenciar categorias
-/help - Mostrar esta ajuda
-
-Use /help <comando> para detalhes específicos.
-    `
-  }
-  
-  if (command && command in helpTexts) {
-    return helpTexts[command as keyof typeof helpTexts]
-  }
-  
-  return helpTexts.help
-}

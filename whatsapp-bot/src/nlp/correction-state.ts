@@ -8,6 +8,7 @@ interface CorrectionState {
   originalMessage: string
   aiResult: any
   timestamp: number
+  transactionId?: string  // Transaction ID if a transaction was created
 }
 
 const correctionStates = new Map<string, CorrectionState>()
@@ -18,13 +19,15 @@ const correctionStates = new Map<string, CorrectionState>()
 export function storeCorrectionState(
   whatsappNumber: string,
   originalMessage: string,
-  aiResult: any
+  aiResult: any,
+  transactionId?: string
 ): void {
   const state: CorrectionState = {
     userId: whatsappNumber, // Using whatsapp number as user ID for simplicity
     originalMessage,
     aiResult,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    transactionId
   }
   
   correctionStates.set(whatsappNumber, state)
@@ -59,4 +62,18 @@ export function hasCorrectionState(whatsappNumber: string): boolean {
  */
 export function clearCorrectionState(whatsappNumber: string): void {
   correctionStates.delete(whatsappNumber)
+}
+
+/**
+ * Update transaction ID in existing correction state
+ */
+export function updateCorrectionStateTransactionId(
+  whatsappNumber: string,
+  transactionId: string
+): void {
+  const state = correctionStates.get(whatsappNumber)
+  if (state) {
+    state.transactionId = transactionId
+    correctionStates.set(whatsappNumber, state)
+  }
 }

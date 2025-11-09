@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../services/supabase-client'
 import { getUserSession } from '../auth/session-manager'
 import { CorrectionIntent } from '../services/correction-detector'
 import { messages, formatDate } from '../localization/pt-br'
+import { logger } from '../services/logger'
 
 /**
  * Handle transaction correction requests
@@ -52,7 +53,7 @@ export async function handleTransactionCorrection(
         return '❌ Tipo de correção não reconhecido. Use "remover", "arrumar" ou "corrigir" seguido do ID da transação.'
     }
   } catch (error) {
-    console.error('Error in handleTransactionCorrection:', error)
+    logger.error('Error in handleTransactionCorrection:', error as Error)
     return messages.genericError
   }
 }
@@ -67,7 +68,7 @@ async function deleteTransaction(transaction: any, supabase: any): Promise<strin
     .eq('id', transaction.id)
 
   if (error) {
-    console.error('Error deleting transaction:', error)
+    logger.error('Error deleting transaction:', error)
     return '❌ Erro ao remover a transação. Tente novamente.'
   }
 
@@ -155,7 +156,7 @@ async function updateTransaction(
     .single()
 
   if (error) {
-    console.error('Error updating transaction:', error)
+    logger.error('Error updating transaction:', error)
     return '❌ Erro ao atualizar a transação. Tente novamente.'
   }
 
@@ -227,7 +228,7 @@ export async function getTransactionDetails(
            `• "${transactionId} era R$ X" - para alterar valor\n` +
            `• "${transactionId} era categoria Y" - para alterar categoria`
   } catch (error) {
-    console.error('Error getting transaction details:', error)
+    logger.error('Error getting transaction details:', error as Error)
     return messages.genericError
   }
 }

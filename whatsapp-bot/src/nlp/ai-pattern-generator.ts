@@ -353,12 +353,13 @@ Retorne APENAS o padrão regex, sem explicações.
  */
 export async function parseUserCorrection(
   correctionMessage: string,
-  context: UserContext
+  context: UserContext,
+  transactionId?: string
 ): Promise<ParsedIntent | null> {
   const systemPrompt = `
 Você é um assistente financeiro especializado em português brasileiro.
 
-O usuário está corrigindo uma interpretação anterior. Analise a mensagem de correção e extraia as informações corretas.
+O usuário está corrigindo uma interpretação anterior${transactionId ? ` sobre a transação ${transactionId}` : ''}. Analise a mensagem de correção e extraia as informações corretas.
 
 CATEGORIAS DISPONÍVEIS: ${context.recentCategories.join(', ')}
 MÉTODOS DE PAGAMENTO RECENTES: ${context.recentPaymentMethods.join(', ')}
@@ -366,7 +367,7 @@ DATA ATUAL: ${new Date().toLocaleDateString('pt-BR')}
 
 FORMATO DE RESPOSTA (JSON):
 {
-  "action": "add_expense|add_income|set_budget|add_recurring|show_report|list_categories|show_help",
+  "action": "add_expense|add_income|set_budget|add_recurring|show_report|list_categories|show_help|change_category|edit_transaction",
   "confidence": 0.9,
   "entities": {
     "amount": number,
@@ -374,6 +375,7 @@ FORMATO DE RESPOSTA (JSON):
     "description": "string", 
     "date": "YYYY-MM-DD",
     "payment_method": "string",
+    "transactionId": "string",
     "transactions": [
       {
         "amount": number,
@@ -392,7 +394,9 @@ REGRAS:
 3. Para valores: aceite "50", "R$ 50", "50 reais", "cinquenta reais"
 4. Para categorias: use as categorias disponíveis ou sugira uma similar
 5. Para métodos de pagamento: use os métodos recentes ou sugira um comum
-6. Confidence: 0.9+ para correções claras
+6. Para mudanças de categoria: use "change_category" com o campo "category"
+7. Para edições de transação: use "edit_transaction" com os campos a serem alterados
+8. Confidence: 0.9+ para correções claras
 
 Retorne APENAS o JSON, sem explicações.
   `
@@ -413,7 +417,14 @@ Retorne APENAS o JSON, sem explicações.
       throw new Error('No response from AI')
     }
     
-    return JSON.parse(response)
+    const parsed = JSON.parse(response)
+    
+    // If transaction ID was provided in context, add it to entities
+    if (transactionId && !parsed.entities.transactionId) {
+      parsed.entities.transactionId = transactionId
+    }
+    
+    return parsed
   } catch (error) {
     console.error('Error parsing user correction:', error)
     return null

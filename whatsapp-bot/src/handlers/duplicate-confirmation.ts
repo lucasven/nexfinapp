@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../services/supabase-client'
 import { getUserSession } from '../auth/session-manager'
 import { ParsedIntent } from '../types'
 import { messages, formatDate } from '../localization/pt-br'
+import { logger } from '../services/logger'
 
 interface PendingTransaction {
   whatsappNumber: string
@@ -123,7 +124,7 @@ export async function handleDuplicateConfirmation(
       .rpc('generate_transaction_id')
 
     if (idError) {
-      console.error('Error generating transaction ID:', idError)
+      logger.error('Error generating transaction ID:', idError)
       return messages.expenseError
     }
 
@@ -148,7 +149,7 @@ export async function handleDuplicateConfirmation(
       .single()
 
     if (error) {
-      console.error('Error creating confirmed transaction:', error)
+      logger.error('Error creating confirmed transaction:', error)
       return messages.expenseError
     }
 
@@ -163,7 +164,7 @@ export async function handleDuplicateConfirmation(
       return `${messages.duplicateConfirmed}\n\n${messages.expenseAdded(amount, categoryName, formattedDate)}${paymentMethodText}${transactionIdText}`
     }
   } catch (error) {
-    console.error('Error in handleDuplicateConfirmation:', error)
+    logger.error('Error in handleDuplicateConfirmation:', error as Error)
     return messages.expenseError
   }
 }
