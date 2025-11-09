@@ -13,7 +13,8 @@ import pino from 'pino'
 import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
-import { handleMessage } from './handlers/message-handler-v2'
+import http from 'http'
+import { handleMessage } from './handlers/message-handler-v2.js'
 
 dotenv.config()
 
@@ -223,8 +224,7 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
 
 // HTTP server for health checks and API endpoints
 // Start this FIRST so Railway health checks pass even if WhatsApp connection fails
-const http = require('http')
-const PORT = process.env.PORT || 3001
+const PORT = parseInt(process.env.PORT || '3001', 10)
 
 http.createServer(async (req: any, res: any) => {
   // Enable CORS
