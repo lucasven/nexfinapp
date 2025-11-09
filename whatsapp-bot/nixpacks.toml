@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ["tesseract", "tesseract-data"]
+# Removed tesseract - using tesseract.js which bundles its own WASM implementation
+nixPkgs = []
 
 [phases.install]
 cmds = ["npm ci"]
