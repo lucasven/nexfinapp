@@ -1,4 +1,4 @@
-import { ParsedIntent, ExpenseData, UserSession } from '../../types'
+import { ParsedIntent, ExpenseData, UserSession } from '../../types.js'
 
 /**
  * Test helper functions for creating mock data and assertions

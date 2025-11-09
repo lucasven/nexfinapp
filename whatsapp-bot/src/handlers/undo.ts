@@ -5,10 +5,10 @@
  * Uses in-memory stack with automatic cleanup after 5 minutes
  */
 
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { messages } from '../localization/pt-br'
-import { logger } from '../services/logger'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { messages } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
 
 /**
  * Represents an action that can be undone

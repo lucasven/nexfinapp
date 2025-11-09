@@ -1,10 +1,10 @@
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { ParsedIntent } from '../types'
-import { messages, formatDate } from '../localization/pt-br'
-import { checkForDuplicate } from '../services/duplicate-detector'
-import { storePendingTransaction } from './duplicate-confirmation'
-import { logger } from '../services/logger'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { ParsedIntent } from '../types.js'
+import { messages, formatDate } from '../localization/pt-br.js'
+import { checkForDuplicate } from '../services/duplicate-detector.js'
+import { storePendingTransaction } from './duplicate-confirmation.js'
+import { logger } from '../services/logger.js'
 
 export async function handleAddExpense(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {

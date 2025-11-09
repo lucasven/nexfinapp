@@ -3,9 +3,9 @@
  * Tracks and enforces AI API usage limits per user
  */
 
-import { getSupabaseClient } from './supabase-client'
-import { calculateLLMCost, calculateEmbeddingCost, type TokenUsage } from './ai-cost-calculator'
-import { logger } from './logger'
+import { getSupabaseClient } from './supabase-client.js'
+import { calculateLLMCost, calculateEmbeddingCost, type TokenUsage } from './ai-cost-calculator.js'
+import { logger } from './logger.js'
 
 export interface UsageStats {
   dailyCostUsd: number

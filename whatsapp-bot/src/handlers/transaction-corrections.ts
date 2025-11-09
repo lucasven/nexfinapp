@@ -1,8 +1,8 @@
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { CorrectionIntent } from '../services/correction-detector'
-import { messages, formatDate } from '../localization/pt-br'
-import { logger } from '../services/logger'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { CorrectionIntent } from '../services/correction-detector.js'
+import { messages, formatDate } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
 
 /**
  * Handle transaction correction requests

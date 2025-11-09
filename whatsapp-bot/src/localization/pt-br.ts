@@ -1,4 +1,4 @@
-import { Messages, FormatHelpers } from './types'
+import { Messages, FormatHelpers } from './types.js'
 
 export const messages: Messages = {
   // Welcome and help messages

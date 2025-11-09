@@ -6,12 +6,12 @@
  */
 
 import OpenAI from 'openai'
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { messages } from '../localization/pt-br'
-import { logger } from '../services/logger'
-import { recordLLMUsage } from '../services/ai-usage-tracker'
-import { calculateLLMCost } from '../services/ai-cost-calculator'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { messages } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
+import { recordLLMUsage } from '../services/ai-usage-tracker.js'
+import { calculateLLMCost } from '../services/ai-cost-calculator.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

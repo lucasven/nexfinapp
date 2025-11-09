@@ -1,9 +1,9 @@
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { ParsedIntent } from '../types'
-import { messages } from '../localization/pt-br'
-import { logger } from '../services/logger'
-import { storeUndoState } from './undo'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { ParsedIntent } from '../types.js'
+import { messages } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
+import { storeUndoState } from './undo.js'
 
 export async function handleAddRecurring(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {

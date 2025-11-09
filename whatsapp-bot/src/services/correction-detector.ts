@@ -1,4 +1,4 @@
-import { ParsedIntent } from '../types'
+import { ParsedIntent } from '../types.js'
 
 export interface CorrectionIntent {
   action: 'delete' | 'update' | 'unknown'

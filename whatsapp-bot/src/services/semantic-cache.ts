@@ -4,11 +4,11 @@
  */
 
 import OpenAI from 'openai'
-import { getSupabaseClient } from './supabase-client'
-import { logger } from './logger'
-import { recordEmbeddingUsage, recordCacheHit } from './ai-usage-tracker'
-import { estimateTokens } from './ai-cost-calculator'
-import { ParsedIntent } from '../types'
+import { getSupabaseClient } from './supabase-client.js'
+import { logger } from './logger.js'
+import { recordEmbeddingUsage, recordCacheHit } from './ai-usage-tracker.js'
+import { estimateTokens } from './ai-cost-calculator.js'
+import { ParsedIntent } from '../types.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

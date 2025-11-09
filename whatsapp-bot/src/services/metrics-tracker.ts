@@ -8,8 +8,8 @@
  * - Permission checks
  */
 
-import { getSupabaseClient } from './supabase-client'
-import { logger } from './logger'
+import { getSupabaseClient } from './supabase-client.js'
+import { logger } from './logger.js'
 
 export type MessageType = 'text' | 'image' | 'command'
 

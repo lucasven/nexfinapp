@@ -4,12 +4,12 @@
  * Handles editing, deleting, and viewing transaction details
  */
 
-import { ParsedIntent } from '../types'
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { messages } from '../localization/pt-br'
-import { logger } from '../services/logger'
-import { storeUndoState } from './undo'
+import { ParsedIntent } from '../types.js'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { messages } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
+import { storeUndoState } from './undo.js'
 
 /**
  * Edit an existing transaction

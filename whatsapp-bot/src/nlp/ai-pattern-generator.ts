@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
-import { getSupabaseClient } from '../services/supabase-client'
-import { ParsedIntent } from './pattern-storage'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { ParsedIntent } from './pattern-storage.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

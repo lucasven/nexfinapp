@@ -1,7 +1,7 @@
-import { authenticateUser } from '../services/supabase-client'
-import { createUserSession, logoutUser } from '../auth/session-manager'
-import { messages } from '../localization/pt-br'
-import { logger } from '../services/logger'
+import { authenticateUser } from '../services/supabase-client.js'
+import { createUserSession, logoutUser } from '../auth/session-manager.js'
+import { messages } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
 
 export async function handleLogin(whatsappNumber: string, emailAndPassword: string): Promise<string> {
   try {

@@ -5,10 +5,10 @@
  * for multi-language support in the WhatsApp bot.
  */
 
-import { Locale, Messages, FormatHelpers } from './types'
-import { messages as ptBrMessages, formatHelpers as ptBrFormatHelpers } from './pt-br'
-import { messages as enMessages, formatHelpers as enFormatHelpers } from './en'
-import { getSupabaseClient } from '../services/supabase-client'
+import { Locale, Messages, FormatHelpers } from './types.js'
+import { messages as ptBrMessages, formatHelpers as ptBrFormatHelpers } from './pt-br.js'
+import { messages as enMessages, formatHelpers as enFormatHelpers } from './en.js'
+import { getSupabaseClient } from '../services/supabase-client.js'
 
 const DEFAULT_LOCALE: Locale = 'pt-br'
 

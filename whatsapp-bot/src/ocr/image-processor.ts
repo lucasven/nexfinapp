@@ -1,5 +1,5 @@
 import { createWorker } from 'tesseract.js'
-import { ExpenseData, OCRResult } from '../types'
+import { ExpenseData, OCRResult } from '../types.js'
 import sharp from 'sharp'
 
 export async function processImage(imageBuffer: Buffer): Promise<OCRResult> {

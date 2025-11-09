@@ -1,5 +1,5 @@
-import { createSession, deleteSession, getSession, updateSessionActivity } from '../services/supabase-client'
-import { UserSession } from '../types'
+import { createSession, deleteSession, getSession, updateSessionActivity } from '../services/supabase-client.js'
+import { UserSession } from '../types.js'
 
 const sessionCache = new Map<string, UserSession>()
 

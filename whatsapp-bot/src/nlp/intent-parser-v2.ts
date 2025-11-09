@@ -4,7 +4,7 @@
  * Natural language is handled by LLM in message handler
  */
 
-import { ParsedIntent } from '../types'
+import { ParsedIntent } from '../types.js'
 
 /**
  * Parse explicit commands starting with /

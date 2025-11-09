@@ -1,5 +1,5 @@
-import { getSupabaseClient } from './supabase-client'
-import { ExpenseData } from '../types'
+import { getSupabaseClient } from './supabase-client.js'
+import { ExpenseData } from '../types.js'
 
 interface DuplicateCheck {
   isDuplicate: boolean

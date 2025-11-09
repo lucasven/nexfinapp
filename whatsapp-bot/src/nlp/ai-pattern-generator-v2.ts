@@ -4,10 +4,10 @@
  */
 
 import OpenAI from 'openai'
-import { getSupabaseClient } from '../services/supabase-client'
-import { ParsedIntent } from '../types'
-import { logger } from '../services/logger'
-import { checkDailyLimit, recordLLMUsage } from '../services/ai-usage-tracker'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { ParsedIntent } from '../types.js'
+import { logger } from '../services/logger.js'
+import { checkDailyLimit, recordLLMUsage } from '../services/ai-usage-tracker.js'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

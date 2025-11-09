@@ -4,11 +4,11 @@
  * Provides search functionality and quick financial statistics
  */
 
-import { ParsedIntent } from '../types'
-import { getSupabaseClient } from '../services/supabase-client'
-import { getUserSession } from '../auth/session-manager'
-import { messages } from '../localization/pt-br'
-import { logger } from '../services/logger'
+import { ParsedIntent } from '../types.js'
+import { getSupabaseClient } from '../services/supabase-client.js'
+import { getUserSession } from '../auth/session-manager.js'
+import { messages } from '../localization/pt-br.js'
+import { logger } from '../services/logger.js'
 
 /**
  * Search for transactions based on criteria

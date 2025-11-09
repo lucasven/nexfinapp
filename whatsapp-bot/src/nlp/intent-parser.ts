@@ -1,6 +1,6 @@
 import nlp from 'compromise'
 import numbers from 'compromise-numbers'
-import { ParsedIntent } from '../types'
+import { ParsedIntent } from '../types.js'
 
 nlp.extend(numbers)
 
