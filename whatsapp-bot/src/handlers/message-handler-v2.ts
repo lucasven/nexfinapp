@@ -87,20 +87,8 @@ export async function handleMessage(context: MessageContext): Promise<string | s
     messageLength: message?.length || 0
   })
 
-  // Handle group messages - only respond if mentioned or starts with "bot"
-  if (isGroup) {
-    const shouldRespond = message?.toLowerCase().includes('bot') || 
-                         message?.toLowerCase().includes('@bot')
-    
-    if (!shouldRespond && !hasImage) {
-      logger.debug('Ignoring group message without bot mention', { from })
-      return null // Ignore group messages that don't mention the bot
-    }
-
-    if (shouldRespond && !message) {
-      return messages.groupMention
-    }
-  }
+  // Note: Bot now responds to all messages in groups (authorization is checked later)
+  // This allows the bot to be more useful in group settings
 
   // Handle image messages
   if (hasImage && imageBuffer) {
