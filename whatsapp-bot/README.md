@@ -91,11 +91,26 @@ Para mensagens complexas, usa OpenAI para entender e criar novos padrões.
 
 2. Conecte o repositório ao Railway
 
-3. Configure as variáveis de ambiente no dashboard do Railway
+3. Configure as variáveis de ambiente no dashboard do Railway:
+   - `SUPABASE_URL`: URL do seu projeto Supabase
+   - `SUPABASE_SERVICE_KEY`: Service key do Supabase
+   - `OPENAI_API_KEY`: Chave da API do OpenAI
+   - `AUTH_STATE_PATH`: `/app/auth-state` (caminho do volume)
 
 4. Configure um volume persistente em `/app/auth-state` para manter a sessão do WhatsApp
 
 5. O bot será deployado automaticamente
+
+6. **Autenticação via QR Code Web**:
+   - Após o deploy, acesse: `https://seu-app.railway.app/qr`
+   - Uma página web bonita mostrará o QR Code
+   - Escaneie com seu WhatsApp:
+     1. Abra WhatsApp no celular
+     2. Vá em **Mais opções (⋮) > Aparelhos conectados**
+     3. Toque em **Conectar um aparelho**
+     4. Escaneie o QR Code da página
+   - ✅ A página se auto-atualiza a cada 10 segundos
+   - 🗑️ Use o botão "Limpar Autenticação" para desconectar e gerar novo QR Code
 
 ## Exemplos de Uso
 

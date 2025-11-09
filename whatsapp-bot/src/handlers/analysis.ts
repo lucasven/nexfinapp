@@ -13,9 +13,19 @@ import { logger } from '../services/logger.js'
 import { recordLLMUsage } from '../services/ai-usage-tracker.js'
 import { calculateLLMCost } from '../services/ai-cost-calculator.js'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+// Lazy-load OpenAI client to avoid crashing on startup if API key is missing
+let openai: OpenAI | null = null
+function getOpenAIClient(): OpenAI {
+  if (!openai) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY environment variable is not set')
+    }
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    })
+  }
+  return openai
+}
 
 interface FinancialStats {
   totalSpent: number
@@ -211,8 +221,9 @@ async function analyzeWithAI(
   const prompt = createAnalysisPrompt(stats, analysisType)
 
   const startTime = Date.now()
+  const client = getOpenAIClient()
 
-  const completion = await openai.chat.completions.create({
+  const completion = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       { 

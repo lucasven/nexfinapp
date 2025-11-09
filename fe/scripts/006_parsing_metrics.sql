@@ -60,3 +60,4 @@ END $$;
 -- Comment on table
 COMMENT ON TABLE parsing_metrics IS 'Tracks parsing strategy usage, success rates, and performance metrics for WhatsApp bot messages';
 
+

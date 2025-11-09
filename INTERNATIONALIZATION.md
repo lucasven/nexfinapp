@@ -343,3 +343,4 @@ This refactoring can be done gradually without breaking existing functionality.
 
 For questions or suggestions about the i18n implementation, please contact the development team or create an issue in the project repository.
 
+

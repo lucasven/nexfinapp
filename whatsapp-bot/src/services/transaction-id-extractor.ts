@@ -73,3 +73,4 @@ export function injectTransactionIdContext(message: string, transactionId: strin
   return `${message} [transaction_id: ${transactionId}]`
 }
 
+

@@ -8,7 +8,8 @@ import makeWASocket, {
   Browsers
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
-import qrcode from 'qrcode-terminal'
+import qrcodeTerminal from 'qrcode-terminal'
+import QRCode from 'qrcode'
 import pino from 'pino'
 import * as dotenv from 'dotenv'
 import * as fs from 'fs'
@@ -28,6 +29,9 @@ if (!fs.existsSync(authStatePath)) {
 
 // Store socket instance to prevent multiple connections
 let sock: WASocket | null = null
+
+// Store current QR code for web endpoint
+let currentQR: string | null = null
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(authStatePath)
@@ -52,15 +56,29 @@ async function connectToWhatsApp() {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
+      // Store QR code for web endpoint
+      currentQR = qr
+      
       console.log('\n📱 ═══════════════════════════════════════════════')
-      console.log('   ESCANEIE O QR CODE COM SEU WHATSAPP')
+      console.log('   QR CODE DISPONÍVEL PARA AUTENTICAÇÃO')
       console.log('═══════════════════════════════════════════════\n')
-      qrcode.generate(qr, { small: true })
+      console.log(`   🌐 Acesse: http://localhost:${PORT}/qr`)
+      console.log(`   🌐 Ou no Railway: https://seu-app.railway.app/qr\n`)
+      
+      // Also print to terminal for local development
+      qrcodeTerminal.generate(qr, { small: true })
+      
       console.log('\n📱 Passos para conectar:')
-      console.log('   1. Abra WhatsApp no seu celular')
-      console.log('   2. Toque em Mais opções (⋮) > Aparelhos conectados')
-      console.log('   3. Toque em Conectar um aparelho')
-      console.log('   4. Aponte seu telefone para esta tela\n')
+      console.log('   1. Acesse o link /qr no navegador')
+      console.log('   2. Abra WhatsApp no seu celular')
+      console.log('   3. Toque em Mais opções (⋮) > Aparelhos conectados')
+      console.log('   4. Toque em Conectar um aparelho')
+      console.log('   5. Escaneie o QR code da página web\n')
+    }
+
+    if (connection === 'open') {
+      // Clear QR code when connected
+      currentQR = null
     }
 
     if (connection === 'close') {
@@ -229,7 +247,7 @@ const PORT = parseInt(process.env.PORT || '3001', 10)
 http.createServer(async (req: any, res: any) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   
   // Handle preflight
@@ -239,13 +257,353 @@ http.createServer(async (req: any, res: any) => {
     return
   }
 
+  // Health check endpoint
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }))
-  } else {
-    res.writeHead(404)
-    res.end()
+    return
   }
+
+  // QR Code endpoint
+  if (req.url === '/qr') {
+    if (currentQR) {
+      try {
+        const qrDataURL = await QRCode.toDataURL(currentQR, { width: 400 })
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end(`
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp QR Code - Expense Tracker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .qr-container {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 15px;
+      margin-bottom: 30px;
+      display: inline-block;
+    }
+    img {
+      border-radius: 10px;
+      max-width: 100%;
+      height: auto;
+    }
+    .instructions {
+      text-align: left;
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    .instructions h3 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .instructions ol {
+      color: #555;
+      padding-left: 20px;
+      line-height: 1.8;
+    }
+    .instructions li {
+      margin-bottom: 8px;
+    }
+    .button {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .button:hover {
+      background: #c82333;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+    }
+    .button:active {
+      transform: translateY(0);
+    }
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      display: none;
+    }
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      display: block;
+    }
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      display: block;
+    }
+    .emoji {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">📱</div>
+    <h1>WhatsApp QR Code</h1>
+    <p class="subtitle">Escaneie para conectar o bot</p>
+    
+    <div class="qr-container">
+      <img src="${qrDataURL}" alt="QR Code do WhatsApp" />
+    </div>
+
+    <div class="instructions">
+      <h3>📋 Como conectar:</h3>
+      <ol>
+        <li>Abra o <strong>WhatsApp</strong> no seu celular</li>
+        <li>Toque em <strong>Mais opções (⋮)</strong> → <strong>Aparelhos conectados</strong></li>
+        <li>Toque em <strong>Conectar um aparelho</strong></li>
+        <li>Aponte a câmera para o QR Code acima</li>
+        <li>Aguarde a confirmação de conexão</li>
+      </ol>
+    </div>
+
+    <button class="button" onclick="clearAuth()">
+      🗑️ Limpar Autenticação e Reconectar
+    </button>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    async function clearAuth() {
+      if (!confirm('Tem certeza que deseja limpar a autenticação? Isso desconectará o bot e você precisará escanear um novo QR Code.')) {
+        return;
+      }
+
+      const button = document.querySelector('.button');
+      const status = document.getElementById('status');
+      button.disabled = true;
+      button.textContent = '⏳ Limpando...';
+
+      try {
+        const response = await fetch('/clear-auth', { method: 'DELETE' });
+        const data = await response.json();
+
+        if (response.ok) {
+          status.className = 'status success';
+          status.textContent = '✅ ' + data.message;
+          button.textContent = '🔄 Recarregar página';
+          button.onclick = () => location.reload();
+        } else {
+          throw new Error(data.error || 'Erro desconhecido');
+        }
+      } catch (error) {
+        status.className = 'status error';
+        status.textContent = '❌ Erro: ' + error.message;
+        button.disabled = false;
+        button.textContent = '🗑️ Limpar Autenticação e Reconectar';
+      }
+    }
+
+    // Auto-refresh every 10 seconds to check for new QR
+    setInterval(() => {
+      if (!document.querySelector('.button').disabled) {
+        location.reload();
+      }
+    }, 10000);
+  </script>
+</body>
+</html>
+        `)
+      } catch (error) {
+        console.error('Error generating QR code:', error)
+        res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end('<html><body><h1>❌ Erro ao gerar QR Code</h1></body></html>')
+      }
+    } else {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(`
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Bot - Conectado</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 { color: #28a745; margin-bottom: 20px; }
+    p { color: #666; line-height: 1.6; margin-bottom: 15px; }
+    .button {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 20px;
+    }
+    .button:hover {
+      background: #c82333;
+      transform: translateY(-2px);
+    }
+    .emoji { font-size: 64px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">✅</div>
+    <h1>Bot Conectado!</h1>
+    <p>O WhatsApp está conectado e funcionando.</p>
+    <p>Não há QR Code disponível no momento.</p>
+    <button class="button" onclick="clearAuth()">
+      🗑️ Desconectar e Gerar Novo QR Code
+    </button>
+    <div id="status" style="margin-top: 15px; font-weight: bold;"></div>
+  </div>
+  <script>
+    async function clearAuth() {
+      if (!confirm('Desconectar o bot? Você precisará escanear um novo QR Code.')) return;
+      const button = document.querySelector('.button');
+      button.disabled = true;
+      button.textContent = '⏳ Desconectando...';
+      try {
+        const response = await fetch('/clear-auth', { method: 'DELETE' });
+        const data = await response.json();
+        if (response.ok) {
+          document.getElementById('status').style.color = '#28a745';
+          document.getElementById('status').textContent = '✅ ' + data.message;
+          setTimeout(() => location.reload(), 2000);
+        } else {
+          throw new Error(data.error || 'Erro desconhecido');
+        }
+      } catch (error) {
+        document.getElementById('status').style.color = '#dc3545';
+        document.getElementById('status').textContent = '❌ ' + error.message;
+        button.disabled = false;
+        button.textContent = '🗑️ Desconectar e Gerar Novo QR Code';
+      }
+    }
+  </script>
+</body>
+</html>
+      `)
+    }
+    return
+  }
+
+  // Clear auth endpoint
+  if (req.url === '/clear-auth' && req.method === 'DELETE') {
+    try {
+      // Check if auth state directory exists
+      if (fs.existsSync(authStatePath)) {
+        // Remove all files in the directory
+        const files = fs.readdirSync(authStatePath)
+        for (const file of files) {
+          fs.unlinkSync(path.join(authStatePath, file))
+        }
+        
+        console.log('\n🗑️  Auth state cleared. Reconnecting...\n')
+        
+        // Close current connection if exists
+        if (sock) {
+          sock.end(undefined)
+          sock = null
+        }
+        
+        // Reconnect after a short delay
+        setTimeout(() => {
+          connectToWhatsApp().catch(error => {
+            console.error('⚠️ Error reconnecting:', error)
+          })
+        }, 2000)
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ 
+          success: true, 
+          message: 'Autenticação limpa com sucesso. Reconectando...' 
+        }))
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: 'Pasta de autenticação não encontrada' 
+        }))
+      }
+    } catch (error) {
+      console.error('Error clearing auth state:', error)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ 
+        success: false, 
+        error: 'Erro ao limpar autenticação: ' + (error as Error).message 
+      }))
+    }
+    return
+  }
+
+  // 404 for other routes
+  res.writeHead(404, { 'Content-Type': 'text/plain' })
+  res.end('Not Found')
 }).listen(PORT, '0.0.0.0', () => {
   console.log(`🏥 HTTP server running on port ${PORT}`)
   console.log(`   Health check: http://0.0.0.0:${PORT}/health`)
