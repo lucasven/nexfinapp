@@ -165,9 +165,26 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
     }
 
     // Get sender number (normalize by stripping non-digits)
-    const rawSender = isGroup && message.key.participant
+    let rawSender = isGroup && message.key.participant
       ? message.key.participant.split('@')[0]
       : from.split('@')[0]
+    
+    // Handle WhatsApp LID format (e.g., "5511999999999:10@s.whatsapp.net")
+    // In groups, WhatsApp sometimes appends :lid where lid is a local identifier
+    if (rawSender.includes(':')) {
+      rawSender = rawSender.split(':')[0]
+    }
+    
+    // Debug logging for group messages
+    if (isGroup) {
+      console.log('[DEBUG] Group message received:', {
+        from,
+        participant: message.key.participant,
+        rawSender,
+        rawSenderBeforeLidSplit: message.key.participant?.split('@')[0],
+        isGroup
+      })
+    }
     
     // Normalize phone number - keep only digits
     const sender = rawSender.replace(/\D/g, '')
