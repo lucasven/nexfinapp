@@ -38,9 +38,18 @@ export function detectCorrectionIntent(message: string): CorrectionIntent {
     return { action: 'unknown', confidence: 0 }
   }
   
-  // Extract transaction ID (6-character alphanumeric)
+  // Extract transaction ID (6-character alphanumeric with at least one letter AND one number)
+  // This prevents false positives like "comida" or "outros" being detected as transaction IDs
   const transactionIdMatch = normalizedMessage.match(/\b([a-z0-9]{6})\b/i)
-  const transactionId = transactionIdMatch ? transactionIdMatch[1].toUpperCase() : undefined
+  let transactionId: string | undefined
+  
+  if (transactionIdMatch) {
+    const candidate = transactionIdMatch[1].toUpperCase()
+    // Validate it has both letters and numbers (real transaction IDs have this format)
+    if (/[A-Z]/.test(candidate) && /[0-9]/.test(candidate)) {
+      transactionId = candidate
+    }
+  }
   
   // Determine correction action
   let action: CorrectionIntent['action'] = 'unknown'
@@ -85,10 +94,20 @@ export function detectCorrectionIntent(message: string): CorrectionIntent {
     }
   }
   
-  // If we have a transaction ID but no specific action, assume update
+  // If we have a valid transaction ID but no specific action, assume update
   if (action === 'unknown' && transactionId) {
     action = 'update'
     confidence = 0.6
+  }
+  
+  // If we have correction words but no valid transaction ID, return unknown with low confidence
+  // This prevents "mudar categoria para outros" or "gastei 50 em comida" from being treated as corrections
+  if (action === 'unknown' && !transactionId && hasCorrectionWord) {
+    return { 
+      action: 'unknown', 
+      confidence: 0.2,  // Too low to trigger correction handling (< 0.5 threshold)
+      reason: 'Palavra de correção detectada mas ID de transação inválido ou ausente'
+    }
   }
   
   // Extract update information

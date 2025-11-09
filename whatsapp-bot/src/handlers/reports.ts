@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../services/supabase-client'
 import { getUserSession } from '../auth/session-manager'
 import { ParsedIntent } from '../types'
 import { messages, getMonthName } from '../localization/pt-br'
+import { logger } from '../services/logger'
 
 export async function handleShowReport(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {
@@ -32,7 +33,7 @@ export async function handleShowReport(whatsappNumber: string, intent: ParsedInt
       .lte('date', endDate)
 
     if (error) {
-      console.error('Error fetching transactions for report:', error)
+      logger.error('Error fetching transactions for report:', error)
       return messages.genericError
     }
 
@@ -107,7 +108,7 @@ export async function handleShowReport(whatsappNumber: string, intent: ParsedInt
 
     return response
   } catch (error) {
-    console.error('Error in handleShowReport:', error)
+    logger.error('Error in handleShowReport:', error as Error)
     return messages.genericError
   }
 }

@@ -2,6 +2,8 @@ import { getSupabaseClient } from '../services/supabase-client'
 import { getUserSession } from '../auth/session-manager'
 import { ParsedIntent } from '../types'
 import { messages, getMonthName } from '../localization/pt-br'
+import { logger } from '../services/logger'
+import { storeUndoState } from './undo'
 
 export async function handleSetBudget(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {
@@ -54,14 +56,14 @@ export async function handleSetBudget(whatsappNumber: string, intent: ParsedInte
       .single()
 
     if (error) {
-      console.error('Error setting budget:', error)
+      logger.error('Error setting budget', { whatsappNumber, userId: session.userId }, error)
       return messages.budgetError
     }
 
     const monthName = getMonthName(targetMonth)
     return messages.budgetSet(categoryName, amount, `${monthName}/${targetYear}`)
   } catch (error) {
-    console.error('Error in handleSetBudget:', error)
+    logger.error('Error in handleSetBudget', { whatsappNumber }, error as Error)
     return messages.budgetError
   }
 }
@@ -90,7 +92,7 @@ export async function handleShowBudgets(whatsappNumber: string): Promise<string>
       .eq('year', currentYear)
 
     if (error) {
-      console.error('Error fetching budgets:', error)
+      logger.error('Error fetching budgets', { whatsappNumber, userId: session.userId }, error)
       return messages.genericError
     }
 
@@ -142,7 +144,93 @@ export async function handleShowBudgets(whatsappNumber: string): Promise<string>
 
     return response
   } catch (error) {
-    console.error('Error in handleShowBudgets:', error)
+    logger.error('Error in handleShowBudgets', { whatsappNumber }, error as Error)
+    return messages.genericError
+  }
+}
+
+/**
+ * Delete a budget for a specific category and period
+ * 
+ * @param whatsappNumber - User's WhatsApp number
+ * @param intent - Parsed intent with category and optional month/year
+ * @returns Success message or error
+ */
+export async function handleDeleteBudget(
+  whatsappNumber: string,
+  intent: ParsedIntent
+): Promise<string> {
+  const { category, month, year } = intent.entities
+
+  if (!category) {
+    return '❌ Categoria não especificada.'
+  }
+
+  try {
+    const session = await getUserSession(whatsappNumber)
+    if (!session) {
+      return messages.loginPrompt
+    }
+
+    const supabase = getSupabaseClient()
+
+    // Find the category
+    const { data: categoryData } = await supabase
+      .from('categories')
+      .select('id, name')
+      .eq('type', 'expense')
+      .ilike('name', `%${category}%`)
+      .single()
+
+    if (!categoryData) {
+      return messages.categoryNotFound(category)
+    }
+
+    // Use current month/year if not specified
+    const now = new Date()
+    const targetMonth = month || now.getMonth() + 1
+    const targetYear = year || now.getFullYear()
+
+    // Find the budget
+    const { data: budget, error: fetchError } = await supabase
+      .from('budgets')
+      .select('*')
+      .eq('user_id', session.userId)
+      .eq('category_id', categoryData.id)
+      .eq('month', targetMonth)
+      .eq('year', targetYear)
+      .single()
+
+    if (fetchError || !budget) {
+      logger.error('Budget not found', { category, month: targetMonth, year: targetYear })
+      return messages.budgetNotFound(categoryData.name)
+    }
+
+    // Store undo state before deleting
+    storeUndoState(whatsappNumber, 'delete_budget', budget)
+
+    // Delete the budget
+    const { error: deleteError } = await supabase
+      .from('budgets')
+      .delete()
+      .eq('id', budget.id)
+
+    if (deleteError) {
+      logger.error('Failed to delete budget', { category, error: deleteError })
+      return messages.genericError
+    }
+
+    logger.info('Budget deleted', {
+      whatsappNumber,
+      userId: session.userId,
+      category: categoryData.name,
+      month: targetMonth,
+      year: targetYear
+    })
+
+    return messages.budgetDeleted(categoryData.name)
+  } catch (error) {
+    logger.error('Error in handleDeleteBudget', { whatsappNumber, category }, error as Error)
     return messages.genericError
   }
 }

@@ -4,6 +4,7 @@ import { ParsedIntent } from '../types'
 import { messages, formatDate } from '../localization/pt-br'
 import { checkForDuplicate } from '../services/duplicate-detector'
 import { storePendingTransaction } from './duplicate-confirmation'
+import { logger } from '../services/logger'
 
 export async function handleAddExpense(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {
@@ -83,7 +84,7 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
       .rpc('generate_transaction_id')
 
     if (idError) {
-      console.error('Error generating transaction ID:', idError)
+      logger.error('Error generating transaction ID', { whatsappNumber }, idError)
       return messages.expenseError
     }
 
@@ -108,7 +109,7 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
       .single()
 
     if (error) {
-      console.error('Error creating transaction:', error)
+      logger.error('Error creating transaction', { whatsappNumber, transactionId: userReadableId }, error)
       return messages.expenseError
     }
 
@@ -123,7 +124,7 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
       return messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
     }
   } catch (error) {
-    console.error('Error in handleAddExpense:', error)
+    logger.error('Error in handleAddExpense', { whatsappNumber }, error as Error)
     return messages.expenseError
   }
 }
@@ -155,7 +156,7 @@ export async function handleShowExpenses(whatsappNumber: string): Promise<string
       .limit(10)
 
     if (error) {
-      console.error('Error fetching transactions:', error)
+      logger.error('Error fetching transactions', { whatsappNumber, userId: session.userId }, error)
       return messages.genericError
     }
 
@@ -197,7 +198,7 @@ export async function handleShowExpenses(whatsappNumber: string): Promise<string
 
     return response
   } catch (error) {
-    console.error('Error in handleShowExpenses:', error)
+    logger.error('Error in handleShowExpenses', { whatsappNumber }, error as Error)
     return messages.genericError
   }
 }
