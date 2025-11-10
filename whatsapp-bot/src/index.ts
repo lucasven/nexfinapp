@@ -15,8 +15,8 @@ import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
 import http from 'http'
-import { handleMessage } from './handlers/message-handler-v2.js'
-import { authorizeGroup } from './services/group-manager.js'
+import { handleMessage } from './handlers/core/message-handler.js'
+import { authorizeGroup } from './services/groups/group-manager.js'
 import { checkAuthorization } from './middleware/authorization.js'
 
 dotenv.config()

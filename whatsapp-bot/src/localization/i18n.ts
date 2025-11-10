@@ -8,7 +8,7 @@
 import { Locale, Messages, FormatHelpers } from './types.js'
 import { messages as ptBrMessages, formatHelpers as ptBrFormatHelpers } from './pt-br.js'
 import { messages as enMessages, formatHelpers as enFormatHelpers } from './en.js'
-import { getSupabaseClient } from '../services/supabase-client.js'
+import { getSupabaseClient } from '../services/database/supabase-client.js'
 
 const DEFAULT_LOCALE: Locale = 'pt-br'
 

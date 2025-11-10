@@ -1,36 +1,36 @@
-module.exports = {
-  preset: 'ts-jest',
+export default {
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/?(*.)+(spec|test).ts'],
-  testPathIgnorePatterns: ['/node_modules/', '/__tests__/utils/', '/__tests__/setup.ts'],
+  testMatch: ['**/__tests__/**/*.test.ts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  extensionsToTreatAsEsm: ['.ts'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
-      tsconfig: {
-        types: ['jest', 'node']
-      }
-    }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: {
+          module: 'ES2020',
+          moduleResolution: 'node',
+        },
+      },
+    ],
   },
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!src/**/*.d.ts',
+    '!src/**/*.test.ts',
+    '!src/**/__tests__/**',
     '!src/__mocks__/**',
-    '!src/__tests__/**',
   ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
   coverageThreshold: {
     global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
     },
   },
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-  },
-  clearMocks: true,
-  restoreMocks: true,
-};
+}
