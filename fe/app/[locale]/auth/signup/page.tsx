@@ -2,25 +2,48 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Link } from "@/lib/localization/link"
 import { useTranslations } from 'next-intl'
+import { trackEvent } from "@/lib/analytics/tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
+import { Badge } from "@/components/ui/badge"
 
 export default function SignupPage() {
   const t = useTranslations()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [isInvited, setIsInvited] = useState(false)
+
+  // Check for invitation token on mount
+  useEffect(() => {
+    const token = searchParams.get('token')
+    const type = searchParams.get('type')
+    
+    if (token && type === 'invite') {
+      setIsInvited(true)
+      
+      // Try to extract email from token (Supabase includes it in the hash)
+      const supabase = getSupabaseBrowserClient()
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session?.user?.email) {
+          setEmail(data.session.user.email)
+        }
+      })
+    }
+  }, [searchParams])
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,6 +65,21 @@ export default function SignupPage() {
 
     try {
       const supabase = getSupabaseBrowserClient()
+      
+      // Check beta status before allowing signup
+      const { data: betaSignup, error: betaError } = await supabase
+        .from("beta_signups")
+        .select("status")
+        .eq("email", email)
+        .single()
+
+      if (betaError || !betaSignup || betaSignup.status !== "approved") {
+        setError("Beta access required. Please join our waitlist at the landing page.")
+        setLoading(false)
+        return
+      }
+
+      // Proceed with signup
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -51,6 +89,13 @@ export default function SignupPage() {
       })
 
       if (error) throw error
+
+      // Track invitation acceptance if this was an invited user
+      if (isInvited) {
+        trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
+          email,
+        })
+      }
 
       setSuccess(true)
       setTimeout(() => {
@@ -69,6 +114,11 @@ export default function SignupPage() {
         <CardHeader>
           <CardTitle className="text-2xl">{t('auth.signup')}</CardTitle>
           <CardDescription>{t('auth.signUpWithEmail')}</CardDescription>
+          {isInvited && (
+            <div className="mt-2">
+              <Badge variant="default" className="bg-blue-600">Beta Invitation</Badge>
+            </div>
+          )}
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4">
@@ -89,7 +139,13 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isInvited && !!email}
               />
+              {isInvited && email && (
+                <p className="text-xs text-muted-foreground">
+                  Email pre-filled from your invitation
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

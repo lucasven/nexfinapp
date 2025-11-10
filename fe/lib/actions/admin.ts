@@ -2,6 +2,8 @@
 
 import { getSupabaseServerClient, getSupabaseAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 
 const ADMIN_EMAIL = "lucas.venturella@hotmail.com"
 
@@ -216,13 +218,14 @@ export async function getAllBetaSignups() {
 }
 
 /**
- * Approve a beta signup
+ * Approve a beta signup and send invitation email
  */
 export async function approveBetaSignup(email: string) {
   await verifyAdmin()
   const supabase = await getSupabaseServerClient()
 
-  const { error } = await supabase
+  // Update status first
+  const { error: updateError } = await supabase
     .from("beta_signups")
     .update({
       status: "approved",
@@ -230,7 +233,54 @@ export async function approveBetaSignup(email: string) {
     })
     .eq("email", email)
 
-  if (error) throw error
+  if (updateError) throw updateError
+
+  // Send invitation email using Supabase Admin API
+  const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
+    email,
+    {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`,
+      data: {
+        // Pass additional user metadata
+        invited_by: "admin",
+        invitation_date: new Date().toISOString(),
+      }
+    }
+  )
+
+  if (inviteError) {
+    // Log error but don't fail the approval
+    console.error("Failed to send invitation email:", inviteError)
+    
+    // Track invitation error in database
+    await supabase
+      .from("beta_signups")
+      .update({ 
+        invitation_sent: false,
+        invitation_error: inviteError.message 
+      })
+      .eq("email", email)
+    
+    // Track failed invitation event
+    await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_FAILED, {
+      error: inviteError.message,
+    })
+  } else {
+    // Track successful invitation
+    await supabase
+      .from("beta_signups")
+      .update({ 
+        invitation_sent: true,
+        invitation_sent_at: new Date().toISOString(),
+        invitation_error: null // Clear any previous errors
+      })
+      .eq("email", email)
+    
+    // Track invitation sent event
+    await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_SENT, {
+      email,
+    })
+  }
 
   revalidatePath("/admin/beta-signups")
 }
@@ -250,6 +300,65 @@ export async function rejectBetaSignup(email: string) {
     .eq("email", email)
 
   if (error) throw error
+
+  revalidatePath("/admin/beta-signups")
+}
+
+/**
+ * Resend beta invitation email
+ */
+export async function resendBetaInvitation(email: string) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Send invitation email using Supabase Admin API
+  const { error } = await supabase.auth.admin.inviteUserByEmail(
+    email,
+    {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`,
+      data: {
+        invited_by: "admin",
+        invitation_date: new Date().toISOString(),
+        resent: true,
+      }
+    }
+  )
+
+  if (error) {
+    console.error("Failed to resend invitation email:", error)
+    
+    // Track error
+    await supabase
+      .from("beta_signups")
+      .update({ 
+        invitation_sent: false,
+        invitation_error: error.message 
+      })
+      .eq("email", email)
+    
+    // Track failed resend event
+    await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_FAILED, {
+      error: error.message,
+      is_resend: true,
+    })
+    
+    throw error
+  }
+
+  // Update invitation tracking
+  await supabase
+    .from("beta_signups")
+    .update({ 
+      invitation_sent: true,
+      invitation_sent_at: new Date().toISOString(),
+      invitation_error: null
+    })
+    .eq("email", email)
+  
+  // Track resend event
+  await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_RESENT, {
+    email,
+  })
 
   revalidatePath("/admin/beta-signups")
 }
