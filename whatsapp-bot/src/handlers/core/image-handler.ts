@@ -92,7 +92,7 @@ export async function handleImageMessage(
       userId: session.userId,
       imageSize: imageBuffer.length 
     })
-    const expenses = await extractExpenseFromImage(imageBuffer)
+    const expenses = await extractExpenseFromImage(imageBuffer, session.userId)
     
     logger.info('OCR extraction completed', { 
       whatsappNumber, 

@@ -1,6 +1,8 @@
 import { createWorker } from 'tesseract.js'
 import { ExpenseData, OCRResult } from '../types.js'
 import sharp from 'sharp'
+import { parseWithAI } from '../services/ai/ai-pattern-generator.js'
+import { getUserContext } from '../services/ai/user-context.js'
 
 export async function processImage(imageBuffer: Buffer): Promise<OCRResult> {
   try {
@@ -377,12 +379,53 @@ function parseAmount(amountStr: string): number {
   }
 }
 
-export async function extractExpenseFromImage(imageBuffer: Buffer): Promise<ExpenseData[] | null> {
+export async function extractExpenseFromImage(
+  imageBuffer: Buffer,
+  userId: string
+): Promise<ExpenseData[] | null> {
   try {
     const result = await processImage(imageBuffer)
 
+    // NEW: Try AI parsing first if OCR text is available
+    if (result.text && result.text.length > 10) {
+      try {
+        console.log('Attempting AI parsing of OCR text...')
+        const userContext = await getUserContext(userId)
+        const aiResult = await parseWithAI(result.text, userContext)
+        
+        if (aiResult.action === 'add_expense' && aiResult.entities.transactions) {
+          // Multiple transactions from AI
+          const expenses: ExpenseData[] = aiResult.entities.transactions.map((tx: any) => ({
+            amount: tx.amount,
+            description: tx.description || '',
+            category: tx.category || 'outros',
+            type: tx.type || 'expense',
+            date: tx.date,
+            paymentMethod: tx.paymentMethod
+          }))
+          console.log(`AI successfully parsed ${expenses.length} expenses from OCR text`)
+          return expenses
+        } else if (aiResult.action === 'add_expense' && aiResult.entities.amount) {
+          // Single transaction from AI
+          const expense: ExpenseData = {
+            amount: aiResult.entities.amount,
+            description: aiResult.entities.description || '',
+            category: aiResult.entities.category || 'outros',
+            type: aiResult.entities.type || 'expense',
+            date: aiResult.entities.date,
+            paymentMethod: aiResult.entities.paymentMethod
+          }
+          console.log('AI successfully parsed 1 expense from OCR text')
+          return [expense]
+        }
+      } catch (aiError) {
+        console.warn('AI parsing failed, falling back to regex patterns:', aiError)
+        // Fall through to regex patterns below
+      }
+    }
+
+    // FALLBACK: Use existing regex patterns
     if (result.expenses && result.expenses.length > 0) {
-      // Return all expenses found
       return result.expenses
     }
 
