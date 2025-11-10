@@ -11,9 +11,14 @@ export interface Messages {
     update: string
     loading: string
     saving: string
+    deleting: string
     select: string
     optional: string
     required: string
+    all: string
+    custom: string
+    day: string
+    confirmDelete: string
   }
 
   // Navigation
@@ -47,6 +52,7 @@ export interface Messages {
   // Transaction
   transaction: {
     title: string
+    transactions: string
     addTitle: string
     editTitle: string
     addDescription: string
@@ -64,6 +70,9 @@ export interface Messages {
     expense: string
     noTransactions: string
     addFirstTransaction: string
+    allTypes: string
+    allCategories: string
+    deleteConfirm: string
   }
 
   // Payment methods
@@ -93,19 +102,31 @@ export interface Messages {
     month: string
     year: string
     amount: string
+    subtitle: string
   }
 
   // Category
   category: {
     title: string
+    categories: string
     addTitle: string
     editTitle: string
+    deleteTitle: string
+    deleteConfirm: string
     name: string
     type: string
     icon: string
     color: string
     noCategories: string
     addFirstCategory: string
+    subtitle: string
+    income: string
+    incomeDescription: string
+    expense: string
+    expenseDescription: string
+    noIncome: string
+    noExpense: string
+    cannotDelete: string
   }
 
   // Default categories
@@ -138,6 +159,9 @@ export interface Messages {
     upcomingPayments: string
     markAsPaid: string
     dueDate: string
+    subtitle: string
+    upcomingDescription: string
+    templatesDescription: string
   }
 
   // Reports
@@ -155,11 +179,85 @@ export interface Messages {
   profile: {
     title: string
     settings: string
+    subtitle: string
     displayName: string
+    displayNamePlaceholder: string
     email: string
+    emailCannotChange: string
+    saveChanges: string
+    updateFailed: string
     whatsappNumbers: string
     authorizedGroups: string
     language: string
+  }
+
+  // WhatsApp
+  whatsapp: {
+    title: string
+    subtitle: string
+    addNumber: string
+    editNumber: string
+    addNumberTitle: string
+    editNumberSubtitle: string
+    addNumberSubtitle: string
+    noNumbers: string
+    name: string
+    namePlaceholder: string
+    nameHelp: string
+    number: string
+    numberPlaceholder: string
+    numberHelp: string
+    isPrimary: string
+    onlyOnePrimary: string
+    primary: string
+    permissions: string
+    permissionView: string
+    permissionViewDesc: string
+    permissionAdd: string
+    permissionAddDesc: string
+    permissionEdit: string
+    permissionEditDesc: string
+    permissionDelete: string
+    permissionDeleteDesc: string
+    permissionBudgets: string
+    permissionBudgetsDesc: string
+    permissionReports: string
+    permissionReportsDesc: string
+    view: string
+    add: string
+    edit: string
+    delete: string
+    budgets: string
+    reports: string
+    deleteConfirm: string
+    deleteFailed: string
+    invalidNumber: string
+    saveFailed: string
+  }
+
+  // Groups
+  groups: {
+    title: string
+    subtitle: string
+    noGroups: string
+    noGroupsHelp: string
+    unknownGroup: string
+    autoAuthorized: string
+    active: string
+    inactive: string
+    addedBy: string
+    lastMessage: string
+    never: string
+    justNow: string
+    minutesAgo: string
+    hoursAgo: string
+    daysAgo: string
+    weeksAgo: string
+    activate: string
+    deactivate: string
+    deleteConfirm: string
+    updateFailed: string
+    deleteFailed: string
   }
 
   // Auth
