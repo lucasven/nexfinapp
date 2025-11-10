@@ -57,21 +57,21 @@ const EXPENSE_TOOL = {
         },
         transactions: {
           type: 'array',
-          description: 'Multiple transactions if mentioned in one message',
+          description: 'REQUIRED when multiple transactions detected (2+ amounts in message). Use this instead of single amount/category/description fields. Extract ALL transactions from the message.',
           items: {
             type: 'object',
             properties: {
-              amount: { type: 'number' },
-              category: { type: 'string' },
-              description: { type: 'string' },
-              date: { type: 'string', format: 'date' },
-              payment_method: { type: 'string' }
+              amount: { type: 'number', description: 'Transaction amount' },
+              category: { type: 'string', description: 'Transaction category' },
+              description: { type: 'string', description: 'Merchant or transaction description' },
+              date: { type: 'string', format: 'date', description: 'Transaction date in YYYY-MM-DD' },
+              payment_method: { type: 'string', description: 'Payment method if known' }
             },
             required: ['amount']
           }
         }
       },
-      required: ['action', 'amount']
+      required: ['action']
     }
   }
 }
@@ -717,20 +717,21 @@ IMPORTANT RULES:
 1. For expense/income messages, extract: amount, category, description, date, payment method
 2. For dates: "hoje" = today, "ontem" = yesterday, "DD/MM" or "DD/MM/YYYY" = specific date, "X de [mês]" = Xth of current month/year
 3. For amounts: accept "50", "R$ 50", "50 reais", convert to number
-4. **MULTIPLE TRANSACTIONS**: If multiple transactions in one message (especially OCR/bank statements), use the transactions array. Parse ALL transactions found, not just the first one.
-5. **OCR/BANK STATEMENTS**: Format like "MERCHANT R$ XX,XX" repeated with dates. Extract ALL transactions with their dates. Match merchants to categories.
-6. Default to "add_expense" unless income is explicitly mentioned (recebi, ganhei, salário, etc.)
-7. If uncertain, make best guess based on context
-8. When user replies to previous message (context provided), consider both messages together
-9. **TRANSACTION REPLIES**: If message contains [transaction_id: ABC123], extract the ID and use it for edit/delete/change operations
-10. **CATEGORY CHANGES**: "mudar categoria", "alterar categoria", "trocar categoria" = change_category (NOT list_items!)
-11. **CATEGORY MATCHING**: Prioritize user's custom categories (listed first) over default ones when matching descriptions. If a description could match multiple categories, prefer the custom one.
+4. **CRITICAL - MULTIPLE TRANSACTIONS**: Before responding, COUNT how many "R$" amounts appear in the message. If you count 2 or more amounts, you MUST use the transactions array and include ALL of them. DO NOT return just one transaction when multiple exist.
+5. **OCR/BANK STATEMENTS**: Messages with pattern "MERCHANT R$ XX,XX\ndate\nMERCHANT R$ XX,XX\ndate" repeated = bank statement with MULTIPLE transactions. You MUST extract EVERY SINGLE transaction into the transactions array.
+6. **VERIFICATION**: After extracting transactions, verify your count matches the number of R$ amounts in the original message.
+7. Default to "add_expense" unless income is explicitly mentioned (recebi, ganhei, salário, etc.)
+8. If uncertain, make best guess based on context
+9. When user replies to previous message (context provided), consider both messages together
+10. **TRANSACTION REPLIES**: If message contains [transaction_id: ABC123], extract the ID and use it for edit/delete/change operations
+11. **CATEGORY CHANGES**: "mudar categoria", "alterar categoria", "trocar categoria" = change_category (NOT list_items!)
+12. **CATEGORY MATCHING**: Prioritize user's custom categories (listed first) over default ones when matching descriptions. If a description could match multiple categories, prefer the custom one.
 
 EXAMPLES:
 "gastei 50 em comida" → add_expense_or_income(action="add_expense", amount=50, category="comida")
-"paguei 30 de uber com cartão" → add_expense_or_income(amount=30, category="transporte", description="uber", payment_method="cartão")
-"comprei 25 no mercado e 15 na farmácia" → add_expense_or_income(transactions=[{amount:25, category:"mercado"}, {amount:15, category:"farmácia"}])
-"SUPERMERCADO R$ 50,00\n6 de novembro\nFARMACIA R$ 30,00\n5 de novembro" → add_expense_or_income(transactions=[{amount:50, category:"mercado", description:"SUPERMERCADO", date:"2025-11-06"}, {amount:30, category:"saúde", description:"FARMACIA", date:"2025-11-05"}])
+"paguei 30 de uber com cartão" → add_expense_or_income(action="add_expense", amount=30, category="transporte", description="uber", payment_method="cartão")
+"comprei 25 no mercado e 15 na farmácia" → add_expense_or_income(action="add_expense", transactions=[{amount:25, category:"mercado"}, {amount:15, category:"saúde"}])
+"SUPERMERCADO R$ 50,00\n6 de novembro\nFARMACIA R$ 30,00\n5 de novembro\nPOSTO R$ 200,00\n4 de novembro" → add_expense_or_income(action="add_expense", transactions=[{amount:50, category:"mercado", description:"SUPERMERCADO", date:"2025-11-06"}, {amount:30, category:"saúde", description:"FARMACIA", date:"2025-11-05"}, {amount:200, category:"transporte", description:"POSTO", date:"2025-11-04"}])
 "recebi 5000 de salário" → add_expense_or_income(action="add_income", amount=5000, category="salário")
 "listar gastos" → list_items(type="transactions")
 "listar categorias" → list_items(type="categories")
