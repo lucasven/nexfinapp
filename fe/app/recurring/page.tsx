@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { UserMenu } from "@/components/user-menu"
 import { getRecurringPayments, getRecurringTransactions, deleteRecurringTransaction } from "@/lib/actions/recurring"
-import { getCategories } from "@/lib/actions/transactions"
+import { getCategories } from "@/lib/actions/categories"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { ArrowLeftIcon, EditIcon, TrashIcon } from "lucide-react"
 import Link from "next/link"

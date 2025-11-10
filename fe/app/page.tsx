@@ -2,11 +2,12 @@ import { BalanceCard } from "@/components/balance-card"
 import { TransactionDialog } from "@/components/transaction-dialog"
 import { TransactionList } from "@/components/transaction-list"
 import { UserMenu } from "@/components/user-menu"
-import { getBalance, getCategories, getTransactions } from "@/lib/actions/transactions"
+import { getBalance, getTransactions } from "@/lib/actions/transactions"
+import { getCategories } from "@/lib/actions/categories"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { BarChart3Icon, RepeatIcon, TargetIcon } from "lucide-react"
+import { BarChart3Icon, RepeatIcon, TargetIcon, FolderIcon } from "lucide-react"
 
 export default async function HomePage() {
   const supabase = await getSupabaseServerClient()
@@ -35,6 +36,12 @@ export default async function HomePage() {
               <Link href="/budgets">
                 <TargetIcon className="h-4 w-4 mr-2" />
                 Budgets
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/categories">
+                <FolderIcon className="h-4 w-4 mr-2" />
+                Categories
               </Link>
             </Button>
             <Button variant="outline" asChild>
