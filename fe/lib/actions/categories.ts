@@ -2,6 +2,8 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 
 export async function getCategories() {
   const supabase = await getSupabaseServerClient()
@@ -39,6 +41,13 @@ export async function createCategory(formData: {
     .single()
 
   if (error) throw error
+
+  // Track category creation event
+  await trackServerEvent(user.id, AnalyticsEvent.CATEGORY_CREATED, {
+    [AnalyticsProperty.CATEGORY_ID]: data.id,
+    [AnalyticsProperty.CATEGORY_NAME]: formData.name,
+    [AnalyticsProperty.CATEGORY_TYPE]: formData.type,
+  })
 
   revalidatePath("/categories")
   revalidatePath("/")
@@ -89,6 +98,11 @@ export async function updateCategory(
 
   if (error) throw error
 
+  // Track category update event
+  await trackServerEvent(user.id, AnalyticsEvent.CATEGORY_EDITED, {
+    [AnalyticsProperty.CATEGORY_ID]: id,
+  })
+
   revalidatePath("/categories")
   revalidatePath("/")
   return data
@@ -132,6 +146,12 @@ export async function deleteCategory(id: string) {
   const { error } = await supabase.from("categories").delete().eq("id", id).eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track category deletion event
+  await trackServerEvent(user.id, AnalyticsEvent.CATEGORY_DELETED, {
+    [AnalyticsProperty.CATEGORY_ID]: id,
+    [AnalyticsProperty.CATEGORY_NAME]: category.name,
+  })
 
   revalidatePath("/categories")
   revalidatePath("/")

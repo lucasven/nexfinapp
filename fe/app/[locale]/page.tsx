@@ -5,6 +5,7 @@ import { UserMenu } from "@/components/user-menu"
 import { getBalance, getTransactions } from "@/lib/actions/transactions"
 import { getCategories } from "@/lib/actions/categories"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { checkIsAdmin } from "@/lib/actions/admin"
 import { Link } from "@/lib/localization/link"
 import { Button } from "@/components/ui/button"
 import { BarChart3Icon, RepeatIcon, TargetIcon, FolderIcon } from "lucide-react"
@@ -17,7 +18,12 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [balance, categories, transactions] = await Promise.all([getBalance(), getCategories(), getTransactions()])
+  const [balance, categories, transactions, isAdmin] = await Promise.all([
+    getBalance(), 
+    getCategories(), 
+    getTransactions(),
+    checkIsAdmin()
+  ])
 
   return (
     <div className="min-h-screen bg-background">
@@ -53,7 +59,7 @@ export default async function HomePage() {
               </Link>
             </Button>
             <TransactionDialog categories={categories} />
-            <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
+            <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} isAdmin={isAdmin} />
           </div>
         </div>
 

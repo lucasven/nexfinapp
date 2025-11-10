@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +23,8 @@ import { PlusIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from 'next-intl'
 import { translateCategoryName } from '@/lib/localization/category-translations'
+import { trackEvent } from '@/lib/analytics/tracker'
+import { AnalyticsEvent } from '@/lib/analytics/events'
 
 interface TransactionDialogProps {
   categories: Category[]
@@ -43,6 +45,15 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
     date: transaction?.date || new Date().toISOString().split("T")[0],
     payment_method: transaction?.payment_method || "",
   })
+
+  // Track when dialog opens
+  useEffect(() => {
+    if (open) {
+      trackEvent(AnalyticsEvent.TRANSACTION_DIALOG_OPENED, {
+        is_edit: !!transaction,
+      })
+    }
+  }, [open, transaction])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

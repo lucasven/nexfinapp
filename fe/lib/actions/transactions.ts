@@ -2,6 +2,8 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 
 export async function getTransactions(filters?: {
   startDate?: string
@@ -74,6 +76,14 @@ export async function createTransaction(formData: {
 
   if (error) throw error
 
+  // Track transaction creation event
+  await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_CREATED, {
+    [AnalyticsProperty.TRANSACTION_ID]: data.id,
+    [AnalyticsProperty.TRANSACTION_AMOUNT]: formData.amount,
+    [AnalyticsProperty.TRANSACTION_TYPE]: formData.type,
+    [AnalyticsProperty.CATEGORY_ID]: formData.category_id,
+  })
+
   revalidatePath("/")
   return data
 }
@@ -109,6 +119,11 @@ export async function updateTransaction(
 
   if (error) throw error
 
+  // Track transaction update event
+  await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_EDITED, {
+    [AnalyticsProperty.TRANSACTION_ID]: id,
+  })
+
   revalidatePath("/")
   return data
 }
@@ -124,6 +139,11 @@ export async function deleteTransaction(id: string) {
   const { error } = await supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track transaction deletion event
+  await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_DELETED, {
+    [AnalyticsProperty.TRANSACTION_ID]: id,
+  })
 
   revalidatePath("/")
 }

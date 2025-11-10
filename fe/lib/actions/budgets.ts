@@ -2,6 +2,8 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 
 export async function getBudgets(month?: number, year?: number) {
   const supabase = await getSupabaseServerClient()
@@ -108,6 +110,14 @@ export async function createBudget(formData: {
 
   if (error) throw error
 
+  // Track budget creation event
+  await trackServerEvent(user.id, AnalyticsEvent.BUDGET_CREATED, {
+    [AnalyticsProperty.BUDGET_AMOUNT]: formData.amount,
+    [AnalyticsProperty.BUDGET_MONTH]: formData.month,
+    [AnalyticsProperty.BUDGET_YEAR]: formData.year,
+    [AnalyticsProperty.CATEGORY_ID]: formData.category_id,
+  })
+
   revalidatePath("/budgets")
   return data
 }
@@ -141,6 +151,11 @@ export async function updateBudget(
 
   if (error) throw error
 
+  // Track budget update event
+  await trackServerEvent(user.id, AnalyticsEvent.BUDGET_UPDATED, {
+    budget_id: id,
+  })
+
   revalidatePath("/budgets")
   return data
 }
@@ -156,6 +171,11 @@ export async function deleteBudget(id: string) {
   const { error } = await supabase.from("budgets").delete().eq("id", id).eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track budget deletion event
+  await trackServerEvent(user.id, AnalyticsEvent.BUDGET_DELETED, {
+    budget_id: id,
+  })
 
   revalidatePath("/budgets")
 }

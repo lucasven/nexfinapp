@@ -10,18 +10,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { LogOutIcon, UserIcon, SettingsIcon } from "lucide-react"
+import { LogOutIcon, UserIcon, SettingsIcon, LayoutDashboardIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Link } from '@/lib/localization/link'
 import { LanguageSwitcher } from './language-switcher'
 import { useTranslations } from 'next-intl'
+import { resetUser } from '@/lib/analytics/tracker'
 
 interface UserMenuProps {
   userEmail?: string
   displayName?: string
+  isAdmin?: boolean
 }
 
-export function UserMenu({ userEmail, displayName }: UserMenuProps) {
+export function UserMenu({ userEmail, displayName, isAdmin }: UserMenuProps) {
   const router = useRouter()
 
   const t = useTranslations()
@@ -29,6 +31,7 @@ export function UserMenu({ userEmail, displayName }: UserMenuProps) {
   const handleLogout = async () => {
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
+    resetUser() // Reset PostHog user identity
     router.push("/auth/login")
     router.refresh()
   }
@@ -58,6 +61,17 @@ export function UserMenu({ userEmail, displayName }: UserMenuProps) {
             {t('profile.settings')}
           </Link>
         </DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/admin">
+                <LayoutDashboardIcon className="h-4 w-4 mr-2" />
+                Admin Dashboard
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOutIcon className="h-4 w-4 mr-2" />
