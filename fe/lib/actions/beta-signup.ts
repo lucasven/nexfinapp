@@ -2,6 +2,8 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { z } from "zod"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 
 const emailSchema = z.string().email("Invalid email address")
 
@@ -69,6 +71,11 @@ export async function submitBetaSignup(email: string): Promise<BetaSignupResult>
         error: "Ocorreu um erro ao processar sua solicitação. Tente novamente.",
       }
     }
+
+    // Track beta signup event (using email as distinct ID since user is not logged in)
+    await trackServerEvent(email, AnalyticsEvent.BETA_SIGNUP_SUBMITTED, {
+      email_domain: email.split('@')[1],
+    })
 
     return {
       success: true,
