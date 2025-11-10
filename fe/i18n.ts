@@ -1,17 +1,23 @@
 import { getRequestConfig } from 'next-intl/server'
-import { notFound } from 'next/navigation'
+import { headers } from 'next/headers'
+import { locales, defaultLocale } from './i18n/routing'
 
-export const locales = ['en', 'pt-br'] as const
-export const defaultLocale = 'pt-br' as const
+export default getRequestConfig(async () => {
+  // Read the incoming `x-next-intl-locale` header that the middleware sets
+  const headersList = await headers()
+  const locale = headersList.get('x-next-intl-locale') || defaultLocale
 
-export type Locale = (typeof locales)[number]
-
-export default getRequestConfig(async ({ locale }) => {
-  // Validate that the incoming `locale` parameter is valid
-  if (!locales.includes(locale as Locale)) notFound()
-
+  let messages
+  if (locale === 'en') {
+    messages = (await import('./lib/localization/en')).messages
+  } else if (locale === 'pt-br') {
+    messages = (await import('./lib/localization/pt-br')).messages
+  } else {
+    // Fallback to default locale
+    messages = (await import('./lib/localization/pt-br')).messages
+  }
   return {
-    locale: locale as string,
-    messages: (await import(`./lib/localization/${locale}.ts`)).messages,
+    locale,
+    messages,
   }
 })

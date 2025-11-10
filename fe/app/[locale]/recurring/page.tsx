@@ -43,7 +43,7 @@ export default async function RecurringPage() {
           </Button>
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">{t('nav.recurring')}</h1>
-            <p className="text-muted-foreground mt-1">Manage your monthly recurring expenses and income</p>
+            <p className="text-muted-foreground mt-1">{t('recurring.subtitle')}</p>
           </div>
           <RecurringDialog categories={categories} />
           <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
@@ -54,7 +54,7 @@ export default async function RecurringPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t('recurring.upcomingPayments')} for {monthName}</CardTitle>
-              <CardDescription>Mark payments as paid when completed</CardDescription>
+              <CardDescription>{t('recurring.upcomingDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               {payments.length === 0 ? (
@@ -73,7 +73,7 @@ export default async function RecurringPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t('recurring.title')}</CardTitle>
-              <CardDescription>Manage your recurring transaction templates</CardDescription>
+              <CardDescription>{t('recurring.templatesDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               {recurringTransactions.length === 0 ? (
@@ -87,7 +87,7 @@ export default async function RecurringPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t('table.description')}</TableHead>
-                        <TableHead>Day</TableHead>
+                        <TableHead>{t('common.day')}</TableHead>
                         <TableHead className="text-right">{t('table.amount')}</TableHead>
                         <TableHead className="text-right">{t('table.actions')}</TableHead>
                       </TableRow>
@@ -101,7 +101,7 @@ export default async function RecurringPage() {
                               <span className="font-medium">{recurring.description || recurring.category?.name}</span>
                             </div>
                           </TableCell>
-                          <TableCell>Day {recurring.day_of_month}</TableCell>
+                          <TableCell>{t('common.day')} {recurring.day_of_month}</TableCell>
                           <TableCell className="text-right">
                             <span
                               className={

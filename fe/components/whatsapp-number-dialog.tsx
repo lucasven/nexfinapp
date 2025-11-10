@@ -19,6 +19,7 @@ import { addAuthorizedNumber, updateAuthorizedNumber } from "@/lib/actions/profi
 import type { AuthorizedWhatsAppNumber } from "@/lib/types"
 import { PlusIcon, EditIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from 'next-intl'
 
 interface WhatsAppNumberDialogProps {
   number?: AuthorizedWhatsAppNumber
@@ -27,6 +28,7 @@ interface WhatsAppNumberDialogProps {
 }
 
 export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumberDialogProps) {
+  const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -78,7 +80,7 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
       const cleanedNumber = formData.whatsapp_number.replace(/\D/g, "")
 
       if (cleanedNumber.length < 10) {
-        alert("Please enter a valid WhatsApp number")
+        alert(t('whatsapp.invalidNumber'))
         setLoading(false)
         return
       }
@@ -101,7 +103,7 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
       onSaved?.()
     } catch (error) {
       console.error("Error saving WhatsApp number:", error)
-      alert("Failed to save WhatsApp number")
+      alert(t('whatsapp.saveFailed'))
     } finally {
       setLoading(false)
     }
@@ -123,46 +125,46 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
         {trigger || (
           <Button>
             <PlusIcon className="h-4 w-4 mr-2" />
-            Add Number
+            {t('whatsapp.addNumber')}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{number ? "Edit WhatsApp Number" : "Add WhatsApp Number"}</DialogTitle>
+            <DialogTitle>{number ? t('whatsapp.editNumber') : t('whatsapp.addNumberTitle')}</DialogTitle>
             <DialogDescription>
               {number
-                ? "Update the WhatsApp number and its permissions."
-                : "Add a WhatsApp number that can interact with the bot. Set permissions to control what this number can do."}
+                ? t('whatsapp.editNumberSubtitle')
+                : t('whatsapp.addNumberSubtitle')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Name / Label</Label>
+              <Label htmlFor="name">{t('whatsapp.name')}</Label>
               <Input
                 id="name"
                 type="text"
-                placeholder="e.g., Spouse, John, Me"
+                placeholder={t('whatsapp.namePlaceholder')}
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
-              <p className="text-xs text-muted-foreground">A label to identify this number</p>
+              <p className="text-xs text-muted-foreground">{t('whatsapp.nameHelp')}</p>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="whatsapp_number">WhatsApp Number</Label>
+              <Label htmlFor="whatsapp_number">{t('whatsapp.number')}</Label>
               <Input
                 id="whatsapp_number"
                 type="tel"
-                placeholder="5511999999999"
+                placeholder={t('whatsapp.numberPlaceholder')}
                 value={formData.whatsapp_number}
                 onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })}
                 required
               />
-              <p className="text-xs text-muted-foreground">Enter the full WhatsApp number including country code (e.g., 5511999999999)</p>
+              <p className="text-xs text-muted-foreground">{t('whatsapp.numberHelp')}</p>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -172,17 +174,17 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                 onCheckedChange={(checked) => setFormData({ ...formData, is_primary: checked as boolean })}
               />
               <Label htmlFor="is_primary" className="font-normal cursor-pointer">
-                Set as primary number
+                {t('whatsapp.isPrimary')}
               </Label>
             </div>
             {formData.is_primary && (
               <p className="text-xs text-muted-foreground -mt-3">
-                Only one number can be primary.
+                {t('whatsapp.onlyOnePrimary')}
               </p>
             )}
 
             <div className="border-t pt-4 space-y-4">
-              <Label className="text-base font-semibold">Permissions</Label>
+              <Label className="text-base font-semibold">{t('whatsapp.permissions')}</Label>
               <div className="space-y-3">
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -192,8 +194,8 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                   />
                   <Label htmlFor="can_view" className="font-normal cursor-pointer flex-1">
                     <div>
-                      <div className="font-medium">View Transactions</div>
-                      <div className="text-xs text-muted-foreground">Can view all transactions and balances</div>
+                      <div className="font-medium">{t('whatsapp.permissionView')}</div>
+                      <div className="text-xs text-muted-foreground">{t('whatsapp.permissionViewDesc')}</div>
                     </div>
                   </Label>
                 </div>
@@ -206,8 +208,8 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                   />
                   <Label htmlFor="can_add" className="font-normal cursor-pointer flex-1">
                     <div>
-                      <div className="font-medium">Add Transactions</div>
-                      <div className="text-xs text-muted-foreground">Can add new income and expenses</div>
+                      <div className="font-medium">{t('whatsapp.permissionAdd')}</div>
+                      <div className="text-xs text-muted-foreground">{t('whatsapp.permissionAddDesc')}</div>
                     </div>
                   </Label>
                 </div>
@@ -220,8 +222,8 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                   />
                   <Label htmlFor="can_edit" className="font-normal cursor-pointer flex-1">
                     <div>
-                      <div className="font-medium">Edit Transactions</div>
-                      <div className="text-xs text-muted-foreground">Can modify existing transactions</div>
+                      <div className="font-medium">{t('whatsapp.permissionEdit')}</div>
+                      <div className="text-xs text-muted-foreground">{t('whatsapp.permissionEditDesc')}</div>
                     </div>
                   </Label>
                 </div>
@@ -234,8 +236,8 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                   />
                   <Label htmlFor="can_delete" className="font-normal cursor-pointer flex-1">
                     <div>
-                      <div className="font-medium">Delete Transactions</div>
-                      <div className="text-xs text-muted-foreground">Can delete transactions</div>
+                      <div className="font-medium">{t('whatsapp.permissionDelete')}</div>
+                      <div className="text-xs text-muted-foreground">{t('whatsapp.permissionDeleteDesc')}</div>
                     </div>
                   </Label>
                 </div>
@@ -248,8 +250,8 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                   />
                   <Label htmlFor="can_manage_budgets" className="font-normal cursor-pointer flex-1">
                     <div>
-                      <div className="font-medium">Manage Budgets</div>
-                      <div className="text-xs text-muted-foreground">Can create, edit, and delete budgets</div>
+                      <div className="font-medium">{t('whatsapp.permissionBudgets')}</div>
+                      <div className="text-xs text-muted-foreground">{t('whatsapp.permissionBudgetsDesc')}</div>
                     </div>
                   </Label>
                 </div>
@@ -262,8 +264,8 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
                   />
                   <Label htmlFor="can_view_reports" className="font-normal cursor-pointer flex-1">
                     <div>
-                      <div className="font-medium">View Reports</div>
-                      <div className="text-xs text-muted-foreground">Can view financial reports and analytics</div>
+                      <div className="font-medium">{t('whatsapp.permissionReports')}</div>
+                      <div className="text-xs text-muted-foreground">{t('whatsapp.permissionReportsDesc')}</div>
                     </div>
                   </Label>
                 </div>
@@ -273,10 +275,10 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : number ? "Update" : "Add"}
+              {loading ? t('common.saving') : number ? t('common.update') : t('common.add')}
             </Button>
           </DialogFooter>
         </form>

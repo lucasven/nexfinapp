@@ -9,8 +9,10 @@ import { getAuthorizedNumbers, deleteAuthorizedNumber } from "@/lib/actions/prof
 import type { AuthorizedWhatsAppNumber } from "@/lib/types"
 import { EditIcon, TrashIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from 'next-intl'
 
 export function WhatsAppNumbersCard() {
+  const t = useTranslations()
   const router = useRouter()
   const [numbers, setNumbers] = useState<AuthorizedWhatsAppNumber[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,7 +33,7 @@ export function WhatsAppNumbersCard() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this WhatsApp number?")) return
+    if (!confirm(t('whatsapp.deleteConfirm'))) return
 
     try {
       await deleteAuthorizedNumber(id)
@@ -39,7 +41,7 @@ export function WhatsAppNumbersCard() {
       loadNumbers()
     } catch (error) {
       console.error("Error deleting WhatsApp number:", error)
-      alert("Failed to delete WhatsApp number")
+      alert(t('whatsapp.deleteFailed'))
     }
   }
 
@@ -48,18 +50,18 @@ export function WhatsAppNumbersCard() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>WhatsApp Configuration</CardTitle>
-            <CardDescription>Manage authorized WhatsApp numbers and their permissions</CardDescription>
+            <CardTitle>{t('whatsapp.title')}</CardTitle>
+            <CardDescription>{t('whatsapp.subtitle')}</CardDescription>
           </div>
           <WhatsAppNumberDialog onSaved={loadNumbers} />
         </div>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">Loading...</div>
+          <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
         ) : numbers.length === 0 ? (
           <div className="text-center py-8 space-y-4">
-            <p className="text-muted-foreground">No WhatsApp numbers added yet.</p>
+            <p className="text-muted-foreground">{t('whatsapp.noNumbers')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -71,16 +73,16 @@ export function WhatsAppNumbersCard() {
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{number.name}</span>
-                    {number.is_primary && <Badge variant="default">Primary</Badge>}
+                    {number.is_primary && <Badge variant="default">{t('whatsapp.primary')}</Badge>}
                     <span className="text-sm text-muted-foreground">{number.whatsapp_number}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {number.permissions.can_view && <Badge variant="secondary">View</Badge>}
-                    {number.permissions.can_add && <Badge variant="secondary">Add</Badge>}
-                    {number.permissions.can_edit && <Badge variant="secondary">Edit</Badge>}
-                    {number.permissions.can_delete && <Badge variant="secondary">Delete</Badge>}
-                    {number.permissions.can_manage_budgets && <Badge variant="secondary">Budgets</Badge>}
-                    {number.permissions.can_view_reports && <Badge variant="secondary">Reports</Badge>}
+                    {number.permissions.can_view && <Badge variant="secondary">{t('whatsapp.view')}</Badge>}
+                    {number.permissions.can_add && <Badge variant="secondary">{t('whatsapp.add')}</Badge>}
+                    {number.permissions.can_edit && <Badge variant="secondary">{t('whatsapp.edit')}</Badge>}
+                    {number.permissions.can_delete && <Badge variant="secondary">{t('whatsapp.delete')}</Badge>}
+                    {number.permissions.can_manage_budgets && <Badge variant="secondary">{t('whatsapp.budgets')}</Badge>}
+                    {number.permissions.can_view_reports && <Badge variant="secondary">{t('whatsapp.reports')}</Badge>}
                   </div>
                 </div>
                 <div className="flex gap-2">

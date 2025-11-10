@@ -37,7 +37,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
   })
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this transaction?")) {
+    if (confirm(t('transaction.deleteConfirm'))) {
       try {
         await deleteTransaction(id)
         router.refresh()
@@ -50,7 +50,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t('transaction.title')}s</CardTitle>
+        <CardTitle>{t('transaction.transactions')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4 mb-4 md:flex-row">
@@ -69,7 +69,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
               <SelectValue placeholder={t('transaction.type')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="all">{t('transaction.allTypes')}</SelectItem>
               <SelectItem value="income">{t('transaction.income')}</SelectItem>
               <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
             </SelectContent>
@@ -80,7 +80,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
               <SelectValue placeholder={t('transaction.category')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{t('transaction.allCategories')}</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
                   {category.icon} {translateCategoryName(category.name, locale as 'pt-br' | 'en')}

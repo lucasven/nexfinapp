@@ -38,7 +38,7 @@ export default async function BudgetsPage() {
           </Button>
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">{t('nav.budgets')}</h1>
-            <p className="text-muted-foreground mt-1">Track your spending limits for {monthName}</p>
+            <p className="text-muted-foreground mt-1">{t('budget.subtitle')} {monthName}</p>
           </div>
           <BudgetDialog categories={categories} currentMonth={currentMonth} currentYear={currentYear} />
           <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />

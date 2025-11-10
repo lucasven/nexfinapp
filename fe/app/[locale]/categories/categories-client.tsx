@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from 'next-intl'
 import { PencilIcon, Trash2Icon, PlusIcon, AlertCircleIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ interface CategoriesClientProps {
 }
 
 export function CategoriesClient({ categories, userId }: CategoriesClientProps) {
+  const t = useTranslations()
   const router = useRouter()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null)
@@ -76,7 +78,7 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
               <span className="font-medium">{category.name}</span>
               {isCustom && (
                 <Badge variant="secondary" className="text-xs">
-                  Custom
+                  {t('common.custom')}
                 </Badge>
               )}
             </div>
@@ -104,7 +106,7 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
             </Button>
           )}
           {!isCustom && (
-            <Button variant="ghost" size="sm" disabled title="Cannot delete default categories">
+            <Button variant="ghost" size="sm" disabled title={t('category.cannotDelete')}>
               <Trash2Icon className="h-4 w-4 text-muted-foreground" />
             </Button>
           )}
@@ -117,8 +119,8 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
     <>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Categories</h1>
-          <p className="text-muted-foreground mt-1">Manage your expense and income categories</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('category.categories')}</h1>
+          <p className="text-muted-foreground mt-1">{t('category.subtitle')}</p>
         </div>
         <CategoryDialog />
       </div>
@@ -128,15 +130,15 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <span className="text-green-600">💰</span>
-              Income Categories
+              {t('category.income')}
             </CardTitle>
-            <CardDescription>Categories for tracking your income</CardDescription>
+            <CardDescription>{t('category.incomeDescription')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {incomeCategories.length > 0 ? (
               incomeCategories.map(renderCategory)
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">No income categories yet</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t('category.noIncome')}</p>
             )}
           </CardContent>
         </Card>
@@ -145,15 +147,15 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <span className="text-red-600">💸</span>
-              Expense Categories
+              {t('category.expense')}
             </CardTitle>
-            <CardDescription>Categories for tracking your expenses</CardDescription>
+            <CardDescription>{t('category.expenseDescription')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {expenseCategories.length > 0 ? (
               expenseCategories.map(renderCategory)
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">No expense categories yet</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t('category.noExpense')}</p>
             )}
           </CardContent>
         </Card>
@@ -162,9 +164,9 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Category</DialogTitle>
+            <DialogTitle>{t('category.deleteTitle')}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the category "{categoryToDelete?.name}"?
+              {t('category.deleteConfirm')} "{categoryToDelete?.name}"?
             </DialogDescription>
           </DialogHeader>
 
@@ -177,10 +179,10 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleteLoading}>
-              {deleteLoading ? "Deleting..." : "Delete"}
+              {deleteLoading ? t('common.deleting') : t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

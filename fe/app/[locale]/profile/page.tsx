@@ -26,7 +26,7 @@ export default async function ProfilePage() {
           </Button>
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">{t('profile.settings')}</h1>
-            <p className="text-muted-foreground mt-1">Manage your profile and WhatsApp bot configuration</p>
+            <p className="text-muted-foreground mt-1">{t('profile.subtitle')}</p>
           </div>
           <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
         </div>

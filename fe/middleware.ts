@@ -1,14 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import createMiddleware from 'next-intl/middleware'
-import { locales, defaultLocale } from './i18n'
+import { locales, defaultLocale } from './i18n/routing'
 import { detectBrowserLocale } from './lib/localization/config'
 
 // Create the next-intl middleware
 const intlMiddleware = createMiddleware({
   locales,
   defaultLocale,
-  localePrefix: 'always',
+  localePrefix: 'always'
 })
 
 export async function middleware(request: NextRequest) {
@@ -17,11 +17,11 @@ export async function middleware(request: NextRequest) {
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value
   const browserLocale = detectBrowserLocale(request.headers.get('accept-language') || undefined)
   const detectedLocale = cookieLocale || browserLocale
-
-  // Create a response with locale handling
-  let response = intlMiddleware(request)
-
-  // Set up Supabase client
+  
+  // Step 1: Use the default intl middleware
+  const response = intlMiddleware(request)
+  
+  // Step 2: Set up Supabase client with the response
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -32,9 +32,6 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request,
-          })
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
         },
       },
