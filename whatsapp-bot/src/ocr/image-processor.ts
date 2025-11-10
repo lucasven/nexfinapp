@@ -2,7 +2,7 @@ import { createWorker } from 'tesseract.js'
 import { ExpenseData, OCRResult } from '../types.js'
 import sharp from 'sharp'
 import { parseWithAI } from '../services/ai/ai-pattern-generator.js'
-import { getUserContext } from '../services/ai/user-context.js'
+import { getUserContext } from '../services/ai/ai-pattern-generator.js'
 
 export async function processImage(imageBuffer: Buffer): Promise<OCRResult> {
   try {
