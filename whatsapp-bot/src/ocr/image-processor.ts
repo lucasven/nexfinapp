@@ -393,6 +393,9 @@ export async function extractExpenseFromImage(
         const userContext = await getUserContext(userId)
         const aiResult = await parseWithAI(result.text, userContext)
         
+        // DEBUG: Log what AI returned
+        console.log('AI parsing result:', JSON.stringify(aiResult, null, 2))
+        
         if (aiResult.action === 'add_expense' && aiResult.entities.transactions) {
           // Multiple transactions from AI
           const expenses: ExpenseData[] = aiResult.entities.transactions.map((tx: any) => ({
@@ -417,6 +420,14 @@ export async function extractExpenseFromImage(
           }
           console.log('AI successfully parsed 1 expense from OCR text')
           return [expense]
+        } else {
+          // DEBUG: Log when AI result doesn't match expected format
+          console.warn('AI result did not match expected format:', {
+            action: aiResult.action,
+            hasTransactions: !!aiResult.entities.transactions,
+            hasAmount: !!aiResult.entities.amount,
+            entities: aiResult.entities
+          })
         }
       } catch (aiError) {
         console.warn('AI parsing failed, falling back to regex patterns:', aiError)
