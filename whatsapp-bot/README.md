@@ -112,6 +112,31 @@ Para mensagens complexas, usa OpenAI para entender e criar novos padrões.
    - ✅ A página se auto-atualiza a cada 10 segundos
    - 🗑️ Use o botão "Limpar Autenticação" para desconectar e gerar novo QR Code
 
+## Usando em Grupos
+
+### Como adicionar o bot a um grupo
+
+**Método 1: Enviar convite ao bot (Recomendado)** 🎯
+1. Faça login no bot via mensagem direta: `login: seuemail@example.com suasenha`
+2. No grupo desejado, toque em **Mais opções (⋮) > Informações do grupo**
+3. Toque em **Convidar via link**
+4. Copie o link do grupo
+5. Envie o link para o bot em uma **mensagem direta**
+6. ✅ O bot entrará automaticamente e autorizará o grupo!
+
+**Método 2: Adicionar manualmente**
+1. Adicione o número do bot ao grupo
+2. O bot detectará se você está autorizado
+3. Se sim: Grupo autorizado automaticamente
+4. Se não: Você precisa fazer login primeiro
+
+### Gerenciar grupos autorizados
+
+- Acesse **Profile Settings** no app web
+- Visualize todos os grupos autorizados
+- Ative/desative grupos conforme necessário
+- Veja última atividade de cada grupo
+
 ## Exemplos de Uso
 
 ### Autenticação

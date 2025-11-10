@@ -16,6 +16,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import http from 'http'
 import { handleMessage } from './handlers/message-handler-v2.js'
+import { authorizeGroup } from './services/group-manager.js'
+import { checkAuthorization } from './middleware/authorization.js'
 
 dotenv.config()
 
@@ -129,7 +131,205 @@ async function connectToWhatsApp() {
     }
   })
 
+  // Listen for group participant updates (when bot is added/removed from groups)
+  sock.ev.on('group-participants.update', async (update) => {
+    try {
+      if (!sock) return // Safety check
+      
+      const { id: groupJid, participants, action } = update
+      
+      console.log('[group-participants.update] Event:', { groupJid, action, participants: participants.length })
+      
+      // Check if bot was added to a group
+      if (action === 'add') {
+        // Get bot's JID
+        const botJid = sock.user?.id
+        if (!botJid) return
+        
+        // Check if the bot is one of the added participants
+        const botWasAdded = participants.some(p => {
+          const participantNumber = p.split('@')[0].split(':')[0]
+          const botNumber = botJid.split(':')[0]
+          return participantNumber === botNumber
+        })
+        
+        if (botWasAdded) {
+          console.log('[group-participants.update] Bot was added to group:', groupJid)
+          
+          try {
+            // Get group metadata
+            const groupMetadata = await sock.groupMetadata(groupJid)
+            const groupName = groupMetadata.subject
+            
+            // Get the person who added the bot (author of the action)
+            const adderJid = update.author
+            if (!adderJid) {
+              console.log('[group-participants.update] No author found for add action')
+              return
+            }
+            
+            // Extract phone number from adder JID
+            const adderNumber = adderJid.split('@')[0].split(':')[0].replace(/\D/g, '')
+            console.log('[group-participants.update] Bot added by:', adderNumber)
+            
+            // Check if the person who added the bot is authorized
+            const authResult = await checkAuthorization(adderNumber)
+            
+            if (authResult.authorized && authResult.userId) {
+              console.log('[group-participants.update] Adder is authorized, auto-authorizing group')
+              
+              // Auto-authorize the group
+              const result = await authorizeGroup(
+                groupJid,
+                groupName,
+                authResult.userId,
+                adderNumber,
+                true // auto_authorized = true
+              )
+              
+              if (result.success) {
+                // Send welcome message to the group
+                await sock.sendMessage(groupJid, {
+                  text: `✅ Grupo autorizado automaticamente!\n\n` +
+                        `Olá! Fui adicionado por um usuário autorizado.\n` +
+                        `Todos no grupo podem usar minhas funcionalidades.\n\n` +
+                        `Envie "ajuda" para ver o que posso fazer! 🤖`
+                })
+                console.log('[group-participants.update] Group auto-authorized successfully')
+              } else {
+                console.error('[group-participants.update] Failed to authorize group:', result.error)
+              }
+            } else {
+              console.log('[group-participants.update] Adder is not authorized, group not auto-authorized')
+              
+              // Send message explaining authorization is needed
+              await sock.sendMessage(groupJid, {
+                text: `⚠️ Olá! Fui adicionado a este grupo, mas ainda não estou autorizado.\n\n` +
+                      `Para me usar aqui, a pessoa que me adicionou precisa:\n` +
+                      `1. Me enviar uma mensagem direta primeiro\n` +
+                      `2. Fazer login com: login: email senha\n` +
+                      `3. Então eu poderei funcionar neste grupo automaticamente.`
+              })
+            }
+          } catch (error) {
+            console.error('[group-participants.update] Error processing group add:', error)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[group-participants.update] Error in event handler:', error)
+    }
+  })
+
   return sock
+}
+
+async function handleGroupInvite(
+  sock: WASocket,
+  from: string,
+  inviteCode: string,
+  groupJid?: string | null,
+  groupName?: string | null
+): Promise<void> {
+  try {
+    console.log('[GROUP INVITE] Processing invite:', {
+      inviteCode,
+      groupJid,
+      groupName,
+      from
+    })
+    
+    // Get sender number
+    const senderNumber = from.split('@')[0].replace(/\D/g, '')
+    
+    // Check if sender is authorized
+    const authResult = await checkAuthorization(senderNumber)
+    
+    if (authResult.authorized && authResult.userId) {
+      console.log('[GROUP INVITE] Sender is authorized, accepting invite')
+      
+      try {
+        // Accept the group invite
+        const joinResult = await sock.groupAcceptInvite(inviteCode)
+        console.log('[GROUP INVITE] Joined group:', joinResult)
+        
+        // Get group JID (prefer from invite message, fallback to join result)
+        const groupJidFinal = groupJid || joinResult
+        if (!groupJidFinal) {
+          throw new Error('Could not determine group JID')
+        }
+        
+        // Fetch group metadata to get the name if not provided
+        let finalGroupName = groupName
+        if (!finalGroupName) {
+          try {
+            const metadata = await sock.groupMetadata(groupJidFinal)
+            finalGroupName = metadata.subject
+          } catch (error) {
+            console.error('[GROUP INVITE] Error fetching group metadata:', error)
+            finalGroupName = 'Unknown Group'
+          }
+        }
+        
+        // Auto-authorize the group
+        const result = await authorizeGroup(
+          groupJidFinal,
+          finalGroupName || 'Unknown Group',
+          authResult.userId,
+          senderNumber,
+          true // auto_authorized = true
+        )
+        
+        if (result.success) {
+          // Send confirmation to user
+          await sock.sendMessage(from, {
+            text: `✅ Entrei no grupo "${finalGroupName}" e autorizei automaticamente!\n\n` +
+                  `O grupo agora está ativo e todos podem usar minhas funcionalidades.\n\n` +
+                  `Você pode gerenciar grupos autorizados no app web em Profile Settings.`
+          })
+          
+          // Send welcome message to the group
+          try {
+            await sock.sendMessage(groupJidFinal, {
+              text: `👋 Olá! Fui convidado e estou pronto para ajudar!\n\n` +
+                    `Todos no grupo podem usar minhas funcionalidades.\n` +
+                    `Envie "ajuda" para ver o que posso fazer! 🤖`
+            })
+          } catch (error) {
+            console.error('[GROUP INVITE] Error sending welcome message:', error)
+          }
+          
+          console.log('[GROUP INVITE] Group auto-authorized successfully')
+        } else {
+          await sock.sendMessage(from, {
+            text: `⚠️ Entrei no grupo mas houve um erro ao autorizar: ${result.error}`
+          })
+        }
+      } catch (error) {
+        console.error('[GROUP INVITE] Error accepting invite:', error)
+        await sock.sendMessage(from, {
+          text: `❌ Erro ao aceitar o convite do grupo.\n\n` +
+                `Possíveis causas:\n` +
+                `• Link expirado ou inválido\n` +
+                `• Grupo cheio\n` +
+                `• Você não tem permissão para adicionar membros\n\n` +
+                `Tente gerar um novo link de convite.`
+        })
+      }
+    } else {
+      console.log('[GROUP INVITE] Sender not authorized')
+      await sock.sendMessage(from, {
+        text: `⚠️ Você precisa estar autenticado primeiro!\n\n` +
+              `Envie: login: seuemail@email.com suasenha\n\n` +
+              `Depois disso, envie o convite novamente e eu entrarei automaticamente.`
+      })
+    }
+  } catch (error) {
+    console.error('[GROUP INVITE] Error processing invite:', error)
+    await sock.sendMessage(from, {
+      text: `❌ Erro ao processar convite do grupo. Tente novamente.`
+    })
+  }
 }
 
 async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
@@ -138,6 +338,21 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
     if (!from) return
 
     const isGroup = from.endsWith('@g.us')
+    
+    // Get group metadata if this is a group message
+    let groupName: string | null = null
+    let groupJid: string | null = null
+    
+    if (isGroup) {
+      groupJid = from
+      try {
+        const groupMetadata = await sock.groupMetadata(from)
+        groupName = groupMetadata.subject
+        console.log('[DEBUG] Group metadata:', { groupJid, groupName })
+      } catch (error) {
+        console.error('Error fetching group metadata:', error)
+      }
+    }
     
     // Extract message text - handle different message types
     let messageText = ''
@@ -151,6 +366,32 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       messageText = msg.imageMessage.caption || ''
     } else if (msg?.videoMessage?.caption) {
       messageText = msg.videoMessage.caption || ''
+    }
+    
+    // Check for group invite in DMs (both as groupInviteMessage and as text URL)
+    if (!isGroup) {
+      // Check for groupInviteMessage object first
+      if (msg?.groupInviteMessage) {
+        const inviteCode = msg.groupInviteMessage.inviteCode
+        const groupJidInvite = msg.groupInviteMessage.groupJid
+        const groupNameInvite = msg.groupInviteMessage.groupName
+        
+        if (inviteCode) {
+          await handleGroupInvite(sock, from, inviteCode, groupJidInvite, groupNameInvite)
+          return
+        }
+      }
+      
+      // Check for WhatsApp group invite URL in text
+      const groupInviteRegex = /https?:\/\/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/
+      const match = messageText.match(groupInviteRegex)
+      
+      if (match && match[1]) {
+        const inviteCode = match[1]
+        console.log('[GROUP INVITE URL] Detected invite link in text:', inviteCode)
+        await handleGroupInvite(sock, from, inviteCode)
+        return // Don't process as regular message
+      }
     }
 
     // Extract quoted message if present (for reply context)
@@ -209,6 +450,8 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
     const response = await handleMessage({
       from: sender,
       isGroup,
+      groupJid: groupJid || undefined,
+      groupName: groupName || undefined,
       message: messageText,
       hasImage,
       imageBuffer,

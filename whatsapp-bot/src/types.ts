@@ -77,6 +77,8 @@ export interface OCRResult {
 export interface MessageContext {
   from: string
   isGroup: boolean
+  groupJid?: string // Group JID if message is from a group
+  groupName?: string // Group name if available
   message: string
   hasImage: boolean
   imageBuffer?: Buffer

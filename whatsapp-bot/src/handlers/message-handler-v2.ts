@@ -18,6 +18,7 @@ import { handleAnalyzeSpending } from './analysis.js'
 import { handleUndo } from './undo.js'
 import { extractExpenseFromImage } from '../ocr/image-processor.js'
 import { messages } from '../localization/pt-br.js'
+import { isGroupAuthorized, updateGroupLastMessage } from '../services/group-manager.js'
 import { getSuggestedPaymentMethod, updatePaymentMethodPreference } from '../nlp/pattern-storage.js'
 import { getSupabaseClient } from '../services/supabase-client.js'
 import { hasPendingTransaction, handleDuplicateConfirmation } from './duplicate-confirmation.js'
@@ -77,22 +78,36 @@ async function getOrCreateSession(whatsappNumber: string): Promise<any | null> {
 }
 
 export async function handleMessage(context: MessageContext): Promise<string | string[] | null> {
-  const { from, isGroup, message, hasImage, imageBuffer, quotedMessage } = context
+  const { from, isGroup, groupJid, groupName, message, hasImage, imageBuffer, quotedMessage } = context
 
   logger.info('Message received', {
     from,
     isGroup,
+    groupJid,
+    groupName,
     hasImage,
     hasQuote: !!quotedMessage,
     messageLength: message?.length || 0
   })
 
-  // Note: Bot now responds to all messages in groups (authorization is checked later)
-  // This allows the bot to be more useful in group settings
+  // Check group authorization if message is from a group
+  let groupOwnerId: string | null = null
+  if (isGroup && groupJid) {
+    groupOwnerId = await isGroupAuthorized(groupJid)
+    
+    if (!groupOwnerId) {
+      logger.info('Ignoring message from unauthorized group', { groupJid, groupName })
+      return null // Silently ignore unauthorized groups
+    }
+    
+    // Update last message timestamp for this group
+    await updateGroupLastMessage(groupJid)
+    logger.info('Message from authorized group', { groupJid, groupName, groupOwnerId })
+  }
 
   // Handle image messages
   if (hasImage && imageBuffer) {
-    return await handleImageMessage(from, imageBuffer, message)
+    return await handleImageMessage(from, imageBuffer, message, groupOwnerId)
   }
 
   // Handle text messages
@@ -100,13 +115,14 @@ export async function handleMessage(context: MessageContext): Promise<string | s
     return null
   }
 
-  return await handleTextMessage(from, message, quotedMessage)
+  return await handleTextMessage(from, message, quotedMessage, groupOwnerId)
 }
 
 async function handleTextMessage(
   whatsappNumber: string,
   message: string,
-  quotedMessage?: string
+  quotedMessage?: string,
+  groupOwnerId?: string | null
 ): Promise<string | string[]> {
   const startTime = Date.now()
   let strategy: ParsingStrategy = 'unknown'
@@ -197,7 +213,19 @@ async function handleTextMessage(
         }
         
         // Check authentication for other commands
-        session = await getOrCreateSession(whatsappNumber)
+        if (groupOwnerId) {
+          // For authorized groups, use group owner's account
+          logger.info('Using group owner account for command', { groupOwnerId, whatsappNumber })
+          session = await getUserSession(whatsappNumber)
+          if (!session) {
+            await createUserSession(whatsappNumber, groupOwnerId)
+            session = await getUserSession(whatsappNumber)
+          }
+        } else {
+          // For DMs, use normal authentication
+          session = await getOrCreateSession(whatsappNumber)
+        }
+        
         if (!session) {
           await recordParsingMetric({
             whatsappNumber,
@@ -263,7 +291,19 @@ async function handleTextMessage(
     }
 
     // Check authentication for natural language (required for cache and LLM)
-    session = await getOrCreateSession(whatsappNumber)
+    if (groupOwnerId) {
+      // For authorized groups, use group owner's account
+      logger.info('Using group owner account for NLP', { groupOwnerId, whatsappNumber })
+      session = await getUserSession(whatsappNumber)
+      if (!session) {
+        await createUserSession(whatsappNumber, groupOwnerId)
+        session = await getUserSession(whatsappNumber)
+      }
+    } else {
+      // For DMs, use normal authentication
+      session = await getOrCreateSession(whatsappNumber)
+    }
+    
     if (!session) {
       logger.warn('Natural language requires authentication', { whatsappNumber })
       await recordParsingMetric({
@@ -850,7 +890,8 @@ async function handleMultipleTransactions(whatsappNumber: string, transactions: 
 async function handleImageMessage(
   whatsappNumber: string, 
   imageBuffer: Buffer, 
-  caption?: string
+  caption?: string,
+  groupOwnerId?: string | null
 ): Promise<string | string[]> {
   logger.info('Handling image message', {
     whatsappNumber,
@@ -860,8 +901,21 @@ async function handleImageMessage(
   
   const startTime = Date.now()
   
-  // Check authentication (auto-auth if authorized)
-  const session = await getOrCreateSession(whatsappNumber)
+  // Check authentication (use group owner if in authorized group, otherwise check individual)
+  let session = null
+  if (groupOwnerId) {
+    // For authorized groups, create/get session using group owner's user_id
+    logger.info('Using group owner account', { groupOwnerId, whatsappNumber })
+    session = await getUserSession(whatsappNumber)
+    if (!session) {
+      // Create session for this WhatsApp number linked to group owner
+      await createUserSession(whatsappNumber, groupOwnerId)
+      session = await getUserSession(whatsappNumber)
+    }
+  } else {
+    // For DMs, use normal authentication
+    session = await getOrCreateSession(whatsappNumber)
+  }
   
   if (!session) {
     await recordParsingMetric({

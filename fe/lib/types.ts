@@ -95,3 +95,16 @@ export interface AuthorizedWhatsAppNumber {
   created_at: string
   updated_at: string
 }
+
+export interface AuthorizedGroup {
+  id: string
+  group_jid: string
+  group_name: string | null
+  user_id: string
+  added_by: string | null
+  auto_authorized: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  last_message_at: string | null
+}

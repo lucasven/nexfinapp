@@ -1,5 +1,6 @@
 import { ProfileSettingsCard } from "@/components/profile-settings-card"
 import { WhatsAppNumbersCard } from "@/components/whatsapp-numbers-card"
+import { AuthorizedGroupsCard } from "@/components/authorized-groups-card"
 import { UserMenu } from "@/components/user-menu"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { ArrowLeftIcon } from "lucide-react"
@@ -31,6 +32,10 @@ export default async function ProfilePage() {
         <div className="grid gap-6 md:grid-cols-2">
           <ProfileSettingsCard />
           <WhatsAppNumbersCard />
+        </div>
+
+        <div className="mt-6">
+          <AuthorizedGroupsCard />
         </div>
       </div>
     </div>
