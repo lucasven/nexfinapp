@@ -426,7 +426,7 @@ export async function parseWithAI(
       ],
       tool_choice: 'auto',
       temperature: 0.1,
-      max_tokens: 500
+      max_tokens: 1500  // Increased for OCR scenarios with multiple transactions
     })
     
     // Record usage
@@ -451,6 +451,12 @@ export async function parseWithAI(
         function: functionName,
         args
       })
+      
+      // DEBUG: Log the raw function call for OCR debugging
+      console.log('AI function call:', JSON.stringify({
+        function: functionName,
+        arguments: args
+      }, null, 2))
       
       return convertFunctionCallToIntent(functionName, args)
     }
@@ -498,8 +504,10 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
         }
       } else {
         // Single transaction
+        // Default to 'add_expense' if action is missing
+        const action = args.action || 'add_expense'
         intent = {
-          action: args.action,
+          action: action,
           confidence: 0.95,
           entities: {
             amount: args.amount,
@@ -507,7 +515,7 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
             description: args.description || args.category,
             date: args.date,
             paymentMethod: args.payment_method,
-            type: args.action === 'add_income' ? 'income' : 'expense'
+            type: action === 'add_income' ? 'income' : 'expense'
           }
         }
       }
@@ -707,20 +715,22 @@ TODAY'S DATE: ${today}
 
 IMPORTANT RULES:
 1. For expense/income messages, extract: amount, category, description, date, payment method
-2. For dates: "hoje" = today, "ontem" = yesterday, "DD/MM" or "DD/MM/YYYY" = specific date
+2. For dates: "hoje" = today, "ontem" = yesterday, "DD/MM" or "DD/MM/YYYY" = specific date, "X de [mês]" = Xth of current month/year
 3. For amounts: accept "50", "R$ 50", "50 reais", convert to number
-4. If multiple transactions in one message, use the transactions array
-5. Default to "add_expense" unless income is explicitly mentioned (recebi, ganhei, salário, etc.)
-6. If uncertain, make best guess based on context
-7. When user replies to previous message (context provided), consider both messages together
-8. **TRANSACTION REPLIES**: If message contains [transaction_id: ABC123], extract the ID and use it for edit/delete/change operations
-9. **CATEGORY CHANGES**: "mudar categoria", "alterar categoria", "trocar categoria" = change_category (NOT list_items!)
-10. **CATEGORY MATCHING**: Prioritize user's custom categories (listed first) over default ones when matching descriptions. If a description could match multiple categories, prefer the custom one.
+4. **MULTIPLE TRANSACTIONS**: If multiple transactions in one message (especially OCR/bank statements), use the transactions array. Parse ALL transactions found, not just the first one.
+5. **OCR/BANK STATEMENTS**: Format like "MERCHANT R$ XX,XX" repeated with dates. Extract ALL transactions with their dates. Match merchants to categories.
+6. Default to "add_expense" unless income is explicitly mentioned (recebi, ganhei, salário, etc.)
+7. If uncertain, make best guess based on context
+8. When user replies to previous message (context provided), consider both messages together
+9. **TRANSACTION REPLIES**: If message contains [transaction_id: ABC123], extract the ID and use it for edit/delete/change operations
+10. **CATEGORY CHANGES**: "mudar categoria", "alterar categoria", "trocar categoria" = change_category (NOT list_items!)
+11. **CATEGORY MATCHING**: Prioritize user's custom categories (listed first) over default ones when matching descriptions. If a description could match multiple categories, prefer the custom one.
 
 EXAMPLES:
 "gastei 50 em comida" → add_expense_or_income(action="add_expense", amount=50, category="comida")
 "paguei 30 de uber com cartão" → add_expense_or_income(amount=30, category="transporte", description="uber", payment_method="cartão")
 "comprei 25 no mercado e 15 na farmácia" → add_expense_or_income(transactions=[{amount:25, category:"mercado"}, {amount:15, category:"farmácia"}])
+"SUPERMERCADO R$ 50,00\n6 de novembro\nFARMACIA R$ 30,00\n5 de novembro" → add_expense_or_income(transactions=[{amount:50, category:"mercado", description:"SUPERMERCADO", date:"2025-11-06"}, {amount:30, category:"saúde", description:"FARMACIA", date:"2025-11-05"}])
 "recebi 5000 de salário" → add_expense_or_income(action="add_income", amount=5000, category="salário")
 "listar gastos" → list_items(type="transactions")
 "listar categorias" → list_items(type="categories")
