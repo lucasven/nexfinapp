@@ -46,8 +46,12 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const pathnameWithoutLocale = pathname.replace(/^\/(en|pt-br)/, '') || '/'
 
+  // Public routes that don't require authentication
+  const publicRoutes = ['/auth', '/landing']
+  const isPublicRoute = publicRoutes.some(route => pathnameWithoutLocale.startsWith(route))
+
   // Redirect to login if not authenticated and trying to access protected routes
-  if (!user && !pathnameWithoutLocale.startsWith('/auth')) {
+  if (!user && !isPublicRoute) {
     const locale = detectedLocale && locales.includes(detectedLocale as any) ? detectedLocale : defaultLocale
     return NextResponse.redirect(new URL(`/${locale}/auth/login`, request.url))
   }
