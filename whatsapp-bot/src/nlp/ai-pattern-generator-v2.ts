@@ -701,7 +701,7 @@ function createSystemPrompt(context: UserContext): string {
 
 Your task is to understand user messages about expenses, income, budgets, and financial reports, then call the appropriate function with the extracted data.
 
-AVAILABLE CATEGORIES: ${context.recentCategories.join(', ')}
+AVAILABLE CATEGORIES (custom categories listed first): ${context.recentCategories.join(', ')}
 COMMON PAYMENT METHODS: ${context.recentPaymentMethods.join(', ')}
 TODAY'S DATE: ${today}
 
@@ -715,6 +715,7 @@ IMPORTANT RULES:
 7. When user replies to previous message (context provided), consider both messages together
 8. **TRANSACTION REPLIES**: If message contains [transaction_id: ABC123], extract the ID and use it for edit/delete/change operations
 9. **CATEGORY CHANGES**: "mudar categoria", "alterar categoria", "trocar categoria" = change_category (NOT list_items!)
+10. **CATEGORY MATCHING**: Prioritize user's custom categories (listed first) over default ones when matching descriptions. If a description could match multiple categories, prefer the custom one.
 
 EXAMPLES:
 "gastei 50 em comida" → add_expense_or_income(action="add_expense", amount=50, category="comida")
@@ -736,17 +737,18 @@ Call the most appropriate function based on the user's intent.`
 export async function getUserContext(userId: string): Promise<UserContext> {
   const supabase = getSupabaseClient()
   
-  // Get recent categories
-  const { data: recentTransactions } = await supabase
-    .from('transactions')
-    .select('category')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(20)
-    
-  const recentCategories = [...new Set(
-    recentTransactions?.map(t => t.category).filter(Boolean) || []
-  )]
+  // Fetch actual category names from categories table
+  const { data: allCategories } = await supabase
+    .from('categories')
+    .select('name, is_custom, user_id')
+    .or(`user_id.eq.${userId},is_custom.eq.false`)
+    .order('is_custom', { ascending: false }) // Custom categories first
+    .order('name', { ascending: true })
+  
+  // Custom categories first, then default ones
+  const customCategories = allCategories?.filter(c => c.is_custom && c.user_id === userId).map(c => c.name) || []
+  const defaultCategories = allCategories?.filter(c => !c.is_custom).map(c => c.name) || []
+  const recentCategories = [...customCategories, ...defaultCategories]
   
   // Get recent payment methods
   const { data: recentPaymentMethods } = await supabase

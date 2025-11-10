@@ -128,15 +128,6 @@ export async function deleteTransaction(id: string) {
   revalidatePath("/")
 }
 
-export async function getCategories() {
-  const supabase = await getSupabaseServerClient()
-
-  const { data, error } = await supabase.from("categories").select("*").order("name")
-
-  if (error) throw error
-  return data
-}
-
 export async function getBalance() {
   const supabase = await getSupabaseServerClient()
 
