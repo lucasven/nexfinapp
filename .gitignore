@@ -49,3 +49,4 @@ Thumbs.db
 # Misc
 .vercel
 .turbo
+fe/.env.local.backup
