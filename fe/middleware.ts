@@ -12,6 +12,20 @@ const intlMiddleware = createMiddleware({
 })
 
 export async function middleware(request: NextRequest) {
+  // Handle PostHog proxy requests first
+  if (request.nextUrl.pathname.startsWith('/ingest')) {
+    const url = request.nextUrl.clone()
+    
+    // Rewrite to PostHog servers
+    if (url.pathname.startsWith('/ingest/static/')) {
+      url.href = `https://us-assets.i.posthog.com${url.pathname.replace('/ingest', '')}`
+    } else {
+      url.href = `https://us.i.posthog.com${url.pathname.replace('/ingest', '')}${url.search}`
+    }
+    
+    return NextResponse.rewrite(url)
+  }
+  
   // Get locale from cookie or detect from browser
   const LOCALE_COOKIE = 'NEXT_LOCALE'
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value
@@ -102,5 +116,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: [
+    // PostHog proxy routes
+    '/ingest/:path*',
+    // All other routes except Next.js internals and static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'
+  ],
 }
