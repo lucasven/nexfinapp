@@ -74,6 +74,7 @@ export interface UserProfile {
   id: string
   user_id: string
   display_name: string | null
+  locale: 'pt-br' | 'en' | null
   created_at: string
   updated_at: string
 }

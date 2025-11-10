@@ -12,6 +12,9 @@ import { EditIcon, SearchIcon, TrashIcon } from "lucide-react"
 import { TransactionDialog } from "./transaction-dialog"
 import { deleteTransaction } from "@/lib/actions/transactions"
 import { useRouter } from "next/navigation"
+import { useTranslations, useLocale } from 'next-intl'
+import { formatCurrency } from '@/lib/localization/format'
+import { translateCategoryName } from '@/lib/localization/category-translations'
 
 interface TransactionListProps {
   transactions: Transaction[]
@@ -19,6 +22,8 @@ interface TransactionListProps {
 }
 
 export function TransactionList({ transactions, categories }: TransactionListProps) {
+  const t = useTranslations()
+  const locale = useLocale()
   const router = useRouter()
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
@@ -32,7 +37,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
   })
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this transaction?")) {
+    if (confirm(t('transaction.deleteConfirm'))) {
       try {
         await deleteTransaction(id)
         router.refresh()
@@ -45,14 +50,14 @@ export function TransactionList({ transactions, categories }: TransactionListPro
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Transactions</CardTitle>
+        <CardTitle>{t('transaction.transactions')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4 mb-4 md:flex-row">
           <div className="relative flex-1">
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search transactions..."
+              placeholder={`${t('transaction.title')}...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -61,24 +66,24 @@ export function TransactionList({ transactions, categories }: TransactionListPro
 
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Type" />
+              <SelectValue placeholder={t('transaction.type')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="income">Income</SelectItem>
-              <SelectItem value="expense">Expense</SelectItem>
+              <SelectItem value="all">{t('transaction.allTypes')}</SelectItem>
+              <SelectItem value="income">{t('transaction.income')}</SelectItem>
+              <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-full md:w-[200px]">
-              <SelectValue placeholder="Category" />
+              <SelectValue placeholder={t('transaction.category')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{t('transaction.allCategories')}</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
-                  {category.icon} {category.name}
+                  {category.icon} {translateCategoryName(category.name, locale as 'pt-br' | 'en')}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -89,19 +94,19 @@ export function TransactionList({ transactions, categories }: TransactionListPro
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('table.date')}</TableHead>
+                <TableHead>{t('table.description')}</TableHead>
+                <TableHead>{t('table.category')}</TableHead>
+                <TableHead>{t('table.paymentMethod')}</TableHead>
+                <TableHead className="text-right">{t('table.amount')}</TableHead>
+                <TableHead className="text-right">{t('table.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredTransactions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No transactions found
+                    {t('transaction.noTransactions')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -111,7 +116,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
                     <TableCell>{transaction.description || "-"}</TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1">
-                        {transaction.category?.icon} {transaction.category?.name}
+                        {transaction.category?.icon} {transaction.category?.name && translateCategoryName(transaction.category.name, locale as 'pt-br' | 'en')}
                       </span>
                     </TableCell>
                     <TableCell className="capitalize">{transaction.payment_method?.replace("_", " ") || "-"}</TableCell>
@@ -121,7 +126,7 @@ export function TransactionList({ transactions, categories }: TransactionListPro
                           transaction.type === "income" ? "text-green-600 font-semibold" : "text-red-600 font-semibold"
                         }
                       >
-                        {transaction.type === "income" ? "+" : "-"}R$ {transaction.amount.toFixed(2)}
+                        {transaction.type === "income" ? "+" : "-"}{formatCurrency(transaction.amount, locale as 'pt-br' | 'en')}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">

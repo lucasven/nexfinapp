@@ -12,7 +12,9 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { LogOutIcon, UserIcon, SettingsIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { Link } from '@/lib/localization/link'
+import { LanguageSwitcher } from './language-switcher'
+import { useTranslations } from 'next-intl'
 
 interface UserMenuProps {
   userEmail?: string
@@ -21,6 +23,8 @@ interface UserMenuProps {
 
 export function UserMenu({ userEmail, displayName }: UserMenuProps) {
   const router = useRouter()
+
+  const t = useTranslations()
 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowserClient()
@@ -39,21 +43,25 @@ export function UserMenu({ userEmail, displayName }: UserMenuProps) {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">{displayName || "Account"}</span>
+            <span className="text-sm font-medium">{displayName || t('nav.profile')}</span>
             {userEmail && <span className="text-xs text-muted-foreground">{userEmail}</span>}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <div className="px-2 py-1.5">
+          <LanguageSwitcher />
+        </div>
+        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/profile">
             <SettingsIcon className="h-4 w-4 mr-2" />
-            Profile Settings
+            {t('profile.settings')}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOutIcon className="h-4 w-4 mr-2" />
-          Sign Out
+          {t('nav.signOut')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

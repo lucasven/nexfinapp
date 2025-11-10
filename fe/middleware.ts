@@ -1,13 +1,27 @@
-import { createServerClient } from "@supabase/ssr"
-import { NextResponse, type NextRequest } from "next/server"
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+import createMiddleware from 'next-intl/middleware'
+import { locales, defaultLocale } from './i18n/routing'
+import { detectBrowserLocale } from './lib/localization/config'
+
+// Create the next-intl middleware
+const intlMiddleware = createMiddleware({
+  locales,
+  defaultLocale,
+  localePrefix: 'always'
+})
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
-
+  // Get locale from cookie or detect from browser
+  const LOCALE_COOKIE = 'NEXT_LOCALE'
+  const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value
+  const browserLocale = detectBrowserLocale(request.headers.get('accept-language') || undefined)
+  const detectedLocale = cookieLocale || browserLocale
+  
+  // Step 1: Use the default intl middleware
+  const response = intlMiddleware(request)
+  
+  // Step 2: Set up Supabase client with the response
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -17,10 +31,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request,
-          })
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
         },
       },
@@ -31,19 +42,61 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Get the pathname without locale prefix
+  const pathname = request.nextUrl.pathname
+  const pathnameWithoutLocale = pathname.replace(/^\/(en|pt-br)/, '') || '/'
+
   // Redirect to login if not authenticated and trying to access protected routes
-  if (!user && !request.nextUrl.pathname.startsWith("/auth")) {
-    return NextResponse.redirect(new URL("/auth/login", request.url))
+  if (!user && !pathnameWithoutLocale.startsWith('/auth')) {
+    const locale = detectedLocale && locales.includes(detectedLocale as any) ? detectedLocale : defaultLocale
+    return NextResponse.redirect(new URL(`/${locale}/auth/login`, request.url))
   }
 
   // Redirect to home if authenticated and trying to access auth pages
-  if (user && request.nextUrl.pathname.startsWith("/auth")) {
-    return NextResponse.redirect(new URL("/", request.url))
+  if (user && pathnameWithoutLocale.startsWith('/auth')) {
+    const locale = detectedLocale && locales.includes(detectedLocale as any) ? detectedLocale : defaultLocale
+    return NextResponse.redirect(new URL(`/${locale}`, request.url))
+  }
+
+  // Set locale cookie if not already set
+  if (!cookieLocale && detectedLocale) {
+    response.cookies.set(LOCALE_COOKIE, detectedLocale, {
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60, // 1 year
+    })
+  }
+
+  // If user is authenticated, fetch their locale preference from database
+  if (user) {
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('locale')
+        .eq('user_id', user.id)
+        .single()
+
+      if (profile?.locale && profile.locale !== cookieLocale) {
+        // Update cookie to match database preference
+        response.cookies.set(LOCALE_COOKIE, profile.locale, {
+          path: '/',
+          maxAge: 365 * 24 * 60 * 60, // 1 year
+        })
+
+        // If the current path doesn't match the user's preferred locale, redirect
+        const currentLocale = pathname.split('/')[1]
+        if (currentLocale !== profile.locale && locales.includes(currentLocale as any)) {
+          const newPathname = pathname.replace(`/${currentLocale}`, `/${profile.locale}`)
+          return NextResponse.redirect(new URL(newPathname, request.url))
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user locale from database:', error)
+    }
   }
 
   return response
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }

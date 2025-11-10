@@ -60,7 +60,7 @@ export async function getProfile(): Promise<UserProfile | null> {
   return data
 }
 
-export async function updateProfile(data: { display_name?: string }) {
+export async function updateProfile(data: { display_name?: string; locale?: 'pt-br' | 'en' }) {
   const supabase = await getSupabaseServerClient()
 
   const {
@@ -100,6 +100,49 @@ export async function updateProfile(data: { display_name?: string }) {
 
   revalidatePath("/profile")
   return profile
+}
+
+export async function getUserLocale(): Promise<'pt-br' | 'en'> {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  
+  if (!user) return 'pt-br' // Default for non-authenticated users
+
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("locale")
+    .eq("user_id", user.id)
+    .single()
+
+  return (data?.locale as 'pt-br' | 'en') || 'pt-br'
+}
+
+export async function setUserLocale(locale: 'pt-br' | 'en') {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  // Ensure profile exists
+  await getProfile()
+
+  // Update the user_profiles table
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      locale,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id)
+
+  if (error) throw error
+
+  revalidatePath("/")
 }
 
 export async function getAuthorizedNumbers(): Promise<AuthorizedWhatsAppNumber[]> {

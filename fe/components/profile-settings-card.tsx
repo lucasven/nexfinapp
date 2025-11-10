@@ -9,8 +9,10 @@ import type { UserProfile } from "@/lib/types"
 import { useState, useEffect } from "react"
 import { Loader2Icon } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { useTranslations } from 'next-intl'
 
 export function ProfileSettingsCard() {
+  const t = useTranslations()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -46,7 +48,7 @@ export function ProfileSettingsCard() {
       setProfile(updated)
     } catch (error) {
       console.error("Error updating profile:", error)
-      alert("Failed to update profile")
+      alert(t('profile.updateFailed'))
     } finally {
       setSaving(false)
     }
@@ -56,7 +58,7 @@ export function ProfileSettingsCard() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Profile Settings</CardTitle>
+          <CardTitle>{t('profile.settings')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -70,24 +72,24 @@ export function ProfileSettingsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile Settings</CardTitle>
-        <CardDescription>Manage your personal information and account settings</CardDescription>
+        <CardTitle>{t('profile.settings')}</CardTitle>
+        <CardDescription>{t('profile.subtitle')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t('profile.email')}</Label>
           <Input id="email" type="email" value={email} disabled className="bg-muted" />
-          <p className="text-xs text-muted-foreground">Email cannot be changed. Contact support if needed.</p>
+          <p className="text-xs text-muted-foreground">{t('profile.emailCannotChange')}</p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="display-name">Display Name</Label>
+          <Label htmlFor="display-name">{t('profile.displayName')}</Label>
           <Input
             id="display-name"
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Enter your display name"
+            placeholder={t('profile.displayNamePlaceholder')}
           />
         </div>
 
@@ -95,10 +97,10 @@ export function ProfileSettingsCard() {
           {saving ? (
             <>
               <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
+              {t('common.saving')}
             </>
           ) : (
-            "Save Changes"
+            t('profile.saveChanges')
           )}
         </Button>
       </CardContent>

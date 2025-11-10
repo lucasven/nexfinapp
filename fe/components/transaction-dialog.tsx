@@ -21,6 +21,8 @@ import { createTransaction, updateTransaction } from "@/lib/actions/transactions
 import type { Category, Transaction } from "@/lib/types"
 import { PlusIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from 'next-intl'
+import { translateCategoryName } from '@/lib/localization/category-translations'
 
 interface TransactionDialogProps {
   categories: Category[]
@@ -29,6 +31,7 @@ interface TransactionDialogProps {
 }
 
 export function TransactionDialog({ categories, transaction, trigger }: TransactionDialogProps) {
+  const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -74,22 +77,22 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
         {trigger || (
           <Button>
             <PlusIcon className="h-4 w-4 mr-2" />
-            Add Transaction
+            {t('home.addTransaction')}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{transaction ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
+            <DialogTitle>{transaction ? t('transaction.editTitle') : t('transaction.addTitle')}</DialogTitle>
             <DialogDescription>
-              {transaction ? "Update your transaction details." : "Add a new income or expense transaction."}
+              {transaction ? t('transaction.editDescription') : t('transaction.addDescription')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">{t('transaction.type')}</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value: "income" | "expense") => {
@@ -100,14 +103,14 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="income">{t('transaction.income')}</SelectItem>
+                  <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="amount">Amount (R$)</Label>
+              <Label htmlFor="amount">{t('transaction.amount')}</Label>
               <Input
                 id="amount"
                 type="number"
@@ -120,14 +123,14 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">{t('transaction.category')}</Label>
               <Select
                 value={formData.category_id}
                 onValueChange={(value) => setFormData({ ...formData, category_id: value })}
                 required
               >
                 <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t('transaction.selectCategory')} />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredCategories.map((category) => (
@@ -140,7 +143,7 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="date">Date</Label>
+              <Label htmlFor="date">{t('transaction.date')}</Label>
               <Input
                 id="date"
                 type="date"
@@ -151,30 +154,30 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="payment_method">Payment Method</Label>
+              <Label htmlFor="payment_method">{t('transaction.paymentMethod')}</Label>
               <Select
                 value={formData.payment_method}
                 onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
               >
                 <SelectTrigger id="payment_method">
-                  <SelectValue placeholder="Select payment method" />
+                  <SelectValue placeholder={t('transaction.selectPaymentMethod')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="credit_card">Credit Card</SelectItem>
-                  <SelectItem value="debit_card">Debit Card</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="cash">{t('paymentMethods.cash')}</SelectItem>
+                  <SelectItem value="credit_card">{t('paymentMethods.creditCard')}</SelectItem>
+                  <SelectItem value="debit_card">{t('paymentMethods.debitCard')}</SelectItem>
+                  <SelectItem value="bank_transfer">{t('paymentMethods.bankTransfer')}</SelectItem>
+                  <SelectItem value="pix">{t('paymentMethods.pix')}</SelectItem>
+                  <SelectItem value="other">{t('paymentMethods.other')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">{t('transaction.description')}</Label>
               <Textarea
                 id="description"
-                placeholder="Optional description..."
+                placeholder={t('transaction.optionalDescription')}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
@@ -184,10 +187,10 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : transaction ? "Update" : "Add"}
+              {loading ? t('common.saving') : transaction ? t('common.update') : t('common.add')}
             </Button>
           </DialogFooter>
         </form>
