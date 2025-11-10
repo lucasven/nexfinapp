@@ -8,9 +8,13 @@ import { getRecurringPayments, getRecurringTransactions, deleteRecurringTransact
 import { getCategories } from "@/lib/actions/categories"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { ArrowLeftIcon, EditIcon, TrashIcon } from "lucide-react"
-import Link from "next/link"
+import { Link } from "@/lib/localization/link"
+import { getTranslations, getLocale } from 'next-intl/server'
+import { getMonthName, formatCurrency } from '@/lib/localization/format'
 
 export default async function RecurringPage() {
+  const t = await getTranslations()
+  const locale = await getLocale()
   const supabase = await getSupabaseServerClient()
   const {
     data: { user },
@@ -26,10 +30,7 @@ export default async function RecurringPage() {
     getCategories(),
   ])
 
-  const monthName = new Date(currentYear, currentMonth - 1).toLocaleString("en-US", {
-    month: "long",
-    year: "numeric",
-  })
+  const monthName = `${getMonthName(currentMonth, locale as 'pt-br' | 'en')} ${currentYear}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,7 +42,7 @@ export default async function RecurringPage() {
             </Link>
           </Button>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold tracking-tight">Recurring Transactions</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{t('nav.recurring')}</h1>
             <p className="text-muted-foreground mt-1">Manage your monthly recurring expenses and income</p>
           </div>
           <RecurringDialog categories={categories} />
@@ -52,12 +53,12 @@ export default async function RecurringPage() {
           {/* Upcoming Payments */}
           <Card>
             <CardHeader>
-              <CardTitle>Payments for {monthName}</CardTitle>
+              <CardTitle>{t('recurring.upcomingPayments')} for {monthName}</CardTitle>
               <CardDescription>Mark payments as paid when completed</CardDescription>
             </CardHeader>
             <CardContent>
               {payments.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No recurring payments scheduled</p>
+                <p className="text-center text-muted-foreground py-8">{t('recurring.noRecurring')}</p>
               ) : (
                 <div className="space-y-3">
                   {payments.map((payment) => (
@@ -71,24 +72,24 @@ export default async function RecurringPage() {
           {/* Recurring Templates */}
           <Card>
             <CardHeader>
-              <CardTitle>Recurring Templates</CardTitle>
+              <CardTitle>{t('recurring.title')}</CardTitle>
               <CardDescription>Manage your recurring transaction templates</CardDescription>
             </CardHeader>
             <CardContent>
               {recurringTransactions.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">No recurring transactions set up</p>
-                  <RecurringDialog categories={categories} trigger={<Button>Create Recurring Transaction</Button>} />
+                  <p className="text-muted-foreground mb-4">{t('recurring.addFirstRecurring')}</p>
+                  <RecurringDialog categories={categories} trigger={<Button>{t('recurring.addTitle')}</Button>} />
                 </div>
               ) : (
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Description</TableHead>
+                        <TableHead>{t('table.description')}</TableHead>
                         <TableHead>Day</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-right">{t('table.amount')}</TableHead>
+                        <TableHead className="text-right">{t('table.actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -109,7 +110,7 @@ export default async function RecurringPage() {
                                   : "text-red-600 font-semibold"
                               }
                             >
-                              {recurring.type === "income" ? "+" : "-"}R$ {recurring.amount.toFixed(2)}
+                              {recurring.type === "income" ? "+" : "-"}{formatCurrency(recurring.amount, locale as 'pt-br' | 'en')}
                             </span>
                           </TableCell>
                           <TableCell className="text-right">

@@ -9,9 +9,13 @@ import { TrendChart } from "@/components/trend-chart"
 import { YearlyChart } from "@/components/yearly-chart"
 import { getMonthlyReport, getYearlyComparison } from "@/lib/actions/reports"
 import { ArrowLeftIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
-import Link from "next/link"
+import { Link } from "@/lib/localization/link"
+import { useTranslations, useLocale } from 'next-intl'
+import { formatCurrency, getMonthName } from '@/lib/localization/format'
 
 export default function ReportsPage() {
+  const t = useTranslations()
+  const locale = useLocale()
   const currentDate = new Date()
   const [month, setMonth] = useState(currentDate.getMonth() + 1)
   const [year, setYear] = useState(currentDate.getFullYear())
@@ -35,10 +39,7 @@ export default function ReportsPage() {
     loadData()
   }, [month, year])
 
-  const monthName = new Date(year, month - 1).toLocaleString("en-US", {
-    month: "long",
-    year: "numeric",
-  })
+  const monthName = `${getMonthName(month, locale as 'pt-br' | 'en')} ${year}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,8 +51,8 @@ export default function ReportsPage() {
             </Link>
           </Button>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
-            <p className="text-muted-foreground mt-1">View your financial insights and trends</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t('reports.title')}</h1>
+            <p className="text-muted-foreground mt-1">{t('reports.subtitle')}</p>
           </div>
         </div>
 
@@ -63,7 +64,7 @@ export default function ReportsPage() {
             <SelectContent>
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <SelectItem key={m} value={m.toString()}>
-                  {new Date(2000, m - 1).toLocaleString("en-US", { month: "long" })}
+                  {getMonthName(m, locale as 'pt-br' | 'en')}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -85,7 +86,7 @@ export default function ReportsPage() {
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">Loading reports...</p>
+            <p className="text-muted-foreground">{t('common.loading')}</p>
           </div>
         ) : !report ? (
           <Card>
@@ -99,33 +100,33 @@ export default function ReportsPage() {
             <div className="grid gap-4 md:grid-cols-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Income</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('balance.income')}</CardTitle>
                   <TrendingUpIcon className="h-4 w-4 text-green-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">R$ {report.income.toFixed(2)}</div>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(report.income, locale as 'pt-br' | 'en')}</div>
                   <p className="text-xs text-muted-foreground mt-1">{monthName}</p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('balance.expenses')}</CardTitle>
                   <TrendingDownIcon className="h-4 w-4 text-red-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-red-600">R$ {report.expenses.toFixed(2)}</div>
+                  <div className="text-2xl font-bold text-red-600">{formatCurrency(report.expenses, locale as 'pt-br' | 'en')}</div>
                   <p className="text-xs text-muted-foreground mt-1">{monthName}</p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('balance.totalBalance')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className={`text-2xl font-bold ${report.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    R$ {report.balance.toFixed(2)}
+                    {formatCurrency(report.balance, locale as 'pt-br' | 'en')}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">{monthName}</p>
                 </CardContent>

@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { Link } from "@/lib/localization/link"
+import { useTranslations } from 'next-intl'
 
 export default function LoginPage() {
+  const t = useTranslations()
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -45,15 +47,15 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Welcome Back</CardTitle>
-          <CardDescription>Sign in to your expense tracker account</CardDescription>
+          <CardTitle className="text-2xl">{t('auth.login')}</CardTitle>
+          <CardDescription>{t('auth.signInWithEmail')}</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             {error && <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{error}</div>}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('auth.email')}</Label>
               <Input
                 id="email"
                 type="email"
@@ -65,7 +67,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('auth.password')}</Label>
               <Input
                 id="password"
                 type="password"
@@ -78,12 +80,12 @@ export default function LoginPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? t('common.loading') : t('auth.login')}
             </Button>
             <p className="text-sm text-center text-muted-foreground">
-              Don't have an account?{" "}
+              {t('auth.noAccount')}{" "}
               <Link href="/auth/signup" className="text-primary hover:underline">
-                Sign up
+                {t('auth.signup')}
               </Link>
             </p>
           </CardFooter>

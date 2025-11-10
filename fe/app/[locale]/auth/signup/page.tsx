@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { Link } from "@/lib/localization/link"
+import { useTranslations } from 'next-intl'
 
 export default function SignupPage() {
+  const t = useTranslations()
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -65,8 +67,8 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Create Account</CardTitle>
-          <CardDescription>Sign up to start tracking your expenses</CardDescription>
+          <CardTitle className="text-2xl">{t('auth.signup')}</CardTitle>
+          <CardDescription>{t('auth.signUpWithEmail')}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4">
@@ -79,7 +81,7 @@ export default function SignupPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('auth.email')}</Label>
               <Input
                 id="email"
                 type="email"
@@ -91,7 +93,7 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('auth.password')}</Label>
               <Input
                 id="password"
                 type="password"
@@ -103,7 +105,7 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">{t('auth.confirmPassword')}</Label>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -116,12 +118,12 @@ export default function SignupPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading || success}>
-              {loading ? "Creating account..." : "Sign Up"}
+              {loading ? t('common.loading') : t('auth.signup')}
             </Button>
             <p className="text-sm text-center text-muted-foreground">
-              Already have an account?{" "}
+              {t('auth.haveAccount')}{" "}
               <Link href="/auth/login" className="text-primary hover:underline">
-                Sign in
+                {t('auth.login')}
               </Link>
             </p>
           </CardFooter>
