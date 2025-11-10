@@ -223,6 +223,7 @@ export async function getAllBetaSignups() {
 export async function approveBetaSignup(email: string) {
   await verifyAdmin()
   const supabase = await getSupabaseServerClient()
+  const adminClient = getSupabaseAdminClient() // Use admin client for auth.admin methods
 
   // Update status first
   const { error: updateError } = await supabase
@@ -235,8 +236,8 @@ export async function approveBetaSignup(email: string) {
 
   if (updateError) throw updateError
 
-  // Send invitation email using Supabase Admin API
-  const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
+  // Send invitation email using Supabase Admin API (requires service role)
+  const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
     email,
     {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`,
@@ -310,9 +311,10 @@ export async function rejectBetaSignup(email: string) {
 export async function resendBetaInvitation(email: string) {
   await verifyAdmin()
   const supabase = await getSupabaseServerClient()
+  const adminClient = getSupabaseAdminClient() // Use admin client for auth.admin methods
 
-  // Send invitation email using Supabase Admin API
-  const { error } = await supabase.auth.admin.inviteUserByEmail(
+  // Send invitation email using Supabase Admin API (requires service role)
+  const { error } = await adminClient.auth.admin.inviteUserByEmail(
     email,
     {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`,

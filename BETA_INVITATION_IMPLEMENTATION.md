@@ -5,7 +5,22 @@
 Successfully implemented a complete beta user invitation system that automatically sends email invitations to approved beta users via Supabase Auth's built-in invite functionality.
 
 **Implementation Date:** November 10, 2025  
+**Last Updated:** November 10, 2025  
 **Status:** ✅ Complete (Pending Manual Supabase Configuration)
+
+---
+
+## 🔧 Recent Fixes
+
+### Fixed: Invitation Link Flow (v2)
+**Issue:** Users clicking invitation links couldn't complete signup  
+**Root Cause:** When users click invitation links, Supabase automatically creates their account and establishes a session. The signup page was trying to call `signUp()` again, which failed.
+
+**Solution:** Updated signup page to:
+1. Detect if user has an active session (from invitation)
+2. Call `updateUser({ password })` instead of `signUp()` for invited users
+3. Show "Complete Your Registration" UI for invited users
+4. Redirect invited users to home page after setting password
 
 ---
 
@@ -95,7 +110,7 @@ Enhanced with:
    ↓
 2. Backend updates status to "approved" in database
    ↓
-3. Backend calls Supabase Auth API to send invitation
+3. Backend calls Supabase Admin API to send invitation
    ↓
 4. If successful:
    - Sets invitation_sent = true
@@ -109,18 +124,24 @@ Enhanced with:
    ↓
 6. User receives email with invitation link
    ↓
-7. User clicks link → Redirected to signup page with token
+7. User clicks link → Supabase automatically:
+   - Creates the user account
+   - Establishes an active session
+   - Redirects to signup page
    ↓
-8. Signup page:
-   - Detects invitation token
-   - Pre-fills email
+8. Signup page detects active session:
+   - Pre-fills email (disabled field)
+   - Shows "Complete Your Registration" title
    - Shows "Beta Invitation" badge
+   - Changes button to "Set Password"
    ↓
-9. User completes signup
+9. User sets password and submits
    ↓
-10. Backend verifies user is in approved beta_signups
+10. Backend calls updateUser() to set password
     ↓
-11. Account created + USER_ACCEPTED_BETA_INVITATION event fired
+11. USER_ACCEPTED_BETA_INVITATION event fired
+    ↓
+12. User redirected to home page (already logged in)
 ```
 
 ### Resend Flow
@@ -162,13 +183,26 @@ Enhanced with:
 
 5. Click **Save**
 
-### ⚠️ Step 2: Configure Redirect URLs
+### ⚠️ Step 2: Configure Redirect URLs (CRITICAL)
+
+**This is required for the invitation link to work!**
 
 1. In Supabase Dashboard: **Authentication → URL Configuration**
-2. Add to **Redirect URLs**:
-   - Development: `http://localhost:3000/auth/signup`
-   - Production: `https://yourdomain.com/auth/signup`
-3. Click **Save**
+2. Add these to **Redirect URLs** (one per line):
+   ```
+   http://localhost:3000/auth/signup
+   http://localhost:3000/pt-br/auth/signup
+   http://localhost:3000/en/auth/signup
+   ```
+3. For production, also add:
+   ```
+   https://yourdomain.com/auth/signup
+   https://yourdomain.com/pt-br/auth/signup
+   https://yourdomain.com/en/auth/signup
+   ```
+4. Click **Save**
+
+**Note:** Without these URLs in the allowlist, users will be redirected to login page instead of signup page.
 
 ### ⚠️ Step 3: Set Environment Variable
 
@@ -201,15 +235,18 @@ Run the migration script in your Supabase SQL editor:
 2. **Click Invitation Link**
    - [ ] Open invitation email
    - [ ] Click "Aceitar Convite" button
-   - [ ] Verify redirect to signup page
+   - [ ] Verify redirect to signup page (NOT login page)
+   - [ ] Check title shows "Complete Your Registration"
    - [ ] Check "Beta Invitation" badge appears
-   - [ ] Verify email is pre-filled
-   - [ ] Verify email field is disabled
+   - [ ] Verify email is pre-filled and disabled
+   - [ ] Verify button shows "Set Password" (not "Sign Up")
 
-3. **Complete Signup**
-   - [ ] Enter password
+3. **Set Password**
+   - [ ] Enter password and confirm password
    - [ ] Submit form
-   - [ ] Verify account is created
+   - [ ] Verify success message: "Password set successfully! Redirecting..."
+   - [ ] Verify redirect to home page (NOT login page)
+   - [ ] Verify user is logged in automatically
    - [ ] Check PostHog for USER_ACCEPTED_BETA_INVITATION event
 
 4. **Resend Invitation**
@@ -338,14 +375,24 @@ In PostHog, create insights for:
 4. Verify email template is saved
 5. Check "Invitation" column in Beta Signups table for error tooltip
 
+### Problem: Invitation link redirects to login page instead of signup
+
+**Cause:** Redirect URLs not configured in Supabase
+
+**Solution:**
+1. Go to Supabase Dashboard → Authentication → URL Configuration
+2. Add ALL locale-specific signup URLs to the allowlist:
+   - `http://localhost:3000/auth/signup`
+   - `http://localhost:3000/pt-br/auth/signup`
+   - `http://localhost:3000/en/auth/signup`
+3. Save and try again
+
 ### Problem: "Beta access required" error on signup
 
-**Cause:** User's email is not in `beta_signups` table with `status = 'approved'`
+**Cause:** This error only applies to non-invited users trying to manually sign up
 
-**Solutions:**
-1. Verify email is in beta_signups table
-2. Check status is "approved" (not "pending" or "rejected")
-3. Admin should click "Approve" button first
+**For Invited Users:** They should NOT see this error because they already have an active session
+**For Manual Signups:** User's email must be in `beta_signups` table with `status = 'approved'`
 
 ### Problem: Email pre-fill not working
 
