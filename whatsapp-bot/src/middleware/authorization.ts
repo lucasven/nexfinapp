@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '../services/supabase-client.js'
+import { getSupabaseClient } from '../services/database/supabase-client.js'
 
 export interface AuthorizationResult {
   authorized: boolean
