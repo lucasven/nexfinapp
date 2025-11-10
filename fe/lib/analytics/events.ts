@@ -55,7 +55,13 @@ export enum AnalyticsEvent {
   ADMIN_ADMIN_OVERRIDE_TOGGLED = 'admin_admin_override_toggled',
   ADMIN_BETA_APPROVED = 'admin_beta_approved',
   ADMIN_BETA_REJECTED = 'admin_beta_rejected',
+  ADMIN_BETA_INVITATION_SENT = 'admin_beta_invitation_sent',
+  ADMIN_BETA_INVITATION_FAILED = 'admin_beta_invitation_failed',
+  ADMIN_BETA_INVITATION_RESENT = 'admin_beta_invitation_resent',
   ADMIN_USER_DETAILS_VIEWED = 'admin_user_details_viewed',
+  
+  // User Invitation Events
+  USER_ACCEPTED_BETA_INVITATION = 'user_accepted_beta_invitation',
 }
 
 /**
