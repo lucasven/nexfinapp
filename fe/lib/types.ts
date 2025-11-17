@@ -75,6 +75,11 @@ export interface UserProfile {
   user_id: string
   display_name: string | null
   locale: 'pt-br' | 'en' | null
+  onboarding_completed: boolean
+  onboarding_step: string | null
+  whatsapp_setup_completed: boolean
+  first_category_added: boolean
+  first_expense_added: boolean
   created_at: string
   updated_at: string
 }
@@ -93,6 +98,9 @@ export interface AuthorizedWhatsAppNumber {
     can_manage_budgets: boolean
     can_view_reports: boolean
   }
+  greeting_sent: boolean
+  greeting_sent_at: string | null
+  greeting_message_id: string | null
   created_at: string
   updated_at: string
 }
@@ -108,4 +116,18 @@ export interface AuthorizedGroup {
   created_at: string
   updated_at: string
   last_message_at: string | null
+}
+
+export interface OnboardingMessage {
+  id: string
+  user_id: string
+  whatsapp_number: string
+  user_name: string | null
+  message_type: 'greeting' | 'reminder' | 'celebration'
+  status: 'pending' | 'sent' | 'failed'
+  sent_at: string | null
+  error: string | null
+  retry_count: number
+  created_at: string
+  updated_at: string
 }

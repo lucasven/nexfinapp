@@ -18,6 +18,7 @@ import http from 'http'
 import { handleMessage } from './handlers/core/message-handler.js'
 import { authorizeGroup } from './services/groups/group-manager.js'
 import { checkAuthorization } from './middleware/authorization.js'
+import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
 
 dotenv.config()
 
@@ -109,6 +110,15 @@ async function connectToWhatsApp() {
       console.log('   ═══════════════════════════════════════════════')
       console.log('   🤖 Bot pronto para receber mensagens!')
       console.log('   📱 Envie "ajuda" para testar\n')
+
+      // Start polling for onboarding messages every 30 seconds
+      setInterval(async () => {
+        processOnboardingMessages(sock)
+      }, 1000) // 30 seconds
+
+      // Process immediately on connection
+      processOnboardingMessages(sock)
+      console.log('   📬 Serviço de mensagens de onboarding iniciado\n')
     }
   })
 

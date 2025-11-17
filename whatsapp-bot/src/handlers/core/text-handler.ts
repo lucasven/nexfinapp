@@ -95,8 +95,8 @@ export async function handleTextMessage(
         }
         
         if (commandResult.action === 'help') {
-          const result = commandResult.entities.description 
-            ? getCommandHelp(commandResult.entities.description) 
+          const result = commandResult.entities.description
+            ? await getCommandHelp(commandResult.entities.description)
             : messages.welcome
           
           await recordParsingMetric({

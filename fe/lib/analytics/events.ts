@@ -62,6 +62,19 @@ export enum AnalyticsEvent {
   
   // User Invitation Events
   USER_ACCEPTED_BETA_INVITATION = 'user_accepted_beta_invitation',
+
+  // Onboarding Events
+  ONBOARDING_STARTED = 'onboarding_started',
+  ONBOARDING_STEP_COMPLETED = 'onboarding_step_completed',
+  ONBOARDING_STEP_SKIPPED = 'onboarding_step_skipped',
+  ONBOARDING_COMPLETED = 'onboarding_completed',
+  WHATSAPP_GREETING_SENT = 'whatsapp_greeting_sent',
+  WHATSAPP_GREETING_FAILED = 'whatsapp_greeting_failed',
+
+  // Tutorial Events
+  ONBOARDING_TUTORIAL_STARTED = 'onboarding_tutorial_started',
+  ONBOARDING_TUTORIAL_ELEMENT_HIGHLIGHTED = 'onboarding_tutorial_element_highlighted',
+  ONBOARDING_TOUR_RESUMED = 'onboarding_tour_resumed',
 }
 
 /**
@@ -110,6 +123,14 @@ export enum AnalyticsProperty {
   // Error properties
   ERROR_MESSAGE = 'error_message',
   ERROR_CODE = 'error_code',
+
+  // Onboarding properties
+  ONBOARDING_STEP = 'onboarding_step',
+  ONBOARDING_STEP_NUMBER = 'onboarding_step_number',
+  ONBOARDING_TOTAL_STEPS = 'onboarding_total_steps',
+  ONBOARDING_DURATION_MS = 'onboarding_duration_ms',
+  ONBOARDING_SKIP_REASON = 'onboarding_skip_reason',
+  WHATSAPP_SETUP_METHOD = 'whatsapp_setup_method',
 }
 
 /**

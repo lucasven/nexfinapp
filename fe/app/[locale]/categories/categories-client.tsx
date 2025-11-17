@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from 'next-intl'
 import { PencilIcon, Trash2Icon, PlusIcon, AlertCircleIcon } from "lucide-react"
@@ -18,6 +18,10 @@ import {
 import { CategoryDialog } from "@/components/category-dialog"
 import { deleteCategory } from "@/lib/actions/categories"
 import { Category } from "@/lib/types"
+import { useOnboarding } from "@/hooks/use-onboarding"
+import { TutorialOverlay } from "@/components/onboarding/tutorial-overlay"
+import { skipOnboardingStep } from "@/lib/actions/onboarding"
+import { ResumeTourFAB } from "@/components/onboarding/resume-tour-fab"
 
 interface CategoriesClientProps {
   categories: Category[]
@@ -32,8 +36,34 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Onboarding state
+  const { currentStep, isOnboarding, loading, refresh: refreshOnboarding } = useOnboarding()
+  const [showTutorial, setShowTutorial] = useState(false)
+  const [tutorialDismissed, setTutorialDismissed] = useState(false)
+
   const incomeCategories = categories.filter((c) => c.type === "income")
   const expenseCategories = categories.filter((c) => c.type === "expense")
+
+  // Show tutorial when on add_category step
+  React.useEffect(() => {
+    if (!loading && currentStep === 'add_category' && !tutorialDismissed) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => setShowTutorial(true), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [loading, currentStep, tutorialDismissed])
+
+  const handleSkipTutorial = async () => {
+    setShowTutorial(false)
+    setTutorialDismissed(true)
+    await skipOnboardingStep('add_category')
+    await refreshOnboarding()
+  }
+
+  const handleResumeTour = () => {
+    setTutorialDismissed(false)
+    setShowTutorial(true)
+  }
 
   const handleDeleteClick = (category: Category) => {
     if (!category.is_custom) {
@@ -94,6 +124,7 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
         <div className="flex items-center gap-2">
           <CategoryDialog
             category={category}
+            currentStep={currentStep}
             trigger={
               <Button variant="ghost" size="sm">
                 <PencilIcon className="h-4 w-4" />
@@ -122,7 +153,9 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
           <h1 className="text-3xl font-bold tracking-tight">{t('category.categories')}</h1>
           <p className="text-muted-foreground mt-1">{t('category.subtitle')}</p>
         </div>
-        <CategoryDialog />
+        <div data-onboarding-add-category>
+          <CategoryDialog currentStep={currentStep} />
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -187,6 +220,25 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Tutorial overlay for add_category step */}
+      <TutorialOverlay
+        isOpen={showTutorial}
+        onClose={() => setShowTutorial(false)}
+        onSkip={handleSkipTutorial}
+        targetSelector="[data-onboarding-add-category]"
+        title={t('onboarding.category.heading')}
+        description={t('onboarding.category.description')}
+        step={2}
+        totalSteps={4}
+        showNext={false}
+        position="bottom"
+      />
+
+      {/* Resume tour FAB if user dismissed but still onboarding */}
+      {isOnboarding && currentStep === 'add_category' && tutorialDismissed && (
+        <ResumeTourFAB onClick={handleResumeTour} />
+      )}
     </>
   )
 }

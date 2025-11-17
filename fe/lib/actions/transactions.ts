@@ -65,11 +65,17 @@ export async function createTransaction(formData: {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  // Generate user-readable ID using the database function
+  const { data: readableIdData, error: idError } = await supabase.rpc("generate_transaction_id")
+
+  if (idError) throw idError
+
   const { data, error } = await supabase
     .from("transactions")
     .insert({
       ...formData,
       user_id: user.id,
+      user_readable_id: readableIdData,
     })
     .select()
     .single()

@@ -300,6 +300,80 @@ export interface Messages {
     type: string
     actions: string
   }
+
+  // Onboarding
+  onboarding: {
+    progress: string
+    back: string
+    next: string
+    skip: string
+    skipTour: string
+    getStarted: string
+    complete: string
+
+    welcome: {
+      title: string
+      heading: string
+      intro: string
+      feature1Title: string
+      feature1Desc: string
+      feature2Title: string
+      feature2Desc: string
+      feature3Title: string
+      feature3Desc: string
+    }
+
+    whatsapp: {
+      title: string
+      heading: string
+      description: string
+      explanation: string
+      instructions: string
+      addButton: string
+      connected: string
+    }
+
+    category: {
+      title: string
+      heading: string
+      description: string
+      explanation: string
+      tip: string
+      tipDetail: string
+      goToCategories: string
+    }
+
+    expense: {
+      tutorialTitle: string
+      tutorialDescription: string
+    }
+
+    features: {
+      title: string
+      heading: string
+      description: string
+      explanation: string
+      tutorialTitle: string
+      tutorialDescription: string
+
+      naturalLanguage: {
+        title: string
+        description: string
+        example: string
+      }
+
+      ocr: {
+        title: string
+        description: string
+        example: string
+      }
+
+      budgets: {
+        title: string
+        description: string
+      }
+    }
+  }
 }
 
 export interface FormatHelpers {

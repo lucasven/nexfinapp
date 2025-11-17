@@ -8,7 +8,17 @@ import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 export async function getCategories() {
   const supabase = await getSupabaseServerClient()
 
-  const { data, error } = await supabase.from("categories").select("*").order("name")
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  // Get default categories (user_id is null) and user's custom categories
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .or(`user_id.is.null,user_id.eq.${user.id}`)
+    .order("name")
 
   if (error) throw error
   return data

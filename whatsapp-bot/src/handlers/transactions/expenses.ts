@@ -118,11 +118,41 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
     const paymentMethodText = paymentMethod ? `\n💳 Método: ${paymentMethod}` : ''
     const transactionIdText = `\n🆔 ID: ${userReadableId}`
 
+    let response = ''
     if (type === 'income') {
-      return messages.incomeAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
+      response = messages.incomeAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
     } else {
-      return messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
+      response = messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
     }
+
+    // Check if this is the user's first expense and celebrate!
+    if (type !== 'income') {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('first_expense_added')
+        .eq('user_id', session.userId)
+        .single()
+
+      if (profile && !profile.first_expense_added) {
+        // Mark first expense as added
+        await supabase
+          .from('user_profiles')
+          .update({
+            first_expense_added: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', session.userId)
+
+        // Add celebration message
+        response += '\n\n🎉 *Parabéns!* Primeira despesa registrada com sucesso!'
+        response += '\n\n💡 *Próximos passos:*'
+        response += '\n• Configure um orçamento mensal para suas categorias'
+        response += '\n• Envie fotos de SMS bancários para registro automático'
+        response += '\n• Digite "relatório" para ver suas finanças'
+      }
+    }
+
+    return response
   } catch (error) {
     logger.error('Error in handleAddExpense', { whatsappNumber }, error as Error)
     return messages.expenseError

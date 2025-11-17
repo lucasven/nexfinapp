@@ -283,6 +283,79 @@ export const messages: Messages = {
     type: 'Type',
     actions: 'Actions',
   },
+
+  onboarding: {
+    progress: 'Step {current} of {total}',
+    back: 'Back',
+    next: 'Next',
+    skip: 'Skip',
+    skipTour: 'Skip Tour',
+    getStarted: 'Get Started',
+    complete: 'Complete',
+
+    welcome: {
+      title: 'Welcome',
+      heading: 'Welcome to NexFinApp!',
+      intro: 'Your personal finance assistant via WhatsApp',
+      feature1Title: 'Track Expenses Easily',
+      feature1Desc: 'Just send a message like "Spent 50 on food"',
+      feature2Title: 'Smart OCR',
+      feature2Desc: 'Send photos of receipts or bank SMS',
+      feature3Title: 'Monthly Budgets',
+      feature3Desc: 'Set limits and get alerts',
+    },
+
+    whatsapp: {
+      title: 'WhatsApp',
+      heading: 'Connect Your WhatsApp',
+      description: 'Manage finances directly from WhatsApp',
+      explanation: 'Add your WhatsApp number to start receiving updates and interact with the bot.',
+      instructions: 'Click the button below to add your WhatsApp number',
+      addButton: 'Add WhatsApp Number',
+      connected: 'WhatsApp Connected!',
+    },
+
+    category: {
+      title: 'Categories',
+      heading: 'Create Your First Category',
+      description: 'Organize your expenses',
+      explanation: 'Categories help you organize and track different types of expenses.',
+      tip: 'Pro Tip:',
+      tipDetail: 'Common categories include: Food, Transport, Rent, Entertainment',
+      goToCategories: 'Go to Categories',
+    },
+
+    expense: {
+      tutorialTitle: 'Add Your First Expense',
+      tutorialDescription: 'Click here to add a transaction. You can do this via WhatsApp or the web interface.',
+    },
+
+    features: {
+      title: 'Features',
+      heading: 'Powerful Features',
+      description: 'What you can do',
+      explanation: 'Here are the key features to help you manage your finances:',
+      tutorialTitle: 'Explore All Features',
+      tutorialDescription: 'Access reports, budgets, categories, and recurring transactions from here. Start exploring!',
+
+      naturalLanguage: {
+        title: 'Natural Language',
+        description: 'Just talk naturally, no commands needed',
+        example: '"Spent 50 on lunch today"',
+      },
+
+      ocr: {
+        title: 'OCR for Bank SMS',
+        description: 'Send photos of bank messages for automatic expense extraction',
+        example: 'Just send a photo of your bank SMS!',
+      },
+
+      budgets: {
+        title: 'Monthly Budgets',
+        description: 'Set spending limits and get alerts when you\'re close',
+      },
+    },
+  },
 }
 
 export const formatHelpers: FormatHelpers = {

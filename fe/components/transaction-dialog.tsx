@@ -25,14 +25,17 @@ import { useTranslations } from 'next-intl'
 import { translateCategoryName } from '@/lib/localization/category-translations'
 import { trackEvent } from '@/lib/analytics/tracker'
 import { AnalyticsEvent } from '@/lib/analytics/events'
+import { advanceOnboardingStep } from "@/lib/actions/onboarding"
+import type { OnboardingStep } from "@/hooks/use-onboarding"
 
 interface TransactionDialogProps {
   categories: Category[]
   transaction?: Transaction
   trigger?: React.ReactNode
+  currentStep?: OnboardingStep
 }
 
-export function TransactionDialog({ categories, transaction, trigger }: TransactionDialogProps) {
+export function TransactionDialog({ categories, transaction, trigger, currentStep }: TransactionDialogProps) {
   const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -67,12 +70,22 @@ export function TransactionDialog({ categories, transaction, trigger }: Transact
 
       if (transaction) {
         await updateTransaction(transaction.id, data)
+        setOpen(false)
+        router.refresh()
       } else {
         await createTransaction(data)
-      }
 
-      setOpen(false)
-      router.refresh()
+        // If creating a new transaction during onboarding, advance to next step
+        if (currentStep === 'add_expense') {
+          await advanceOnboardingStep('add_expense')
+          setOpen(false)
+          // Force full page reload to ensure onboarding state refreshes
+          window.location.href = '/'
+        } else {
+          setOpen(false)
+          router.refresh()
+        }
+      }
     } catch (error) {
       console.error("Error saving transaction:", error)
     } finally {
