@@ -114,7 +114,7 @@ async function connectToWhatsApp() {
       // Start polling for onboarding messages every 30 seconds
       setInterval(async () => {
         processOnboardingMessages(sock)
-      }, 1000) // 30 seconds
+      }, 30000) // 30 seconds
 
       // Process immediately on connection
       processOnboardingMessages(sock)
