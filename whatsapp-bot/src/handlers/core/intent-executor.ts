@@ -158,7 +158,7 @@ export async function executeIntent(whatsappNumber: string, intent: any, session
 
       case 'show_help':
       case 'help':
-        result = getCommandHelp(intent.entities.description)
+        result = await getCommandHelp(intent.entities.description)
         break
 
       // NEW: Transaction Management

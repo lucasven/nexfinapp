@@ -17,13 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createCategory, updateCategory } from "@/lib/actions/categories"
 import { Category } from "@/lib/types"
 import { useRouter } from "next/navigation"
+import { advanceOnboardingStep } from "@/lib/actions/onboarding"
+import type { OnboardingStep } from "@/hooks/use-onboarding"
 
 interface CategoryDialogProps {
   category?: Category
   trigger?: React.ReactNode
+  currentStep?: OnboardingStep
 }
 
-export function CategoryDialog({ category, trigger }: CategoryDialogProps) {
+export function CategoryDialog({ category, trigger, currentStep }: CategoryDialogProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -44,11 +47,22 @@ export function CategoryDialog({ category, trigger }: CategoryDialogProps) {
     try {
       if (category) {
         await updateCategory(category.id, formData)
+        setOpen(false)
+        router.refresh()
       } else {
         await createCategory(formData)
+
+        // If creating a new category during onboarding, advance to next step
+        if (currentStep === 'add_category') {
+          await advanceOnboardingStep('add_category')
+          setOpen(false)
+          // Force full page reload to ensure onboarding state refreshes
+          window.location.href = '/'
+        } else {
+          setOpen(false)
+          router.refresh()
+        }
       }
-      setOpen(false)
-      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {

@@ -96,6 +96,23 @@ export function WhatsAppNumberDialog({ number, trigger, onSaved }: WhatsAppNumbe
         await updateAuthorizedNumber(number.id, data)
       } else {
         await addAuthorizedNumber(data)
+
+        // Always send greeting message for new numbers
+        try {
+          await fetch('/api/onboarding/send-greeting', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              whatsappNumber: cleanedNumber,
+              userName: data.name,
+            }),
+          })
+        } catch (greetingError) {
+          console.error('Error sending greeting:', greetingError)
+          // Don't fail the whole operation if greeting fails
+        }
       }
 
       setOpen(false)

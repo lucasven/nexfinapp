@@ -283,6 +283,79 @@ export const messages: Messages = {
     type: 'Tipo',
     actions: 'Ações',
   },
+
+  onboarding: {
+    progress: 'Passo {current} de {total}',
+    back: 'Voltar',
+    next: 'Próximo',
+    skip: 'Pular',
+    skipTour: 'Pular Tour',
+    getStarted: 'Começar',
+    complete: 'Concluir',
+
+    welcome: {
+      title: 'Boas-vindas',
+      heading: 'Bem-vindo ao NexFinApp!',
+      intro: 'Seu assistente financeiro pessoal via WhatsApp',
+      feature1Title: 'Rastreie Despesas Facilmente',
+      feature1Desc: 'Basta enviar uma mensagem como "Gastei 50 em comida"',
+      feature2Title: 'OCR Inteligente',
+      feature2Desc: 'Envie fotos/prints de recibos, SMS bancários ou extratos',
+      feature3Title: 'Orçamentos Mensais',
+      feature3Desc: 'Defina limites e receba alertas',
+    },
+
+    whatsapp: {
+      title: 'WhatsApp',
+      heading: 'Conecte seu WhatsApp',
+      description: 'Gerencie suas finanças direto do WhatsApp',
+      explanation: 'Adicione seu número do WhatsApp para começar a interagir com o bot.',
+      instructions: 'Clique no botão acima para adicionar seu número do WhatsApp',
+      addButton: 'Adicionar Número do WhatsApp',
+      connected: 'WhatsApp Conectado!',
+    },
+
+    category: {
+      title: 'Categorias',
+      heading: 'Crie sua Primeira Categoria',
+      description: 'Organize suas despesas',
+      explanation: 'Categorias ajudam você a organizar e rastrear diferentes tipos de despesas.',
+      tip: 'Dica Profissional:',
+      tipDetail: 'Categorias comuns incluem: Alimentação, Transporte, Aluguel, Entretenimento',
+      goToCategories: 'Ir para Categorias',
+    },
+
+    expense: {
+      tutorialTitle: 'Adicione sua Primeira Despesa',
+      tutorialDescription: 'Clique aqui para adicionar uma transação. Você pode fazer isso via WhatsApp ou pela interface web.',
+    },
+
+    features: {
+      title: 'Recursos',
+      heading: 'Recursos Poderosos',
+      description: 'O que você pode fazer',
+      explanation: 'Aqui estão os principais recursos para ajudá-lo a gerenciar suas finanças:',
+      tutorialTitle: 'Explore Todos os Recursos',
+      tutorialDescription: 'Acesse relatórios, orçamentos, categorias e transações recorrentes daqui. Comece a explorar!',
+
+      naturalLanguage: {
+        title: 'Linguagem Natural',
+        description: 'Apenas fale naturalmente, sem comandos necessários',
+        example: '"Gastei 50 no almoço hoje"',
+      },
+
+      ocr: {
+        title: 'OCR para SMS Bancários',
+        description: 'Envie fotos de mensagens bancárias para extração automática de despesas',
+        example: 'Apenas envie uma foto do seu SMS bancário!',
+      },
+
+      budgets: {
+        title: 'Orçamentos Mensais',
+        description: 'Defina limites de gastos e receba alertas quando estiver próximo',
+      },
+    },
+  },
 }
 
 export const formatHelpers: FormatHelpers = {

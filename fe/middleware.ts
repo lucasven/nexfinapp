@@ -15,23 +15,49 @@ export async function middleware(request: NextRequest) {
   // Handle PostHog proxy requests first
   if (request.nextUrl.pathname.startsWith('/ingest')) {
     const url = request.nextUrl.clone()
-    
+
     // Rewrite to PostHog servers
     if (url.pathname.startsWith('/ingest/static/')) {
       url.href = `https://us-assets.i.posthog.com${url.pathname.replace('/ingest', '')}`
     } else {
       url.href = `https://us.i.posthog.com${url.pathname.replace('/ingest', '')}${url.search}`
     }
-    
+
     return NextResponse.rewrite(url)
   }
-  
+
+  // Skip locale middleware for API routes, but still handle Supabase auth
+  if (request.nextUrl.pathname.startsWith('/api')) {
+    const response = NextResponse.next()
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+            cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
+          },
+        },
+      },
+    )
+
+    // This will refresh the auth session if needed
+    await supabase.auth.getUser()
+
+    return response
+  }
+
   // Get locale from cookie or detect from browser
   const LOCALE_COOKIE = 'NEXT_LOCALE'
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value
   const browserLocale = detectBrowserLocale(request.headers.get('accept-language') || undefined)
   const detectedLocale = cookieLocale || browserLocale
-  
+
   // Step 1: Use the default intl middleware
   const response = intlMiddleware(request)
   
@@ -84,12 +110,12 @@ export async function middleware(request: NextRequest) {
     })
   }
 
-  // If user is authenticated, fetch their locale preference from database
+  // If user is authenticated, fetch their locale preference and onboarding status from database
   if (user) {
     try {
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('locale')
+        .select('locale, onboarding_completed, onboarding_step')
         .eq('user_id', user.id)
         .single()
 
@@ -107,8 +133,21 @@ export async function middleware(request: NextRequest) {
           return NextResponse.redirect(new URL(newPathname, request.url))
         }
       }
+
+      // Check onboarding status - redirect to welcome page ONLY on first visit to home
+      // This allows users to navigate freely during onboarding
+      if (profile && !profile.onboarding_completed && profile.onboarding_step === null) {
+        // First time user - redirect to welcome page
+        const isHome = pathnameWithoutLocale === '/'
+        const isAuth = pathnameWithoutLocale.startsWith('/auth')
+
+        if (isHome && !isAuth) {
+          const locale = profile.locale || detectedLocale || defaultLocale
+          return NextResponse.redirect(new URL(`/${locale}/onboarding/welcome`, request.url))
+        }
+      }
     } catch (error) {
-      console.error('Error fetching user locale from database:', error)
+      console.error('Error fetching user profile from database:', error)
     }
   }
 

@@ -260,3 +260,80 @@ export async function deleteAuthorizedNumber(id: string) {
 
   revalidatePath("/profile")
 }
+
+// Onboarding helper functions
+export async function checkOnboardingStatus(): Promise<{
+  onboarding_completed: boolean
+  whatsapp_setup_completed: boolean
+  first_category_added: boolean
+  first_expense_added: boolean
+  onboarding_step: string | null
+} | null> {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("onboarding_completed, whatsapp_setup_completed, first_category_added, first_expense_added, onboarding_step")
+    .eq("user_id", user.id)
+    .single()
+
+  if (error && error.code !== "PGRST116") throw error
+
+  return data
+}
+
+export async function updateOnboardingStep(
+  step: string,
+  stepData?: {
+    whatsapp_setup_completed?: boolean
+    first_category_added?: boolean
+    first_expense_added?: boolean
+  }
+) {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      onboarding_step: step,
+      ...stepData,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id)
+
+  if (error) throw error
+
+  revalidatePath("/onboarding")
+}
+
+export async function markOnboardingComplete() {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      onboarding_completed: true,
+      onboarding_step: "completed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id)
+
+  if (error) throw error
+
+  revalidatePath("/")
+}

@@ -332,16 +332,16 @@ function parseCategoriesCommand(args: string[]): ParsedIntent | null {
  * Uses default Portuguese locale for now
  * TODO: Accept locale parameter when handlers support dynamic locales
  */
-export function getCommandHelp(command?: string): string {
+export async function getCommandHelp(command?: string): Promise<string> {
   // Import here to avoid circular dependencies
-  const { messages } = require('../localization/pt-br')
-  
+  const { messages } = await import('../localization/pt-br.js')
+
   const helpTexts = messages.commandHelp
-  
+
   if (command && command in helpTexts) {
     return helpTexts[command as keyof typeof helpTexts]
   }
-  
+
   return helpTexts.help
 }
 

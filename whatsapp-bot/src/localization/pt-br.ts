@@ -4,44 +4,43 @@ export const messages: Messages = {
   // Welcome and help messages
   welcome: `👋 Olá! Bem-vindo ao NexFinApp!
 
-Sou seu assistente para gerenciar suas finanças. Aqui está o que posso fazer:
+Sou seu assistente financeiro pessoal. Você pode falar comigo naturalmente!
 
 💰 *Despesas e Receitas*
-• "Gastei R$50 em comida"
-• "Recebi R$2000 de salário"
-• "Adicionar despesa de 30 reais em transporte ontem"
-• "Mostrar minhas despesas"
+Fale comigo como você falaria com um amigo:
+• "Gastei 50 reais em comida"
+• "Recebi salário de 2000"
+• "Comprei 30 de transporte ontem"
+• "Mostra minhas despesas"
 
 📊 *Orçamentos*
-• "Definir orçamento de comida em R$500"
-• "Mostrar meus orçamentos"
-• "Status do orçamento"
+Configure limites para suas categorias:
+• "Quero gastar no máximo 500 em comida por mês"
+• "Meus orçamentos"
+• "Como está meu orçamento?"
 
 🔄 *Despesas Recorrentes*
-• "Adicionar aluguel mensal de R$1200 no dia 1"
-• "Mostrar pagamentos recorrentes"
+Para gastos fixos mensais:
+• "Todo dia 1 pago 1200 de aluguel"
+• "Quais são meus pagamentos recorrentes?"
 
 📈 *Relatórios*
+Acompanhe suas finanças:
 • "Relatório deste mês"
-• "Resumo de despesas"
+• "Quanto gastei?"
+• "Resumo das minhas despesas"
 
-📁 *Categorias*
-• "Listar categorias"
-• "Adicionar categoria Academia"
+📸 *Dica Especial*
+Envie fotos de SMS bancários ou extratos - eu extraio os dados automaticamente!
 
-🔐 *Autenticação*
-• Sua sessão inicia automaticamente pelo número do WhatsApp. Caso precise fazer login manualmente, use:
-• "Login: meuemail@example.com senha123"
-• "Sair"
-
-Você também pode me enviar fotos de SMS bancários ou extratos!`,
+💡 Sua sessão é automática pelo WhatsApp. Apenas converse comigo naturalmente!`,
 
   // Authentication messages
-  loginPrompt: '🔐 Para começar, faça login com:\n"Login: seu-email@example.com sua-senha"',
+  loginPrompt: '🔐 Para começar, adicione o seu número de whatsapp no seu perfil"',
   loginSuccess: '✅ Login realizado com sucesso! Agora você pode gerenciar suas despesas.',
   loginError: '❌ Erro ao fazer login. Verifique suas credenciais e tente novamente.',
   logoutSuccess: '👋 Você foi desconectado com sucesso!',
-  notAuthenticated: '🔒 Você precisa fazer login primeiro. Use:\n"Login: seu-email@example.com sua-senha"',
+  notAuthenticated: '🔒 Você precisa fazer login primeiro. Adicione seu número de whatsapp no seu perfil."',
   sessionExpired: '⏰ Sua sessão expirou. Por favor, faça login novamente.',
   unauthorizedNumber: '🚫 Este número WhatsApp não está autorizado. Entre em contato com o proprietário da conta para adicionar seu número.',
   permissionDenied: (action: string) => `🔒 Você não tem permissão para ${action}. Entre em contato com o proprietário da conta para ajustar suas permissões.`,
@@ -156,71 +155,72 @@ Você também pode me enviar fotos de SMS bancários ou extratos!`,
   // Command help texts
   commandHelp: {
     add: `
-/add <valor> <categoria> [data] [descrição] [método_pagamento]
+(use linguagem natural, adicionar/gastei e outros funcionam)
+Adicionar/Gastei <valor> <categoria> [data] [descrição] [método_pagamento]
 
 Exemplos:
-/add 50 comida
-/add 30 transporte 15/10
-/add 100 mercado ontem cartão
-/add 25.50 farmácia "compras de remédios" pix
+Adicionar (ou gastei) 50 em comida
+Gastei 30 em transporte em 15/10
+Gastei 100 no mercado ontem no cartão
+Gastei 25,50 na farmácia em remédios no pix
     `,
     budget: `
-/budget <categoria> <valor> [período]
+Definir Orçamento de <valor> para <categoria> 
 
 Exemplos:
-/budget comida 500
-/budget transporte 200 mês
-/budget lazer 1000 ano
+Definir orçamento de 500 em mercado
+Definir orçamento de 300 em transporte
+Definir orçamento de 1000 para lazer
     `,
     recurring: `
-/recurring <nome> <valor> dia <dia>
+Cadastrar gasto recorrente <nome> <valor> dia <dia> na categoria <categoria>
 
 Exemplos:
-/recurring aluguel 1200 dia 5
-/recurring salário 5000 dia 1
-/recurring academia 80 dia 15
+Gasto recorrente aluguel 1200 dia 5 em moradia pago em dinheiro
+Entrada recorrente salario 5000 dia 1
+Gasto recorrente em academia 80 reais dia 15 
     `,
     report: `
-/report [período] [categoria]
+Mostrar gastos de [periodo] para [categoria]
 
 Exemplos:
-/report
-/report este mês
-/report janeiro 2024
-/report comida
+Mostrar gastos - usa o padrão do mês atual
+Mostrar gastos desse mês
+Mostrar gastos de janeiro de 2024
+Mostrar gastos em comida
     `,
     list: `
-/list [tipo]
+Listar [tipo]
 
 Tipos: categories, recurring, budgets, transactions
 
 Exemplos:
-/list
-/list categories
-/list recurring
+Listar (retorna resumo mensal)
+Listar cateorias
+Listar gastos recorrentes
+Listar orçamentos
+Listar transacoes
     `,
     categories: `
-/categories [ação] [nome]
+[ação] categoria [nome]
 
 Ações: add, remove
 
 Exemplos:
-/categories
-/categories add "casa e decoração"
-/categories remove transporte
+listar categorias
+adicionar categoria casa e decoração
+remover categoria transporte
     `,
     help: `
 Comandos disponíveis:
 
-/add - Adicionar despesa
-/budget - Definir orçamento
-/recurring - Adicionar despesa recorrente
-/report - Ver relatórios
-/list - Listar itens
-/categories - Gerenciar categorias
-/help - Mostrar esta ajuda
-
-Use /help <comando> para detalhes específicos.
+Adicionar despesa - "Gastei 50 em comida"
+Definir orçamento - "Definir orçamento de 50 para mercado"
+Adicionar despesa recorrente - "Adicionar despesa recorrente de 19,9 em netflix na categoria assinaturas"
+Ver relatórios - "Quanto gastei esse mês?" ou "Quanto gastei esse mês em mercado?"
+Listar itens - "Listar gastos" ou "Listar Transaçoes"
+Gerenciar categorias - "Listar categorias" ou "Adicionar categoria assinaturas"
+Mostrar esta ajuda - "Ajuda"
     `
   }
 }
