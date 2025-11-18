@@ -5,13 +5,24 @@ import { messages, formatDate } from '../../localization/pt-br.js'
 import { checkForDuplicate } from '../../services/detection/duplicate-detector.js'
 import { storePendingTransaction } from './duplicate-confirmation.js'
 import { logger } from '../../services/monitoring/logger.js'
+import { findCategoryWithFallback } from '../../services/category-matcher.js'
 
-export async function handleAddExpense(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
+export async function handleAddExpense(
+  whatsappNumber: string,
+  intent: ParsedIntent,
+  parsingMetricId?: string | null
+): Promise<string> {
   try {
     const session = await getUserSession(whatsappNumber)
     if (!session) {
       return messages.notAuthenticated
     }
+
+    logger.info('Adding expense with parsing metric link', {
+      whatsappNumber,
+      parsingMetricId,
+      action: intent.action
+    })
 
     const { amount, category, description, date, type, paymentMethod } = intent.entities
 
@@ -19,35 +30,30 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
       return messages.invalidAmount
     }
 
-    // Find category ID
+    // Find category ID using improved matching
     const supabase = getSupabaseClient()
-    let categoryId = null
 
-    if (category) {
-      const { data: categories } = await supabase
-        .from('categories')
-        .select('id, name')
-        .eq('type', type || 'expense')
-        .ilike('name', `%${category}%`)
-        .limit(1)
+    const categoryMatch = await findCategoryWithFallback(category, {
+      userId: session.userId,
+      type: type || 'expense',
+      threshold: 0.6,
+      includeCustom: true
+    })
 
-      if (categories && categories.length > 0) {
-        categoryId = categories[0].id
-      }
-    }
+    const categoryId = categoryMatch.id
+    const matchedCategoryName = categoryMatch.name
+    const matchConfidence = categoryMatch.confidence
 
-    // Use default category if not found
-    if (!categoryId) {
-      const defaultCategoryName = type === 'income' ? 'Other Income' : 'Other Expense'
-      const { data: defaultCat } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('name', defaultCategoryName)
-        .single()
-
-      if (defaultCat) {
-        categoryId = defaultCat.id
-      }
+    // Log low-confidence matches for analysis
+    if (matchConfidence < 0.8 && category) {
+      logger.info('Low confidence category match', {
+        whatsappNumber,
+        userId: session.userId,
+        inputCategory: category,
+        matchedCategory: matchedCategoryName,
+        confidence: matchConfidence,
+        matchType: categoryMatch.matchType
+      })
     }
 
     // Check for duplicate transactions
@@ -68,11 +74,13 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
         return messages.duplicateBlocked(duplicateCheck.reason || 'Transação muito similar encontrada')
       } else {
         // Store pending transaction and ask for confirmation
-        storePendingTransaction(whatsappNumber, session.userId, expenseData)
+        const duplicateId = storePendingTransaction(whatsappNumber, session.userId, expenseData)
+
+        // Include duplicate ID in the warning message so users can reply to confirm specific duplicates
         return messages.duplicateWarning(
           duplicateCheck.reason || 'Transação similar encontrada',
           Math.round(duplicateCheck.confidence * 100)
-        )
+        ) + `\n🆔 Duplicate ID: ${duplicateId}`
       }
     }
 
@@ -100,7 +108,10 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
         description: description || null,
         date: transactionDate,
         payment_method: paymentMethod || null,
-        user_readable_id: userReadableId
+        user_readable_id: userReadableId,
+        match_confidence: matchConfidence,
+        match_type: categoryMatch.matchType,
+        parsing_metric_id: parsingMetricId || null  // Link to parsing metric
       })
       .select(`
         *,
@@ -113,16 +124,50 @@ export async function handleAddExpense(whatsappNumber: string, intent: ParsedInt
       return messages.expenseError
     }
 
+    // Link back from parsing_metrics to transaction (bidirectional link)
+    if (parsingMetricId && data.id) {
+      logger.info('Creating bidirectional link', {
+        parsingMetricId,
+        transactionId: data.id,
+        userReadableId
+      })
+
+      const { error: linkError } = await supabase
+        .from('parsing_metrics')
+        .update({ linked_transaction_id: data.id })
+        .eq('id', parsingMetricId)
+
+      if (linkError) {
+        logger.warn('Failed to create bidirectional link to parsing metric', {
+          parsingMetricId,
+          transactionId: data.id,
+          error: linkError.message
+        })
+        // Don't fail the transaction if linking fails
+      } else {
+        logger.info('Bidirectional link created successfully', {
+          parsingMetricId,
+          transactionId: data.id
+        })
+      }
+    }
+
     const categoryName = data.category?.name || 'Sem categoria'
     const formattedDate = formatDate(new Date(transactionDate))
     const paymentMethodText = paymentMethod ? `\n💳 Método: ${paymentMethod}` : ''
     const transactionIdText = `\n🆔 ID: ${userReadableId}`
 
+    // Add confidence indicator if match was uncertain
+    let confidenceText = ''
+    if (matchConfidence < 0.8 && matchConfidence >= 0.6 && category) {
+      confidenceText = `\n\n⚠️ Categoria sugerida com ${Math.round(matchConfidence * 100)}% de certeza. Se estiver incorreta, você pode alterá-la.`
+    }
+
     let response = ''
     if (type === 'income') {
-      response = messages.incomeAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
+      response = messages.incomeAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText
     } else {
-      response = messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText
+      response = messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText
     }
 
     // Check if this is the user's first expense and celebrate!

@@ -16,6 +16,7 @@ export async function handleListCategories(whatsappNumber: string): Promise<stri
     const { data: categories, error } = await supabase
       .from('categories')
       .select('*')
+      .or(`user_id.eq.${session.userId},user_id.is.null`)
       .order('type', { ascending: false })
       .order('name', { ascending: true })
 

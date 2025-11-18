@@ -20,11 +20,12 @@ export async function handleSetBudget(whatsappNumber: string, intent: ParsedInte
 
     const supabase = getSupabaseClient()
 
-    // Find category
+    // Find category (only user's categories and defaults)
     const { data: categories } = await supabase
       .from('categories')
       .select('id, name')
       .eq('type', 'expense')
+      .or(`user_id.is.null,user_id.eq.${session.userId}`)
       .ilike('name', `%${category}%`)
       .limit(1)
 
@@ -174,11 +175,12 @@ export async function handleDeleteBudget(
 
     const supabase = getSupabaseClient()
 
-    // Find the category
+    // Find the category (only user's categories and defaults)
     const { data: categoryData } = await supabase
       .from('categories')
       .select('id, name')
       .eq('type', 'expense')
+      .or(`user_id.is.null,user_id.eq.${session.userId}`)
       .ilike('name', `%${category}%`)
       .single()
 

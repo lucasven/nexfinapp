@@ -97,6 +97,25 @@ export async function processOnboardingMessages(sock: WASocket | null): Promise<
 
     for (const msg of messages) {
       try {
+        // First, try to claim this message by updating status to 'processing'
+        // This prevents another instance from picking it up
+        const { data: claimedMsg, error: claimError } = await supabase
+          .from('onboarding_messages')
+          .update({
+            status: 'processing',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', msg.id)
+          .eq('status', 'pending') // Only update if still pending
+          .select()
+          .single()
+
+        // If we couldn't claim it, skip (another instance is processing it)
+        if (claimError || !claimedMsg) {
+          console.log(`[Onboarding] Message ${msg.id} already being processed`)
+          continue
+        }
+
         if (msg.message_type === 'greeting') {
           await sendOnboardingGreeting(sock, msg.whatsapp_number, msg.user_name)
 

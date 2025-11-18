@@ -358,7 +358,7 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       try {
         const groupMetadata = await sock.groupMetadata(from)
         groupName = groupMetadata.subject
-        console.log('[DEBUG] Group metadata:', { groupJid, groupName })
+        //console.log('[DEBUG] Group metadata:', { groupJid, groupName })
       } catch (error) {
         console.error('Error fetching group metadata:', error)
       }
@@ -428,13 +428,13 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
     
     // Debug logging for group messages
     if (isGroup) {
-      console.log('[DEBUG] Group message received:', {
-        from,
-        participant: message.key.participant,
-        rawSender,
-        rawSenderBeforeLidSplit: message.key.participant?.split('@')[0],
-        isGroup
-      })
+      // console.log('[DEBUG] Group message received:', {
+      //   from,
+      //   participant: message.key.participant,
+      //   rawSender,
+      //   rawSenderBeforeLidSplit: message.key.participant?.split('@')[0],
+      //   isGroup
+      // })
     }
     
     // Normalize phone number - keep only digits

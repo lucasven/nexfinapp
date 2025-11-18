@@ -29,6 +29,7 @@ export async function handleAddRecurring(whatsappNumber: string, intent: ParsedI
         .from('categories')
         .select('id, name')
         .eq('type', type || 'expense')
+        .or(`user_id.is.null,user_id.eq.${session.userId}`)
         .ilike('name', `%${category}%`)
         .limit(1)
 

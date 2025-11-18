@@ -20,22 +20,37 @@ import { logger } from '../../services/monitoring/logger.js'
 import { getCategoryId } from './helpers.js'
 import { getCommandHelp } from '../../nlp/intent-parser.js'
 
+// Execution result for tracking
+export interface ExecutionResult {
+  message: string | string[]
+  transactionIds?: string[]  // For linking to transactions table
+  success: boolean
+  errorDetails?: string
+}
+
 /**
  * Execute a parsed intent
+ * @param parsingMetricId - ID from parsing_metrics table for transaction linking
  */
-export async function executeIntent(whatsappNumber: string, intent: any, session?: any): Promise<string | string[]> {
+export async function executeIntent(
+  whatsappNumber: string,
+  intent: any,
+  session?: any,
+  parsingMetricId?: string | null
+): Promise<string | string[]> {
   const startTime = Date.now()
-  
+
   logger.info('Executing intent', {
     whatsappNumber,
     userId: session?.userId,
-    action: intent.action
+    action: intent.action,
+    parsingMetricId
   })
   
   try {
     // Handle multiple transactions
     if (intent.entities.transactions && intent.entities.transactions.length > 1) {
-      const result = await handleMultipleTransactions(whatsappNumber, intent.entities.transactions)
+      const result = await handleMultipleTransactions(whatsappNumber, intent.entities.transactions, parsingMetricId)
       logger.info('Multiple transactions executed', {
         whatsappNumber,
         count: intent.entities.transactions.length,
@@ -79,8 +94,8 @@ export async function executeIntent(whatsappNumber: string, intent: any, session
 
       case 'add_expense':
       case 'add_income':
-        result = await handleAddExpense(whatsappNumber, intent)
-        
+        result = await handleAddExpense(whatsappNumber, intent, parsingMetricId)
+
         // Learn payment method preference
         if (intent.entities.category && intent.entities.paymentMethod) {
           const currentSession = session || await getUserSession(whatsappNumber)
@@ -247,14 +262,20 @@ export async function executeIntent(whatsappNumber: string, intent: any, session
 /**
  * Handle multiple transactions in a single message
  * Returns an array of messages to send individually
+ * @param parsingMetricId - ID from parsing_metrics table for transaction linking
  */
-export async function handleMultipleTransactions(whatsappNumber: string, transactions: any[]): Promise<string[]> {
+export async function handleMultipleTransactions(
+  whatsappNumber: string,
+  transactions: any[],
+  parsingMetricId?: string | null
+): Promise<string[]> {
   const messageList: string[] = []
   let successCount = 0
 
   logger.info('Processing multiple transactions', {
     whatsappNumber,
-    count: transactions.length
+    count: transactions.length,
+    parsingMetricId
   })
 
   // Send initial message about processing multiple transactions
@@ -268,8 +289,8 @@ export async function handleMultipleTransactions(whatsappNumber: string, transac
         confidence: 0.9,
         entities: transaction
       }
-      
-      const result = await handleAddExpense(whatsappNumber, intent)
+
+      const result = await handleAddExpense(whatsappNumber, intent, parsingMetricId)
       messageList.push(`${i + 1}/${transactions.length} - ${result}`)
       successCount++
     } catch (error) {

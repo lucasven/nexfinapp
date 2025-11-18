@@ -62,10 +62,11 @@ export async function handleEditTransaction(
     }
 
     if (category && category !== transaction.category) {
-      // Look up category ID (case-insensitive)
+      // Look up category ID (case-insensitive, only user's categories and defaults)
       const { data: categoryData } = await supabase
         .from('categories')
         .select('id, name')
+        .or(`user_id.is.null,user_id.eq.${session.userId}`)
         .ilike('name', category)
         .limit(1)
         .single()
@@ -229,10 +230,11 @@ export async function handleChangeCategory(
     // Store undo state before making changes
     storeUndoState(whatsappNumber, 'change_category', transaction)
 
-    // Look up new category (case-insensitive)
+    // Look up new category (case-insensitive, only user's categories and defaults)
     const { data: categoryData } = await supabase
       .from('categories')
       .select('id, name')
+      .or(`user_id.is.null,user_id.eq.${session.userId}`)
       .ilike('name', newCategory)
       .limit(1)
       .single()

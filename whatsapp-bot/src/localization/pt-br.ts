@@ -85,6 +85,57 @@ Envie fotos de SMS bancários ou extratos - eu extraio os dados automaticamente!
   confirmOcrExpense: (amount: number, description: string) =>
     `Encontrei:\n💵 R$ ${amount.toFixed(2)}\n📝 ${description}\n\nResponda "sim" para confirmar ou "não" para cancelar.`,
 
+  // OCR Confirmation Flow
+  ocrPreview: (transactions: Array<{amount: number, category?: string, description?: string, date?: string}>) => {
+    let message = `📸 *Transações encontradas na imagem:*\n\n`;
+    transactions.forEach((t, i) => {
+      const dateStr = t.date ? ` (${t.date})` : '';
+      const category = t.category || 'Sem categoria';
+      const description = t.description || 'Sem descrição';
+      message += `${i + 1}. R$ ${t.amount.toFixed(2)} - ${category} - ${description}${dateStr}\n`;
+    });
+    message += `\n*Responda:*\n`;
+    message += `✅ "sim" ou "confirmar" - Adicionar todas\n`;
+    message += `✏️ "editar 2" - Editar transação #2\n`;
+    message += `❌ "não" ou "cancelar" - Não adicionar`;
+    return message;
+  },
+  ocrConfirmationPrompt: '💡 *Como deseja proceder?*\n\n✅ "sim" - Confirmar todas\n✏️ "editar N" - Editar transação N\n❌ "não" - Cancelar',
+  ocrAllAdded: (count: number, successful: number) => {
+    if (successful === count) {
+      return `✅ *Sucesso!*\n\nTodas as ${count} transações foram adicionadas.`;
+    } else {
+      return `⚠️ *Parcialmente concluído*\n\n${successful} de ${count} transações adicionadas.\n${count - successful} falharam.`;
+    }
+  },
+  ocrCancelled: '❌ Transações canceladas. Nenhuma despesa foi adicionada.',
+  ocrEditPrompt: (index: number, transaction: {amount: number, category?: string, description?: string}) =>
+    `✏️ *Editar transação #${index}*\n\n` +
+    `💵 Valor: R$ ${transaction.amount.toFixed(2)}\n` +
+    `📁 Categoria: ${transaction.category || 'Sem categoria'}\n` +
+    `📝 Descrição: ${transaction.description || 'Sem descrição'}\n\n` +
+    `*Responda com o que deseja mudar:*\n` +
+    `• "categoria: Alimentação" - Alterar categoria\n` +
+    `• "valor: 50" - Alterar valor\n` +
+    `• "descrição: Mercado" - Alterar descrição\n` +
+    `• "cancelar" - Voltar sem mudar`,
+  ocrEditSuccess: (index: number) => `✅ Transação #${index} atualizada!\n\nResponda "sim" para confirmar todas ou "editar N" para editar outra.`,
+  ocrTimeout: '⏰ Tempo esgotado. As transações extraídas da imagem foram descartadas. Envie a imagem novamente se desejar.',
+  ocrNoPending: '❌ Não há transações pendentes de confirmação. Envie uma imagem para começar.',
+  ocrInvalidTransactionNumber: (max: number) => `❌ Número de transação inválido. Use um número entre 1 e ${max}.`,
+
+  // Settings messages
+  ocrSettingUpdated: (autoAdd: boolean) =>
+    autoAdd
+      ? '✅ *OCR configurado para adicionar automaticamente*\n\n📸 Agora quando você enviar uma foto de recibo, as transações serão adicionadas imediatamente sem confirmação.\n\n💡 Para voltar ao modo de confirmação, use: /settings ocr confirmar'
+      : '✅ *OCR configurado para sempre confirmar*\n\n📸 Agora quando você enviar uma foto de recibo, você verá uma prévia e poderá confirmar ou cancelar antes de adicionar.\n\n💡 Para adicionar automaticamente, use: /settings ocr auto',
+  ocrSettingCurrent: (autoAdd: boolean) =>
+    `⚙️ *Configuração atual de OCR:* ${autoAdd ? '🚀 Adicionar automaticamente' : '✋ Sempre confirmar'}\n\n` +
+    `📸 Quando você envia uma foto de recibo:\n` +
+    (autoAdd
+      ? `✅ As transações são adicionadas imediatamente\n\n💡 Para ativar confirmação: /settings ocr confirmar`
+      : `✅ Você vê uma prévia e pode confirmar/cancelar\n\n💡 Para adicionar automaticamente: /settings ocr auto`),
+
   // Error messages
   unknownCommand: '❓ Desculpe, não entendi. Digite "ajuda" para ver os comandos disponíveis.',
   aiLimitExceeded: '⚠️ Você atingiu o limite diário de uso de IA. Use comandos explícitos como: /add 50 comida',

@@ -6,7 +6,12 @@ jobs:
     schedule: "0 3 * * *"  # Run daily at 3 AM UTC
     command: npm run cleanup-parsers
     description: "Daily cleanup of learned patterns - removes duplicates, archives low-usage patterns, and consolidates similar patterns"
-    
+
+  - name: data-retention-cleanup
+    schedule: "0 2 * * *"  # Run daily at 2 AM UTC
+    command: npm run data-retention-cleanup
+    description: "Daily data retention cleanup - archives/deletes old parsing metrics, embeddings, and AI usage logs to prevent database growth"
+
   - name: health-check
     schedule: "*/30 * * * *"  # Run every 30 minutes
     command: echo "Bot is running - $(date)"

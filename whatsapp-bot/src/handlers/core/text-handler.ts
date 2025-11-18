@@ -7,17 +7,19 @@ import { parseIntent, getCommandHelp } from '../../nlp/intent-parser.js'
 import { getUserSession, updateUserActivity, createUserSession } from '../../auth/session-manager.js'
 import { handleLogin } from '../auth/auth.js'
 import { messages } from '../../localization/pt-br.js'
-import { hasPendingTransaction, handleDuplicateConfirmation } from '../transactions/duplicate-confirmation.js'
+import { hasPendingTransaction, handleDuplicateConfirmation, isDuplicateReply, extractDuplicateIdFromQuote } from '../transactions/duplicate-confirmation.js'
+import { hasPendingOcrTransactions, handleOcrConfirmation, handleOcrCancel, handleOcrEdit, applyOcrEdit } from '../transactions/ocr-confirmation.js'
 import { checkAuthorization, hasPermission } from '../../middleware/authorization.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { recordParsingMetric, ParsingStrategy } from '../../services/monitoring/metrics-tracker.js'
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
-import { checkCache, saveToCache } from '../../services/ai/semantic-cache.js'
+import { checkCacheWithDetails, saveToCache } from '../../services/ai/semantic-cache.js'
 import { checkDailyLimit } from '../../services/ai/ai-usage-tracker.js'
 import { isTransactionReply, extractTransactionIdFromQuote, injectTransactionIdContext } from '../../services/groups/transaction-id-extractor.js'
 import { getOrCreateSession } from './helpers.js'
 import { ACTION_PERMISSION_MAP, getActionDescription } from './permissions.js'
 import { executeIntent } from './intent-executor.js'
+import { setUserOcrPreference, getUserPreferences } from '../../services/user/preference-manager.js'
 
 export async function handleTextMessage(
   whatsappNumber: string,
@@ -30,12 +32,127 @@ export async function handleTextMessage(
   let session: any = null
   
   try {
-    // LAYER 0: State checks (correction, duplicate confirmation)
-    if (hasPendingTransaction(whatsappNumber)) {
+    // LAYER 0.5: Reply Context Extraction (MOVED BEFORE STATE CHECKS)
+    // If user is replying to a bot message with a transaction ID or duplicate ID, extract it
+    // This allows users to edit/confirm specific transactions even when they have pending operations
+    let enhancedMessage = message
+    let replyTransactionId: string | null = null
+    let replyDuplicateId: string | null = null
+
+    if (quotedMessage) {
+      // Check for transaction ID (for edits)
+      if (isTransactionReply(quotedMessage)) {
+        replyTransactionId = extractTransactionIdFromQuote(quotedMessage)
+        if (replyTransactionId) {
+          enhancedMessage = injectTransactionIdContext(message, replyTransactionId)
+          logger.info('Reply to transaction detected - bypassing state checks', {
+            whatsappNumber,
+            transactionId: replyTransactionId,
+            originalMessage: message
+          })
+        }
+      }
+
+      // Check for duplicate ID (for confirmations)
+      if (isDuplicateReply(quotedMessage)) {
+        replyDuplicateId = extractDuplicateIdFromQuote(quotedMessage)
+        if (replyDuplicateId) {
+          logger.info('Reply to duplicate detected', {
+            whatsappNumber,
+            duplicateId: replyDuplicateId,
+            originalMessage: message
+          })
+        }
+      }
+    }
+
+    // LAYER 0: State checks (OCR confirmation, duplicate confirmation)
+    // Skip OCR/duplicate checks based on what user is replying to:
+    // - Replying to transaction: Skip both OCR and duplicate checks
+    // - Replying to duplicate: Skip OCR check only, handle specific duplicate
+    // - No reply: Check both normally
+
+    if (!replyTransactionId && !replyDuplicateId) {
+      // No reply context - check OCR first
+      if (hasPendingOcrTransactions(whatsappNumber)) {
+        strategy = 'ocr_confirmation'
+        logger.info('User has pending OCR transactions', { whatsappNumber, message })
+
+        const messageLower = message.toLowerCase().trim()
+        let result: string | string[]
+
+        // Handle different responses
+        if (messageLower === 'sim' || messageLower === 'confirmar' || messageLower === 'ok' || messageLower === 'yes') {
+          logger.info('User confirmed OCR transactions', { whatsappNumber })
+          result = await handleOcrConfirmation(whatsappNumber)
+        } else if (messageLower === 'não' || messageLower === 'nao' || messageLower === 'cancelar' || messageLower === 'no') {
+          logger.info('User cancelled OCR transactions', { whatsappNumber })
+          result = await handleOcrCancel(whatsappNumber)
+        } else if (messageLower.startsWith('editar ')) {
+          // Extract transaction number: "editar 2"
+          const parts = message.split(' ')
+          const transactionNum = parseInt(parts[1], 10)
+
+          if (isNaN(transactionNum)) {
+            result = messages.ocrInvalidTransactionNumber(99) // Max will be checked in handler
+          } else {
+            logger.info('User requested OCR transaction edit', { whatsappNumber, transactionNum })
+            result = await handleOcrEdit(whatsappNumber, transactionNum)
+          }
+        } else if (messageLower.includes(':')) {
+          // Handle edit field updates: "categoria: Alimentação" or "valor: 50"
+          const colonIndex = message.indexOf(':')
+          const field = message.substring(0, colonIndex).trim().toLowerCase()
+          const value = message.substring(colonIndex + 1).trim()
+
+          logger.info('User providing OCR edit value', { whatsappNumber, field, value })
+
+          // For now, show help message - full edit implementation can be added later
+          result = '✏️ Para editar, use:\n• "sim" - Confirmar todas\n• "editar 2" - Editar transação #2\n• "cancelar" - Cancelar'
+        } else {
+          // Unknown response - show help
+          result = messages.ocrConfirmationPrompt
+        }
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+
+      // Check for duplicate confirmation (without reply context)
+      if (hasPendingTransaction(whatsappNumber)) {
+        strategy = 'duplicate_confirmation'
+        logger.info('Using duplicate confirmation strategy (no specific ID)', { whatsappNumber })
+        const result = await handleDuplicateConfirmation(whatsappNumber, message)
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+    } else if (replyDuplicateId) {
+      // User replied to a specific duplicate warning - handle that specific duplicate only
+      // Skip OCR check since they're replying to a duplicate, not OCR pending transactions
       strategy = 'duplicate_confirmation'
-      logger.info('Using duplicate confirmation strategy', { whatsappNumber })
-      const result = await handleDuplicateConfirmation(whatsappNumber, message)
-      
+      logger.info('Handling specific duplicate confirmation via reply', {
+        whatsappNumber,
+        duplicateId: replyDuplicateId
+      })
+      const result = await handleDuplicateConfirmation(whatsappNumber, message, replyDuplicateId)
+
       await recordParsingMetric({
         whatsappNumber,
         messageText: message,
@@ -44,24 +161,8 @@ export async function handleTextMessage(
         success: true,
         parseDurationMs: Date.now() - startTime
       })
-      
-      return result
-    }
 
-    // LAYER 0.5: Reply Context Extraction
-    // If user is replying to a bot message with a transaction ID, inject it as context for the LLM
-    let enhancedMessage = message
-    if (quotedMessage && isTransactionReply(quotedMessage)) {
-      const transactionId = extractTransactionIdFromQuote(quotedMessage)
-      
-      if (transactionId) {
-        enhancedMessage = injectTransactionIdContext(message, transactionId)
-        logger.info('Reply context detected', {
-          whatsappNumber,
-          transactionId,
-          originalMessage: message
-        })
-      }
+      return result
     }
 
     // LAYER 1: Explicit Commands (fast path, zero cost)
@@ -98,7 +199,7 @@ export async function handleTextMessage(
           const result = commandResult.entities.description
             ? await getCommandHelp(commandResult.entities.description)
             : messages.welcome
-          
+
           await recordParsingMetric({
             whatsappNumber,
             messageText: message,
@@ -109,10 +210,141 @@ export async function handleTextMessage(
             success: true,
             parseDurationMs: Date.now() - startTime
           })
-          
+
           return result
         }
-        
+
+        // Handle settings command (requires authentication but no permissions check)
+        if (message.toLowerCase().startsWith('/settings') || message.toLowerCase().startsWith('/config')) {
+          // Get or create session
+          if (groupOwnerId) {
+            session = await getUserSession(whatsappNumber)
+            if (!session) {
+              await createUserSession(whatsappNumber, groupOwnerId)
+              session = await getUserSession(whatsappNumber)
+            }
+          } else {
+            session = await getOrCreateSession(whatsappNumber)
+          }
+
+          if (!session) {
+            await recordParsingMetric({
+              whatsappNumber,
+              messageText: message,
+              messageType: 'text',
+              strategyUsed: strategy,
+              success: false,
+              errorMessage: 'Authentication required'
+            })
+            return messages.loginPrompt
+          }
+
+          await updateUserActivity(whatsappNumber)
+
+          // Parse settings command: /settings ocr [auto|confirm]
+          const parts = message.toLowerCase().split(/\s+/)
+
+          if (parts.length === 1) {
+            // Show current settings
+            const preferences = await getUserPreferences(session.userId)
+            const result = messages.ocrSettingCurrent(preferences.ocrAutoAdd)
+
+            await recordParsingMetric({
+              whatsappNumber,
+              userId: session.userId,
+              messageText: message,
+              messageType: 'text',
+              strategyUsed: strategy,
+              success: true,
+              parseDurationMs: Date.now() - startTime
+            })
+
+            return result
+          }
+
+          if (parts[1] === 'ocr') {
+            if (parts.length === 2) {
+              // Show current OCR setting
+              const preferences = await getUserPreferences(session.userId)
+              const result = messages.ocrSettingCurrent(preferences.ocrAutoAdd)
+
+              await recordParsingMetric({
+                whatsappNumber,
+                userId: session.userId,
+                messageText: message,
+                messageType: 'text',
+                strategyUsed: strategy,
+                success: true,
+                parseDurationMs: Date.now() - startTime
+              })
+
+              return result
+            }
+
+            const value = parts[2]
+            if (value === 'auto' || value === 'automatico') {
+              await setUserOcrPreference(session.userId, true)
+              const result = messages.ocrSettingUpdated(true)
+
+              await recordParsingMetric({
+                whatsappNumber,
+                userId: session.userId,
+                messageText: message,
+                messageType: 'text',
+                strategyUsed: strategy,
+                success: true,
+                parseDurationMs: Date.now() - startTime
+              })
+
+              return result
+            } else if (value === 'confirm' || value === 'confirmar') {
+              await setUserOcrPreference(session.userId, false)
+              const result = messages.ocrSettingUpdated(false)
+
+              await recordParsingMetric({
+                whatsappNumber,
+                userId: session.userId,
+                messageText: message,
+                messageType: 'text',
+                strategyUsed: strategy,
+                success: true,
+                parseDurationMs: Date.now() - startTime
+              })
+
+              return result
+            } else {
+              const result = '❌ Opção inválida. Use: /settings ocr [auto|confirmar]'
+
+              await recordParsingMetric({
+                whatsappNumber,
+                userId: session.userId,
+                messageText: message,
+                messageType: 'text',
+                strategyUsed: strategy,
+                success: false,
+                errorMessage: 'Invalid setting value'
+              })
+
+              return result
+            }
+          }
+
+          // Unknown setting
+          const result = '❌ Configuração desconhecida. Use: /settings ocr [auto|confirmar]'
+
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: session.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: false,
+            errorMessage: 'Unknown setting'
+          })
+
+          return result
+        }
+
         // Check authentication for other commands
         if (groupOwnerId) {
           // For authorized groups, use group owner's account
@@ -173,9 +405,8 @@ export async function handleTextMessage(
           }
         }
         
-        const result = await executeIntent(whatsappNumber, commandResult, session)
-        
-        await recordParsingMetric({
+        // Record parsing metric BEFORE execution to get the ID
+        const parsingMetricId = await recordParsingMetric({
           whatsappNumber,
           userId: session.userId,
           messageText: message,
@@ -184,9 +415,12 @@ export async function handleTextMessage(
           intentAction: commandResult.action,
           confidence: commandResult.confidence,
           success: true,
-          parseDurationMs: Date.now() - startTime
+          parseDurationMs: Date.now() - startTime,
+          intentEntities: commandResult.entities
         })
-        
+
+        const result = await executeIntent(whatsappNumber, commandResult, session, parsingMetricId)
+
         return result
       }
     }
@@ -223,28 +457,31 @@ export async function handleTextMessage(
 
     // LAYER 2: Semantic Cache Lookup (low cost)
     strategy = 'semantic_cache'
-    const cachedIntent = await checkCache(session.userId, enhancedMessage)
-    
-    if (cachedIntent && cachedIntent.action !== 'unknown') {
+    const cacheResult = await checkCacheWithDetails(session.userId, enhancedMessage)
+
+    if (cacheResult.hit && cacheResult.intent && cacheResult.intent.action !== 'unknown') {
+      const cachedIntent = cacheResult.intent
+
       logger.info('Cache hit!', {
         whatsappNumber,
         userId: session.userId,
         action: cachedIntent.action,
-        confidence: cachedIntent.confidence
+        confidence: cachedIntent.confidence,
+        similarity: cacheResult.similarity
       })
-      
+
       // Check permissions for cached action
       const requiredPermission = ACTION_PERMISSION_MAP[cachedIntent.action]
       if (requiredPermission) {
         const authResult = await checkAuthorization(whatsappNumber)
-        
+
         if (!authResult.authorized || !hasPermission(authResult.permissions, requiredPermission)) {
           const actionDesc = getActionDescription(cachedIntent.action)
           logger.warn('Permission denied for cached action', {
             whatsappNumber,
             action: cachedIntent.action
           })
-          
+
           await recordParsingMetric({
             whatsappNumber,
             userId: session.userId,
@@ -256,16 +493,18 @@ export async function handleTextMessage(
             success: false,
             permissionRequired: requiredPermission,
             permissionGranted: false,
-            errorMessage: 'Permission denied'
+            errorMessage: 'Permission denied',
+            cacheHit: true,
+            cacheSimilarity: cacheResult.similarity,
+            intentEntities: cachedIntent.entities
           })
-          
+
           return messages.permissionDenied(actionDesc)
         }
       }
-      
-      const result = await executeIntent(whatsappNumber, cachedIntent, session)
-      
-      await recordParsingMetric({
+
+      // Record parsing metric BEFORE execution to get the ID
+      const parsingMetricId = await recordParsingMetric({
         whatsappNumber,
         userId: session.userId,
         messageText: message,
@@ -274,9 +513,14 @@ export async function handleTextMessage(
         intentAction: cachedIntent.action,
         confidence: cachedIntent.confidence,
         success: true,
-        parseDurationMs: Date.now() - startTime
+        parseDurationMs: Date.now() - startTime,
+        cacheHit: true,
+        cacheSimilarity: cacheResult.similarity,
+        intentEntities: cachedIntent.entities
       })
-      
+
+      const result = await executeIntent(whatsappNumber, cachedIntent, session, parsingMetricId)
+
       return result
     }
 
@@ -368,13 +612,8 @@ export async function handleTextMessage(
         }
       }
       
-      // Execute the intent
-      let result = await executeIntent(whatsappNumber, aiResult, session)
-      
-      // Save to cache for future use (async, don't wait)
-      saveToCache(session.userId, message, aiResult)
-      
-      await recordParsingMetric({
+      // Record parsing metric BEFORE execution to get the ID
+      const parsingMetricId = await recordParsingMetric({
         whatsappNumber,
         userId: session.userId,
         messageText: message,
@@ -383,9 +622,17 @@ export async function handleTextMessage(
         intentAction: aiResult.action,
         confidence: aiResult.confidence,
         success: true,
-        parseDurationMs: Date.now() - startTime
+        parseDurationMs: Date.now() - startTime,
+        cacheHit: false,
+        intentEntities: aiResult.entities
       })
-      
+
+      // Execute the intent
+      let result = await executeIntent(whatsappNumber, aiResult, session, parsingMetricId)
+
+      // Save to cache for future use (async, don't wait)
+      saveToCache(session.userId, message, aiResult)
+
       return result
     } catch (error) {
       logger.error('LLM parsing failed', {

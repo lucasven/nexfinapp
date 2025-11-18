@@ -25,7 +25,12 @@ export default async function CategoriesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8 px-4">
-        <CategoriesClient categories={categories} userId={user.id} />
+        <CategoriesClient
+          categories={categories}
+          userId={user.id}
+          userEmail={user.email}
+          displayName={user.user_metadata?.display_name}
+        />
       </div>
     </div>
   )

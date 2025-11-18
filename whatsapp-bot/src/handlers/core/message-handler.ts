@@ -13,15 +13,16 @@ import { handleImageMessage } from './image-handler.js'
 export async function handleMessage(context: MessageContext): Promise<string | string[] | null> {
   const { from, isGroup, groupJid, groupName, message, hasImage, imageBuffer, quotedMessage } = context
 
-  logger.info('Message received', {
-    from,
-    isGroup,
-    groupJid,
-    groupName,
-    hasImage,
-    hasQuote: !!quotedMessage,
-    messageLength: message?.length || 0
-  })
+  if(!isGroup)
+    logger.info('Message received', {
+      from,
+      isGroup,
+      groupJid,
+      groupName,
+      hasImage,
+      hasQuote: !!quotedMessage,
+      messageLength: message?.length || 0
+    })
 
   // Check group authorization if message is from a group
   let groupOwnerId: string | null = null
@@ -29,7 +30,7 @@ export async function handleMessage(context: MessageContext): Promise<string | s
     groupOwnerId = await isGroupAuthorized(groupJid)
     
     if (!groupOwnerId) {
-      logger.info('Ignoring message from unauthorized group', { groupJid, groupName })
+      // logger.info('Ignoring message from unauthorized group', { groupJid, groupName })
       return null // Silently ignore unauthorized groups
     }
     

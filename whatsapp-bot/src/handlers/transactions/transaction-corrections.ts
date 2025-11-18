@@ -99,12 +99,12 @@ async function updateTransaction(
     updateData.amount = updates.amount
   }
 
-  // Update category
+  // Update category (only user's categories and defaults)
   if (updates.category) {
     const { data: category } = await supabase
       .from('categories')
       .select('id')
-      .eq('user_id', transaction.user_id)
+      .or(`user_id.is.null,user_id.eq.${transaction.user_id}`)
       .ilike('name', `%${updates.category}%`)
       .limit(1)
 
@@ -115,6 +115,7 @@ async function updateTransaction(
       const { data: defaultCat } = await supabase
         .from('categories')
         .select('id')
+        .is('user_id', null)
         .eq('name', 'Other Expense')
         .single()
 

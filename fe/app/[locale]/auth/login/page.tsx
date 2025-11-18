@@ -11,6 +11,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Link } from "@/lib/localization/link"
 import { useTranslations } from 'next-intl'
+import { Loader2 } from "lucide-react"
 
 export default function LoginPage() {
   const t = useTranslations()
@@ -80,6 +81,7 @@ export default function LoginPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {loading ? t('common.loading') : t('auth.login')}
             </Button>
             <p className="text-sm text-center text-muted-foreground">
