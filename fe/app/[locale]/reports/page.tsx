@@ -45,7 +45,7 @@ export default async function ReportsPage() {
           />
         </div>
 
-        <ReportsViewer locale={locale} translations={t} />
+        <ReportsViewer locale={locale} />
       </div>
     </div>
   )

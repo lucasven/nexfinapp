@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
+import { useTranslations } from 'next-intl'
 
 interface CategoryChartProps {
   data: Array<{
@@ -26,6 +27,7 @@ const COLORS = [
 ]
 
 export function CategoryChart({ data, type }: CategoryChartProps) {
+  const t = useTranslations()
   const filteredData = data
     .filter((item) => item.type === type)
     .map((item, index) => ({
@@ -38,10 +40,10 @@ export function CategoryChart({ data, type }: CategoryChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{type === "income" ? "Income" : "Expenses"} by Category</CardTitle>
+          <CardTitle>{type === "income" ? t('reports.incomeByCategory') : t('reports.expensesByCategory')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-center text-muted-foreground py-8">No {type} data for this period</p>
+          <p className="text-center text-muted-foreground py-8">{type === "income" ? t('reports.noIncomeData') : t('reports.noExpenseData')}</p>
         </CardContent>
       </Card>
     )
@@ -50,7 +52,7 @@ export function CategoryChart({ data, type }: CategoryChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{type === "income" ? "Income" : "Expenses"} by Category</CardTitle>
+        <CardTitle>{type === "income" ? t('reports.incomeByCategory') : t('reports.expensesByCategory')}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>

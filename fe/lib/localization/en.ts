@@ -18,6 +18,7 @@ export const messages: Messages = {
     custom: 'Custom',
     day: 'Day',
     confirmDelete: 'Are you sure you want to delete?',
+    locale: 'en-US',
   },
 
   nav: {
@@ -96,6 +97,10 @@ export const messages: Messages = {
     year: 'Year',
     amount: 'Amount',
     subtitle: 'Track your spending limits for',
+    addGoalTitle: 'Add Budget Goal',
+    addGoalDescription: 'Set a monthly spending limit for a category.',
+    budgetLimit: 'Budget Limit ($)',
+    selectCategory: 'Select category',
   },
 
   category: {
@@ -119,6 +124,14 @@ export const messages: Messages = {
     noIncome: 'No income categories yet',
     noExpense: 'No expense categories yet',
     cannotDelete: 'Cannot delete default categories',
+    addDescription: 'Create a new custom category for organizing your transactions.',
+    editDescription: 'Update the category details.',
+    namePlaceholder: 'e.g., Groceries',
+    selectType: 'Select type',
+    iconLabel: 'Icon (Emoji)',
+    iconPlaceholder: 'e.g., 🛒',
+    iconHelp: 'Enter an emoji to represent this category',
+    create: 'Create',
   },
 
   categories: {
@@ -147,11 +160,20 @@ export const messages: Messages = {
     noRecurring: 'No recurring transactions found',
     addFirstRecurring: 'Add your first recurring transaction',
     upcomingPayments: 'Upcoming Payments',
+    for: 'for',
     markAsPaid: 'Mark as Paid',
     dueDate: 'Due Date',
     subtitle: 'Manage your monthly recurring expenses and income',
     upcomingDescription: 'Mark payments as paid when completed',
     templatesDescription: 'Manage your recurring transaction templates',
+    addTransactionTitle: 'Add Recurring Transaction',
+    editTransactionTitle: 'Edit Recurring Transaction',
+    addTransactionDescription: 'Set up a transaction that repeats monthly.',
+    editTransactionDescription: 'Update your recurring transaction.',
+    amount: 'Amount ($)',
+    day: 'Day',
+    descriptionPlaceholder: 'e.g., Netflix subscription, Rent payment...',
+    selectPaymentMethod: 'Select payment method',
   },
 
   reports: {
@@ -162,6 +184,14 @@ export const messages: Messages = {
     yearlyOverview: 'Yearly Overview',
     selectMonth: 'Select month',
     selectYear: 'Select year',
+    noDataAvailable: 'No data available for this period',
+    paymentMethods: 'Payment Methods',
+    transactionCount: 'transactions',
+    dailyTrend: 'Daily Trend',
+    incomeByCategory: 'Income by Category',
+    expensesByCategory: 'Expenses by Category',
+    noIncomeData: 'No income for this period',
+    noExpenseData: 'No expenses for this period',
   },
 
   profile: {

@@ -20,6 +20,7 @@ import { createBudget, updateBudget } from "@/lib/actions/budgets"
 import type { Budget, Category } from "@/lib/types"
 import { PlusIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from 'next-intl'
 
 interface BudgetDialogProps {
   categories: Category[]
@@ -30,6 +31,7 @@ interface BudgetDialogProps {
 }
 
 export function BudgetDialog({ categories, budget, trigger, currentMonth, currentYear }: BudgetDialogProps) {
+  const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -73,29 +75,29 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
         {trigger || (
           <Button>
             <PlusIcon className="h-4 w-4 mr-2" />
-            Add Budget
+            {t('budget.addTitle')}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{budget ? "Edit Budget" : "Add Budget Goal"}</DialogTitle>
+            <DialogTitle>{budget ? t('budget.editTitle') : t('budget.addGoalTitle')}</DialogTitle>
             <DialogDescription>
-              {budget ? "Update your budget limit." : "Set a monthly spending limit for a category."}
+              {budget ? t('budget.editDescription') : t('budget.addGoalDescription')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">{t('transaction.category')}</Label>
               <Select
                 value={formData.category_id}
                 onValueChange={(value) => setFormData({ ...formData, category_id: value })}
                 required
               >
                 <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t('budget.selectCategory')} />
                 </SelectTrigger>
                 <SelectContent>
                   {expenseCategories.map((category) => (
@@ -108,7 +110,7 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="amount">Budget Limit (R$)</Label>
+              <Label htmlFor="amount">{t('budget.budgetLimit')}</Label>
               <Input
                 id="amount"
                 type="number"
@@ -122,7 +124,7 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="month">Month</Label>
+                <Label htmlFor="month">{t('budget.month')}</Label>
                 <Select
                   value={formData.month.toString()}
                   onValueChange={(value) => setFormData({ ...formData, month: Number.parseInt(value) })}
@@ -133,7 +135,7 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
                   <SelectContent>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
                       <SelectItem key={month} value={month.toString()}>
-                        {new Date(2000, month - 1).toLocaleString("en-US", { month: "long" })}
+                        {new Date(2000, month - 1).toLocaleString(t('common.locale') as string, { month: "long" })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -141,7 +143,7 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="year">Year</Label>
+                <Label htmlFor="year">{t('budget.year')}</Label>
                 <Select
                   value={formData.year.toString()}
                   onValueChange={(value) => setFormData({ ...formData, year: Number.parseInt(value) })}
@@ -163,10 +165,10 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : budget ? "Update" : "Add"}
+              {loading ? t('common.saving') : budget ? t('common.update') : t('common.add')}
             </Button>
           </DialogFooter>
         </form>

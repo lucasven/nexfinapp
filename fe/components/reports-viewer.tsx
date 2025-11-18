@@ -9,6 +9,7 @@ import { YearlyChart } from "@/components/yearly-chart"
 import { getMonthlyReport, getYearlyComparison } from "@/lib/actions/reports"
 import { TrendingDownIcon, TrendingUpIcon } from "lucide-react"
 import { formatCurrency, getMonthName } from '@/lib/localization/format'
+import { useTranslations } from 'next-intl'
 
 // Type definitions for report data
 interface PaymentMethod {
@@ -49,12 +50,10 @@ interface YearlyData {
 
 interface ReportsViewerProps {
   locale: string
-  translations: {
-    (key: string): string
-  }
 }
 
-export function ReportsViewer({ locale, translations: t }: ReportsViewerProps) {
+export function ReportsViewer({ locale }: ReportsViewerProps) {
+  const t = useTranslations()
   const currentDate = new Date()
   const [month, setMonth] = useState(currentDate.getMonth() + 1)
   const [year, setYear] = useState(currentDate.getFullYear())
@@ -117,7 +116,7 @@ export function ReportsViewer({ locale, translations: t }: ReportsViewerProps) {
       ) : !report ? (
         <Card>
           <CardContent className="py-12">
-            <p className="text-center text-muted-foreground">No data available for this period</p>
+            <p className="text-center text-muted-foreground">{t('reports.noDataAvailable')}</p>
           </CardContent>
         </Card>
       ) : (
@@ -160,7 +159,7 @@ export function ReportsViewer({ locale, translations: t }: ReportsViewerProps) {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Transactions</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('transaction.transactions')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{report.transactionCount}</div>
@@ -183,7 +182,7 @@ export function ReportsViewer({ locale, translations: t }: ReportsViewerProps) {
           {report.paymentMethods.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Payment Methods</CardTitle>
+                <CardTitle>{t('reports.paymentMethods')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -191,7 +190,7 @@ export function ReportsViewer({ locale, translations: t }: ReportsViewerProps) {
                     <div key={method.method} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="capitalize">{method.method.replace("_", " ")}</span>
-                        <span className="text-muted-foreground text-sm">({method.count} transactions)</span>
+                        <span className="text-muted-foreground text-sm">({method.count} {t('reports.transactionCount')})</span>
                       </div>
                       <span className="font-semibold">{formatCurrency(method.total, locale as 'pt-br' | 'en')}</span>
                     </div>

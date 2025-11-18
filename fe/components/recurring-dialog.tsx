@@ -21,6 +21,7 @@ import { createRecurringTransaction, updateRecurringTransaction } from "@/lib/ac
 import type { Category, RecurringTransaction } from "@/lib/types"
 import { PlusIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from 'next-intl'
 
 interface RecurringDialogProps {
   categories: Category[]
@@ -29,6 +30,7 @@ interface RecurringDialogProps {
 }
 
 export function RecurringDialog({ categories, recurring, trigger }: RecurringDialogProps) {
+  const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -75,22 +77,22 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
         {trigger || (
           <Button>
             <PlusIcon className="h-4 w-4 mr-2" />
-            Add Recurring
+            {t('recurring.addTitle')}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{recurring ? "Edit Recurring Transaction" : "Add Recurring Transaction"}</DialogTitle>
+            <DialogTitle>{recurring ? t('recurring.editTransactionTitle') : t('recurring.addTransactionTitle')}</DialogTitle>
             <DialogDescription>
-              {recurring ? "Update your recurring transaction." : "Set up a transaction that repeats monthly."}
+              {recurring ? t('recurring.editTransactionDescription') : t('recurring.addTransactionDescription')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">{t('transaction.type')}</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value: "income" | "expense") => {
@@ -101,14 +103,14 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="income">{t('transaction.income')}</SelectItem>
+                  <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="amount">Amount (R$)</Label>
+              <Label htmlFor="amount">{t('recurring.amount')}</Label>
               <Input
                 id="amount"
                 type="number"
@@ -121,14 +123,14 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">{t('transaction.category')}</Label>
               <Select
                 value={formData.category_id}
                 onValueChange={(value) => setFormData({ ...formData, category_id: value })}
                 required
               >
                 <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t('transaction.selectCategory')} />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredCategories.map((category) => (
@@ -141,7 +143,7 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="day_of_month">Day of Month</Label>
+              <Label htmlFor="day_of_month">{t('recurring.dayOfMonth')}</Label>
               <Select
                 value={formData.day_of_month}
                 onValueChange={(value) => setFormData({ ...formData, day_of_month: value })}
@@ -153,7 +155,7 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
                 <SelectContent>
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <SelectItem key={day} value={day.toString()}>
-                      Day {day}
+                      {t('recurring.day')} {day}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -161,30 +163,30 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="payment_method">Payment Method</Label>
+              <Label htmlFor="payment_method">{t('transaction.paymentMethod')}</Label>
               <Select
                 value={formData.payment_method}
                 onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
               >
                 <SelectTrigger id="payment_method">
-                  <SelectValue placeholder="Select payment method" />
+                  <SelectValue placeholder={t('recurring.selectPaymentMethod')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="credit_card">Credit Card</SelectItem>
-                  <SelectItem value="debit_card">Debit Card</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="cash">{t('paymentMethods.cash')}</SelectItem>
+                  <SelectItem value="credit_card">{t('paymentMethods.creditCard')}</SelectItem>
+                  <SelectItem value="debit_card">{t('paymentMethods.debitCard')}</SelectItem>
+                  <SelectItem value="bank_transfer">{t('paymentMethods.bankTransfer')}</SelectItem>
+                  <SelectItem value="pix">{t('paymentMethods.pix')}</SelectItem>
+                  <SelectItem value="other">{t('paymentMethods.other')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">{t('transaction.description')}</Label>
               <Textarea
                 id="description"
-                placeholder="e.g., Netflix subscription, Rent payment..."
+                placeholder={t('recurring.descriptionPlaceholder')}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
@@ -194,10 +196,10 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : recurring ? "Update" : "Add"}
+              {loading ? t('common.saving') : recurring ? t('common.update') : t('common.add')}
             </Button>
           </DialogFooter>
         </form>

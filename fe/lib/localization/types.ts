@@ -19,6 +19,7 @@ export interface Messages {
     custom: string
     day: string
     confirmDelete: string
+    locale: string
   }
 
   // Navigation
@@ -103,6 +104,10 @@ export interface Messages {
     year: string
     amount: string
     subtitle: string
+    addGoalTitle: string
+    addGoalDescription: string
+    budgetLimit: string
+    selectCategory: string
   }
 
   // Category
@@ -127,6 +132,14 @@ export interface Messages {
     noIncome: string
     noExpense: string
     cannotDelete: string
+    addDescription: string
+    editDescription: string
+    namePlaceholder: string
+    selectType: string
+    iconLabel: string
+    iconPlaceholder: string
+    iconHelp: string
+    create: string
   }
 
   // Default categories
@@ -157,11 +170,20 @@ export interface Messages {
     noRecurring: string
     addFirstRecurring: string
     upcomingPayments: string
+    for: string
     markAsPaid: string
     dueDate: string
     subtitle: string
     upcomingDescription: string
     templatesDescription: string
+    addTransactionTitle: string
+    editTransactionTitle: string
+    addTransactionDescription: string
+    editTransactionDescription: string
+    amount: string
+    day: string
+    descriptionPlaceholder: string
+    selectPaymentMethod: string
   }
 
   // Reports
@@ -173,6 +195,14 @@ export interface Messages {
     yearlyOverview: string
     selectMonth: string
     selectYear: string
+    noDataAvailable: string
+    paymentMethods: string
+    transactionCount: string
+    dailyTrend: string
+    incomeByCategory: string
+    expensesByCategory: string
+    noIncomeData: string
+    noExpenseData: string
   }
 
   // Profile

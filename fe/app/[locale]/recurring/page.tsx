@@ -53,7 +53,7 @@ export default async function RecurringPage() {
           {/* Upcoming Payments */}
           <Card>
             <CardHeader>
-              <CardTitle>{t('recurring.upcomingPayments')} for {monthName}</CardTitle>
+              <CardTitle>{t('recurring.upcomingPayments')} {t('recurring.for')} {monthName}</CardTitle>
               <CardDescription>{t('recurring.upcomingDescription')}</CardDescription>
             </CardHeader>
             <CardContent>

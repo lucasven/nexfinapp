@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { format } from "date-fns"
+import { useTranslations } from 'next-intl'
 
 interface TrendChartProps {
   data: Array<{
@@ -13,6 +14,7 @@ interface TrendChartProps {
 }
 
 export function TrendChart({ data }: TrendChartProps) {
+  const t = useTranslations()
   const chartData = data.map((item) => ({
     ...item,
     date: format(new Date(item.date), "MMM dd"),
@@ -21,7 +23,7 @@ export function TrendChart({ data }: TrendChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Daily Trend</CardTitle>
+        <CardTitle>{t('reports.dailyTrend')}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -37,7 +39,7 @@ export function TrendChart({ data }: TrendChartProps) {
               stroke="#10b981"
               fill="#10b981"
               fillOpacity={0.6}
-              name="Income"
+              name={t('balance.income')}
             />
             <Area
               type="monotone"
@@ -46,7 +48,7 @@ export function TrendChart({ data }: TrendChartProps) {
               stroke="#ef4444"
               fill="#ef4444"
               fillOpacity={0.6}
-              name="Expenses"
+              name={t('balance.expenses')}
             />
           </AreaChart>
         </ResponsiveContainer>

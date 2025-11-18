@@ -18,6 +18,7 @@ export const messages: Messages = {
     custom: 'Personalizado',
     day: 'Dia',
     confirmDelete: 'Tem certeza que deseja excluir?',
+    locale: 'pt-BR',
   },
 
   nav: {
@@ -96,6 +97,10 @@ export const messages: Messages = {
     year: 'Ano',
     amount: 'Valor',
     subtitle: 'Acompanhe seus limites de gastos para',
+    addGoalTitle: 'Adicionar Meta de Orçamento',
+    addGoalDescription: 'Defina um limite de gastos mensal para uma categoria.',
+    budgetLimit: 'Limite do Orçamento (R$)',
+    selectCategory: 'Selecione a categoria',
   },
 
   category: {
@@ -119,6 +124,14 @@ export const messages: Messages = {
     noIncome: 'Nenhuma categoria de receita ainda',
     noExpense: 'Nenhuma categoria de despesa ainda',
     cannotDelete: 'Não é possível excluir categorias padrão',
+    addDescription: 'Crie uma nova categoria personalizada para organizar suas transações.',
+    editDescription: 'Atualize os detalhes da categoria.',
+    namePlaceholder: 'ex: Supermercado',
+    selectType: 'Selecione o tipo',
+    iconLabel: 'Ícone (Emoji)',
+    iconPlaceholder: 'ex: 🛒',
+    iconHelp: 'Digite um emoji para representar esta categoria',
+    create: 'Criar',
   },
 
   categories: {
@@ -147,11 +160,20 @@ export const messages: Messages = {
     noRecurring: 'Nenhuma transação recorrente encontrada',
     addFirstRecurring: 'Adicione sua primeira transação recorrente',
     upcomingPayments: 'Próximos Pagamentos',
+    for: 'para',
     markAsPaid: 'Marcar como Pago',
     dueDate: 'Data de Vencimento',
     subtitle: 'Gerencie suas despesas e receitas mensais recorrentes',
     upcomingDescription: 'Marque os pagamentos como pagos quando concluídos',
     templatesDescription: 'Gerencie seus modelos de transações recorrentes',
+    addTransactionTitle: 'Adicionar Transação Recorrente',
+    editTransactionTitle: 'Editar Transação Recorrente',
+    addTransactionDescription: 'Configure uma transação que se repete mensalmente.',
+    editTransactionDescription: 'Atualize sua transação recorrente.',
+    amount: 'Valor (R$)',
+    day: 'Dia',
+    descriptionPlaceholder: 'ex: Assinatura Netflix, Pagamento de aluguel...',
+    selectPaymentMethod: 'Selecione o método de pagamento',
   },
 
   reports: {
@@ -162,6 +184,14 @@ export const messages: Messages = {
     yearlyOverview: 'Visão Anual',
     selectMonth: 'Selecione o mês',
     selectYear: 'Selecione o ano',
+    noDataAvailable: 'Nenhum dado disponível para este período',
+    paymentMethods: 'Métodos de Pagamento',
+    transactionCount: 'transações',
+    dailyTrend: 'Tendência Diária',
+    incomeByCategory: 'Receitas por Categoria',
+    expensesByCategory: 'Despesas por Categoria',
+    noIncomeData: 'Nenhuma receita para este período',
+    noExpenseData: 'Nenhuma despesa para este período',
   },
 
   profile: {
@@ -226,7 +256,7 @@ export const messages: Messages = {
     title: 'Grupos Autorizados',
     subtitle: 'Grupos do WhatsApp onde o bot está autorizado a responder mensagens',
     noGroups: 'Nenhum grupo autorizado ainda.',
-    noGroupsHelp: 'Adicione o bot a um grupo para vê-lo aqui. Os grupos são autorizados automaticamente quando adicionados por você.',
+    noGroupsHelp: 'Envie um link de convite ao bot que ele entrará automaticamente no grupo. Os grupos são autorizados automaticamente quando adicionados por você.',
     unknownGroup: 'Grupo Desconhecido',
     autoAuthorized: 'Auto-autorizado',
     active: 'Ativo',

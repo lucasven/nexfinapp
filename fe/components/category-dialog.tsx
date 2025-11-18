@@ -19,6 +19,7 @@ import { Category } from "@/lib/types"
 import { useRouter } from "next/navigation"
 import { advanceOnboardingStep } from "@/lib/actions/onboarding"
 import type { OnboardingStep } from "@/hooks/use-onboarding"
+import { useTranslations } from 'next-intl'
 
 interface CategoryDialogProps {
   category?: Category
@@ -27,6 +28,7 @@ interface CategoryDialogProps {
 }
 
 export function CategoryDialog({ category, trigger, currentStep }: CategoryDialogProps) {
+  const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -76,27 +78,25 @@ export function CategoryDialog({ category, trigger, currentStep }: CategoryDialo
         {trigger || (
           <Button>
             <PlusIcon className="h-4 w-4 mr-2" />
-            Add Category
+            {t('category.addTitle')}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{category ? "Edit Category" : "Add Category"}</DialogTitle>
+            <DialogTitle>{category ? t('category.editTitle') : t('category.addTitle')}</DialogTitle>
             <DialogDescription>
-              {category
-                ? "Update the category details."
-                : "Create a new custom category for organizing your transactions."}
+              {category ? t('category.editDescription') : t('category.addDescription')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">{t('category.name')}</Label>
               <Input
                 id="name"
-                placeholder="e.g., Groceries"
+                placeholder={t('category.namePlaceholder')}
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
@@ -104,36 +104,36 @@ export function CategoryDialog({ category, trigger, currentStep }: CategoryDialo
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">{t('category.type')}</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value: "income" | "expense") => setFormData({ ...formData, type: value })}
                 required
               >
                 <SelectTrigger id="type">
-                  <SelectValue placeholder="Select type" />
+                  <SelectValue placeholder={t('category.selectType')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="income">{t('transaction.income')}</SelectItem>
+                  <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="icon">Icon (Emoji)</Label>
+              <Label htmlFor="icon">{t('category.iconLabel')}</Label>
               <Input
                 id="icon"
-                placeholder="e.g., 🛒"
+                placeholder={t('category.iconPlaceholder')}
                 value={formData.icon}
                 onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                 maxLength={2}
               />
-              <p className="text-xs text-muted-foreground">Enter an emoji to represent this category</p>
+              <p className="text-xs text-muted-foreground">{t('category.iconHelp')}</p>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="color">Color</Label>
+              <Label htmlFor="color">{t('category.color')}</Label>
               <div className="flex gap-2">
                 <Input
                   id="color"
@@ -161,10 +161,10 @@ export function CategoryDialog({ category, trigger, currentStep }: CategoryDialo
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : category ? "Update" : "Create"}
+              {loading ? t('common.saving') : category ? t('common.update') : t('category.create')}
             </Button>
           </div>
         </form>
