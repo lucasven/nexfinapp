@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl'
 import { trackEvent } from "@/lib/analytics/tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 import { Badge } from "@/components/ui/badge"
+import { Loader2 } from "lucide-react"
 
 export default function SignupPage() {
   const t = useTranslations()
@@ -257,6 +258,7 @@ export default function SignupPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading || success}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {loading ? t('common.loading') : (hasSession ? "Set Password" : t('auth.signup'))}
             </Button>
             {!hasSession && (

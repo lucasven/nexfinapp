@@ -5,21 +5,27 @@ import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 
-const ADMIN_EMAIL = "lucas.venturella@hotmail.com"
-
 /**
  * Check if the current user is an admin
+ * Uses user_profiles.is_admin column instead of hardcoded email
  */
 export async function checkIsAdmin(): Promise<boolean> {
   const supabase = await getSupabaseServerClient()
-  
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  
+
   if (!user) return false
-  
-  return user.email === ADMIN_EMAIL
+
+  // Query database for admin status
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("is_admin")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  return profile?.is_admin === true
 }
 
 /**
@@ -524,5 +530,1313 @@ export async function getUserDetails(userId: string) {
     } : null,
     recentActivity: recentActivity || [],
   }
+}
+
+// ============================================
+// Category Analytics Server Actions
+// ============================================
+
+/**
+ * Get category matching statistics overview
+ */
+export async function getCategoryMatchingStats() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Total corrections count
+  const { count: totalCorrections } = await supabase
+    .from("category_corrections")
+    .select("*", { count: "exact", head: true })
+
+  // Total transactions with categories
+  const { count: totalTransactions } = await supabase
+    .from("transactions")
+    .select("*", { count: "exact", head: true })
+    .not("category_id", "is", null)
+
+  // Calculate correction rate
+  const correctionRate = totalTransactions && totalTransactions > 0
+    ? ((totalCorrections || 0) / totalTransactions) * 100
+    : 0
+
+  // Get merchant coverage (transactions with merchant mappings)
+  const { data: merchantMappings } = await supabase
+    .from("merchant_category_mapping")
+    .select("merchant_name")
+
+  const merchantNames = new Set(merchantMappings?.map(m => m.merchant_name.toLowerCase()) || [])
+
+  const { data: transactions } = await supabase
+    .from("transactions")
+    .select("description")
+
+  let merchantCoverageCount = 0
+  transactions?.forEach((t: any) => {
+    const desc = t.description?.toLowerCase() || ""
+    for (const merchant of merchantNames) {
+      if (desc.includes(merchant)) {
+        merchantCoverageCount++
+        break
+      }
+    }
+  })
+
+  const merchantCoverage = transactions && transactions.length > 0
+    ? (merchantCoverageCount / transactions.length) * 100
+    : 0
+
+  // Get total synonyms
+  const { count: totalSynonyms } = await supabase
+    .from("category_synonyms")
+    .select("*", { count: "exact", head: true })
+
+  return {
+    totalCorrections: totalCorrections || 0,
+    totalTransactions: totalTransactions || 0,
+    correctionRate: Number(correctionRate.toFixed(2)),
+    merchantCoverage: Number(merchantCoverage.toFixed(2)),
+    totalSynonyms: totalSynonyms || 0,
+    totalMerchantMappings: merchantMappings?.length || 0,
+  }
+}
+
+/**
+ * Get corrections by category for analysis
+ */
+export async function getCorrectionsByCategory() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: corrections, error } = await supabase
+    .from("category_corrections")
+    .select(`
+      id,
+      original_category_id,
+      corrected_category_id,
+      created_at
+    `)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+
+  // Get all unique category IDs
+  const categoryIds = new Set<string>()
+  corrections?.forEach((c: any) => {
+    if (c.original_category_id) categoryIds.add(c.original_category_id)
+    if (c.corrected_category_id) categoryIds.add(c.corrected_category_id)
+  })
+
+  // Fetch category names
+  const { data: categories } = await supabase
+    .from("categories")
+    .select("id, name")
+    .in("id", Array.from(categoryIds))
+
+  const categoryMap = new Map(categories?.map(c => [c.id, c.name]) || [])
+
+  // Count corrections per original category
+  const correctionCounts = new Map<string, number>()
+  corrections?.forEach((c: any) => {
+    const categoryName = categoryMap.get(c.original_category_id) || "Unknown"
+    correctionCounts.set(categoryName, (correctionCounts.get(categoryName) || 0) + 1)
+  })
+
+  // Convert to array and sort by count
+  const result = Array.from(correctionCounts.entries())
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10) // Top 10
+
+  return result
+}
+
+/**
+ * Get correction flows (FROM category -> TO category patterns)
+ */
+export async function getCorrectionFlows() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: corrections, error } = await supabase
+    .from("category_corrections")
+    .select(`
+      id,
+      original_category_id,
+      corrected_category_id
+    `)
+    .not("original_category_id", "is", null)
+
+  if (error) throw error
+
+  // Get all unique category IDs
+  const categoryIds = new Set<string>()
+  corrections?.forEach((c: any) => {
+    if (c.original_category_id) categoryIds.add(c.original_category_id)
+    if (c.corrected_category_id) categoryIds.add(c.corrected_category_id)
+  })
+
+  // Fetch category names
+  const { data: categories } = await supabase
+    .from("categories")
+    .select("id, name")
+    .in("id", Array.from(categoryIds))
+
+  const categoryMap = new Map(categories?.map(c => [c.id, c.name]) || [])
+
+  // Count flows
+  const flowCounts = new Map<string, number>()
+  corrections?.forEach((c: any) => {
+    const from = categoryMap.get(c.original_category_id) || "Unknown"
+    const to = categoryMap.get(c.corrected_category_id) || "Unknown"
+    const flowKey = `${from}→${to}`
+    flowCounts.set(flowKey, (flowCounts.get(flowKey) || 0) + 1)
+  })
+
+  // Convert to array and sort by count
+  const result = Array.from(flowCounts.entries())
+    .map(([flow, count]) => {
+      const [from, to] = flow.split("→")
+      return { from, to, count }
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20) // Top 20 flows
+
+  return result
+}
+
+/**
+ * Get low-confidence category matches that need review
+ * Note: This requires match_confidence column to be added to transactions
+ * For now, we'll use category_corrections as a proxy for problematic matches
+ */
+export async function getLowConfidenceMatches(
+  limit: number = 50,
+  offset: number = 0
+) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Get recent corrections to identify problematic patterns
+  const { data: corrections } = await supabase
+    .from("category_corrections")
+    .select("description, original_category_id, corrected_category_id")
+    .not("original_category_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(100)
+
+  // Extract problematic descriptions
+  const problematicDescriptions = new Set(
+    corrections?.map(c => c.description?.toLowerCase().trim()).filter(Boolean) || []
+  )
+
+  // Find similar transactions that might need review
+  const { data: transactions, error } = await supabase
+    .from("transactions")
+    .select(`
+      id,
+      description,
+      amount,
+      category_id,
+      categories!inner(id, name),
+      created_at,
+      user_id
+    `)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+    .range(offset, offset + limit - 1)
+
+  if (error) throw error
+
+  // Mark transactions that match problematic patterns
+  const result = transactions?.map((t: any) => ({
+    id: t.id,
+    description: t.description,
+    amount: Number(t.amount),
+    category: t.categories?.name || "Unknown",
+    categoryId: t.category_id,
+    userId: t.user_id,
+    createdAt: t.created_at,
+    needsReview: problematicDescriptions.has(t.description?.toLowerCase().trim()),
+    confidence: 0.75, // Placeholder - will be real data once match_confidence column is added
+  })) || []
+
+  return result
+}
+
+/**
+ * Approve a category match (updates user preferences)
+ */
+export async function approveCategoryMatch(
+  transactionId: string,
+  categoryId: string,
+  description: string,
+  userId: string
+) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Insert or update user category preference
+  const { error } = await supabase
+    .from("user_category_preferences")
+    .upsert({
+      user_id: userId,
+      description_pattern: description.toLowerCase().trim(),
+      category_id: categoryId,
+      frequency: 1,
+      last_used_at: new Date().toISOString(),
+    }, {
+      onConflict: "user_id,description_pattern",
+    })
+
+  if (error) throw error
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "approve_match",
+      target_table: "transactions",
+      target_id: transactionId,
+      details: {
+        categoryId,
+        description,
+        userId,
+      },
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Reject a category match and create a correction
+ */
+export async function rejectCategoryMatch(
+  transactionId: string,
+  newCategoryId: string,
+  userId: string
+) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Get transaction details
+  const { data: transaction } = await supabase
+    .from("transactions")
+    .select("category_id, description, amount")
+    .eq("id", transactionId)
+    .single()
+
+  if (!transaction) throw new Error("Transaction not found")
+
+  // Update transaction category
+  const { error: updateError } = await supabase
+    .from("transactions")
+    .update({ category_id: newCategoryId })
+    .eq("id", transactionId)
+
+  if (updateError) throw updateError
+
+  // Create correction record (trigger will handle this, but we can also do it manually)
+  await supabase
+    .from("category_corrections")
+    .insert({
+      user_id: userId,
+      transaction_id: transactionId,
+      original_category_id: transaction.category_id,
+      corrected_category_id: newCategoryId,
+      description: transaction.description,
+      amount: transaction.amount,
+      correction_source: "admin_review",
+    })
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "reject_match",
+      target_table: "transactions",
+      target_id: transactionId,
+      details: {
+        oldCategoryId: transaction.category_id,
+        newCategoryId,
+        userId,
+      },
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Get all merchant category mappings
+ */
+export async function getMerchantMappings() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: mappings, error } = await supabase
+    .from("merchant_category_mapping")
+    .select(`
+      id,
+      merchant_name,
+      category_id,
+      categories!inner(id, name),
+      confidence,
+      usage_count,
+      is_global,
+      user_id,
+      created_at
+    `)
+    .order("usage_count", { ascending: false })
+
+  if (error) throw error
+
+  return mappings?.map((m: any) => ({
+    id: m.id,
+    merchantName: m.merchant_name,
+    categoryId: m.category_id,
+    categoryName: m.categories?.name || "Unknown",
+    confidence: Number(m.confidence),
+    usageCount: m.usage_count,
+    isGlobal: m.is_global,
+    userId: m.user_id,
+    createdAt: m.created_at,
+  })) || []
+}
+
+/**
+ * Create a new merchant category mapping
+ */
+export async function createMerchantMapping(
+  merchantName: string,
+  categoryId: string,
+  isGlobal: boolean = false,
+  confidence: number = 0.90
+) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { error } = await supabase
+    .from("merchant_category_mapping")
+    .insert({
+      merchant_name: merchantName.toUpperCase(),
+      category_id: categoryId,
+      is_global: isGlobal,
+      confidence,
+      usage_count: 0,
+    })
+
+  if (error) throw error
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "add_merchant",
+      target_table: "merchant_category_mapping",
+      details: {
+        merchantName,
+        categoryId,
+        isGlobal,
+      },
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Update an existing merchant category mapping
+ */
+export async function updateMerchantMapping(
+  id: string,
+  updates: {
+    categoryId?: string
+    confidence?: number
+    isGlobal?: boolean
+  }
+) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const updateData: any = {}
+  if (updates.categoryId) updateData.category_id = updates.categoryId
+  if (updates.confidence !== undefined) updateData.confidence = updates.confidence
+  if (updates.isGlobal !== undefined) updateData.is_global = updates.isGlobal
+
+  const { error } = await supabase
+    .from("merchant_category_mapping")
+    .update(updateData)
+    .eq("id", id)
+
+  if (error) throw error
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "update_merchant",
+      target_table: "merchant_category_mapping",
+      target_id: id,
+      details: updates,
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Delete a merchant category mapping
+ */
+export async function deleteMerchantMapping(id: string) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { error } = await supabase
+    .from("merchant_category_mapping")
+    .delete()
+    .eq("id", id)
+
+  if (error) throw error
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "delete_merchant",
+      target_table: "merchant_category_mapping",
+      target_id: id,
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Get all category synonyms
+ */
+export async function getCategorySynonyms(categoryId?: string) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  let query = supabase
+    .from("category_synonyms")
+    .select(`
+      id,
+      category_id,
+      categories!inner(id, name),
+      synonym,
+      language,
+      is_merchant,
+      confidence,
+      created_at
+    `)
+    .order("category_id")
+    .order("synonym")
+
+  if (categoryId) {
+    query = query.eq("category_id", categoryId)
+  }
+
+  const { data: synonyms, error } = await query
+
+  if (error) throw error
+
+  return synonyms?.map((s: any) => ({
+    id: s.id,
+    categoryId: s.category_id,
+    categoryName: s.categories?.name || "Unknown",
+    synonym: s.synonym,
+    language: s.language,
+    isMerchant: s.is_merchant,
+    confidence: Number(s.confidence),
+    createdAt: s.created_at,
+  })) || []
+}
+
+/**
+ * Create a new category synonym
+ */
+export async function createCategorySynonym(
+  categoryId: string,
+  synonym: string,
+  language: string = "pt-BR",
+  isMerchant: boolean = false,
+  confidence: number = 0.80
+) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { error } = await supabase
+    .from("category_synonyms")
+    .insert({
+      category_id: categoryId,
+      synonym: synonym.toLowerCase(),
+      language,
+      is_merchant: isMerchant,
+      confidence,
+    })
+
+  if (error) throw error
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "add_synonym",
+      target_table: "category_synonyms",
+      details: {
+        categoryId,
+        synonym,
+        language,
+      },
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Delete a category synonym
+ */
+export async function deleteCategorySynonym(id: string) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { error } = await supabase
+    .from("category_synonyms")
+    .delete()
+    .eq("id", id)
+
+  if (error) throw error
+
+  // Log admin action
+  await supabase
+    .from("admin_actions")
+    .insert({
+      admin_user_id: (await supabase.auth.getUser()).data.user?.id,
+      action_type: "delete_synonym",
+      target_table: "category_synonyms",
+      target_id: id,
+    })
+
+  revalidatePath("/admin/category-analytics")
+}
+
+/**
+ * Get correction rate trend over time (last 30 days)
+ */
+export async function getCorrectionRateTrend() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Get daily correction counts for last 30 days
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  const { data: corrections } = await supabase
+    .from("category_corrections")
+    .select("created_at")
+    .gte("created_at", thirtyDaysAgo.toISOString())
+
+  const { data: transactions } = await supabase
+    .from("transactions")
+    .select("created_at")
+    .gte("created_at", thirtyDaysAgo.toISOString())
+    .not("category_id", "is", null)
+
+  // Group by date
+  const dateMap = new Map<string, { corrections: number; transactions: number }>()
+
+  // Initialize all dates in range
+  for (let i = 0; i < 30; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - (29 - i))
+    const dateStr = date.toISOString().split("T")[0]
+    dateMap.set(dateStr, { corrections: 0, transactions: 0 })
+  }
+
+  // Count corrections per day
+  corrections?.forEach((c: any) => {
+    const dateStr = c.created_at.split("T")[0]
+    const entry = dateMap.get(dateStr)
+    if (entry) entry.corrections++
+  })
+
+  // Count transactions per day
+  transactions?.forEach((t: any) => {
+    const dateStr = t.created_at.split("T")[0]
+    const entry = dateMap.get(dateStr)
+    if (entry) entry.transactions++
+  })
+
+  // Convert to array with correction rate
+  return Array.from(dateMap.entries()).map(([date, counts]) => ({
+    date,
+    corrections: counts.corrections,
+    transactions: counts.transactions,
+    correctionRate: counts.transactions > 0
+      ? Number(((counts.corrections / counts.transactions) * 100).toFixed(2))
+      : 0,
+  }))
+}
+
+/**
+ * Get match type distribution (for pie chart)
+ */
+export async function getMatchTypeDistribution() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: transactions } = await supabase
+    .from("transactions")
+    .select("match_type")
+    .not("match_type", "is", null)
+
+  // Count by match type
+  const typeCounts = new Map<string, number>()
+  transactions?.forEach((t: any) => {
+    const type = t.match_type || "unknown"
+    typeCounts.set(type, (typeCounts.get(type) || 0) + 1)
+  })
+
+  // Convert to array with percentages
+  const total = transactions?.length || 0
+  return Array.from(typeCounts.entries()).map(([type, count]) => ({
+    type,
+    count,
+    percentage: total > 0 ? Number(((count / total) * 100).toFixed(1)) : 0,
+  }))
+}
+
+// ============================================
+// OCR & NLP Parsing Analytics Server Actions
+// ============================================
+
+/**
+ * Get OCR matching statistics overview
+ */
+export async function getOCRMatchingStats() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Total OCR messages processed
+  const { count: totalOCRMessages } = await supabase
+    .from("parsing_metrics")
+    .select("*", { count: "exact", head: true })
+    .eq("message_type", "image")
+
+  // Successful OCR extractions
+  const { count: successfulOCR } = await supabase
+    .from("parsing_metrics")
+    .select("*", { count: "exact", head: true })
+    .eq("message_type", "image")
+    .eq("success", true)
+
+  // Average OCR confidence
+  const { data: ocrConfidenceData } = await supabase
+    .from("parsing_metrics")
+    .select("confidence")
+    .eq("message_type", "image")
+    .not("confidence", "is", null)
+
+  const avgOCRConfidence = ocrConfidenceData && ocrConfidenceData.length > 0
+    ? ocrConfidenceData.reduce((sum, row) => sum + Number(row.confidence || 0), 0) / ocrConfidenceData.length
+    : 0
+
+  // Average processing time for OCR
+  const { data: ocrTimingData } = await supabase
+    .from("parsing_metrics")
+    .select("parse_duration_ms")
+    .eq("message_type", "image")
+    .not("parse_duration_ms", "is", null)
+
+  const avgOCRProcessingTime = ocrTimingData && ocrTimingData.length > 0
+    ? ocrTimingData.reduce((sum, row) => sum + Number(row.parse_duration_ms || 0), 0) / ocrTimingData.length
+    : 0
+
+  // OCR success rate
+  const ocrSuccessRate = totalOCRMessages && totalOCRMessages > 0
+    ? ((successfulOCR || 0) / totalOCRMessages) * 100
+    : 0
+
+  return {
+    totalOCRMessages: totalOCRMessages || 0,
+    successfulOCR: successfulOCR || 0,
+    ocrSuccessRate: Number(ocrSuccessRate.toFixed(2)),
+    avgOCRConfidence: Number((avgOCRConfidence * 100).toFixed(2)), // Convert to percentage
+    avgOCRProcessingTime: Number(avgOCRProcessingTime.toFixed(0)), // In ms
+  }
+}
+
+/**
+ * Get NLP strategy performance breakdown
+ */
+export async function getNLPStrategyPerformance() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: metrics } = await supabase
+    .from("parsing_metrics")
+    .select("strategy_used, success, confidence, parse_duration_ms")
+    .not("strategy_used", "is", null)
+
+  // Group by strategy
+  const strategyStats = new Map<string, {
+    total: number
+    successful: number
+    totalConfidence: number
+    totalDuration: number
+  }>()
+
+  metrics?.forEach((m: any) => {
+    const strategy = m.strategy_used
+    const stats = strategyStats.get(strategy) || {
+      total: 0,
+      successful: 0,
+      totalConfidence: 0,
+      totalDuration: 0,
+    }
+
+    stats.total++
+    if (m.success) stats.successful++
+    stats.totalConfidence += Number(m.confidence || 0)
+    stats.totalDuration += Number(m.parse_duration_ms || 0)
+
+    strategyStats.set(strategy, stats)
+  })
+
+  // Convert to array with calculated metrics
+  return Array.from(strategyStats.entries()).map(([strategy, stats]) => ({
+    strategy,
+    total: stats.total,
+    successful: stats.successful,
+    successRate: Number(((stats.successful / stats.total) * 100).toFixed(2)),
+    avgConfidence: Number(((stats.totalConfidence / stats.total) * 100).toFixed(2)),
+    avgDuration: Number((stats.totalDuration / stats.total).toFixed(0)),
+  })).sort((a, b) => b.total - a.total) // Sort by usage
+}
+
+/**
+ * Get cache hit rate statistics
+ */
+export async function getCacheHitRateStats() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Get aggregate cache statistics
+  const { data: aiUsageData } = await supabase
+    .from("user_ai_usage")
+    .select("llm_calls_count, cache_hits_count, total_cost_usd")
+
+  const totalLLMCalls = aiUsageData?.reduce(
+    (sum, row) => sum + Number(row.llm_calls_count || 0),
+    0
+  ) || 0
+
+  const totalCacheHits = aiUsageData?.reduce(
+    (sum, row) => sum + Number(row.cache_hits_count || 0),
+    0
+  ) || 0
+
+  const totalCost = aiUsageData?.reduce(
+    (sum, row) => sum + Number(row.total_cost_usd || 0),
+    0
+  ) || 0
+
+  const totalCallsWithCache = totalLLMCalls + totalCacheHits
+  const cacheHitRate = totalCallsWithCache > 0
+    ? (totalCacheHits / totalCallsWithCache) * 100
+    : 0
+
+  // Estimate cost savings (assuming $0.01 per LLM call saved)
+  const estimatedSavings = totalCacheHits * 0.01
+
+  // Get most cached message patterns
+  const { data: cachedMessages } = await supabase
+    .from("message_embeddings")
+    .select("message_text, usage_count")
+    .order("usage_count", { ascending: false })
+    .limit(10)
+
+  return {
+    totalLLMCalls,
+    totalCacheHits,
+    cacheHitRate: Number(cacheHitRate.toFixed(2)),
+    totalCost: Number(totalCost.toFixed(4)),
+    estimatedSavings: Number(estimatedSavings.toFixed(4)),
+    topCachedPatterns: cachedMessages?.map((m: any) => ({
+      message: m.message_text,
+      hitCount: m.usage_count,
+    })) || [],
+  }
+}
+
+/**
+ * Get merchant recognition statistics
+ */
+export async function getMerchantRecognitionStats() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Top merchants by recognition count
+  const { data: topMerchants } = await supabase
+    .from("merchant_category_mapping")
+    .select(`
+      merchant_name,
+      usage_count,
+      category_id,
+      categories!inner(name)
+    `)
+    .order("usage_count", { ascending: false })
+    .limit(20)
+
+  // Total unique merchants
+  const { count: totalMerchants } = await supabase
+    .from("merchant_category_mapping")
+    .select("*", { count: "exact", head: true })
+
+  // Total merchant-matched transactions
+  const totalUsage = topMerchants?.reduce(
+    (sum, m: any) => sum + Number(m.usage_count || 0),
+    0
+  ) || 0
+
+  return {
+    totalMerchants: totalMerchants || 0,
+    totalMerchantMatches: totalUsage,
+    topMerchants: topMerchants?.map((m: any) => ({
+      merchantName: m.merchant_name,
+      usageCount: m.usage_count,
+      categoryName: m.categories?.name || "Unknown",
+    })) || [],
+  }
+}
+
+/**
+ * Get pattern learning quality statistics
+ */
+export async function getPatternLearningQuality() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: patterns } = await supabase
+    .from("learned_patterns")
+    .select("pattern_type, confidence_score, usage_count, success_count, failure_count, last_used_at")
+    .order("usage_count", { ascending: false })
+
+  // Calculate accuracy for each pattern
+  const patternsWithAccuracy = patterns?.map((p: any) => ({
+    patternType: p.pattern_type,
+    usageCount: p.usage_count,
+    successCount: p.success_count,
+    failureCount: p.failure_count,
+    accuracy: p.usage_count > 0
+      ? Number(((p.success_count / p.usage_count) * 100).toFixed(2))
+      : 0,
+    confidence: Number((p.confidence_score * 100).toFixed(2)),
+    lastUsed: p.last_used_at,
+  })) || []
+
+  // Group by pattern type
+  const typeStats = new Map<string, {
+    count: number
+    totalUsage: number
+    totalSuccess: number
+    avgConfidence: number
+  }>()
+
+  patterns?.forEach((p: any) => {
+    const type = p.pattern_type
+    const stats = typeStats.get(type) || {
+      count: 0,
+      totalUsage: 0,
+      totalSuccess: 0,
+      avgConfidence: 0,
+    }
+
+    stats.count++
+    stats.totalUsage += p.usage_count
+    stats.totalSuccess += p.success_count
+    stats.avgConfidence += p.confidence_score
+
+    typeStats.set(type, stats)
+  })
+
+  const typeBreakdown = Array.from(typeStats.entries()).map(([type, stats]) => ({
+    patternType: type,
+    patternCount: stats.count,
+    totalUsage: stats.totalUsage,
+    accuracy: stats.totalUsage > 0
+      ? Number(((stats.totalSuccess / stats.totalUsage) * 100).toFixed(2))
+      : 0,
+    avgConfidence: Number(((stats.avgConfidence / stats.count) * 100).toFixed(2)),
+  }))
+
+  return {
+    patterns: patternsWithAccuracy.slice(0, 20), // Top 20 patterns
+    typeBreakdown,
+    totalPatterns: patterns?.length || 0,
+  }
+}
+
+/**
+ * Get OCR processing trend over last 30 days
+ */
+export async function getOCRProcessingTrend() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  const { data: ocrMetrics } = await supabase
+    .from("parsing_metrics")
+    .select("created_at, success, confidence")
+    .eq("message_type", "image")
+    .gte("created_at", thirtyDaysAgo.toISOString())
+
+  // Group by date
+  const dateMap = new Map<string, {
+    total: number
+    successful: number
+    totalConfidence: number
+  }>()
+
+  // Initialize all dates in range
+  for (let i = 0; i < 30; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - (29 - i))
+    const dateStr = date.toISOString().split("T")[0]
+    dateMap.set(dateStr, { total: 0, successful: 0, totalConfidence: 0 })
+  }
+
+  // Count OCR attempts per day
+  ocrMetrics?.forEach((m: any) => {
+    const dateStr = m.created_at.split("T")[0]
+    const entry = dateMap.get(dateStr)
+    if (entry) {
+      entry.total++
+      if (m.success) entry.successful++
+      entry.totalConfidence += Number(m.confidence || 0)
+    }
+  })
+
+  // Convert to array with rates
+  return Array.from(dateMap.entries()).map(([date, counts]) => ({
+    date,
+    total: counts.total,
+    successful: counts.successful,
+    successRate: counts.total > 0
+      ? Number(((counts.successful / counts.total) * 100).toFixed(2))
+      : 0,
+    avgConfidence: counts.total > 0
+      ? Number(((counts.totalConfidence / counts.total) * 100).toFixed(2))
+      : 0,
+  }))
+}
+
+/**
+ * Get strategy distribution for pie chart
+ */
+export async function getStrategyDistribution() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: metrics } = await supabase
+    .from("parsing_metrics")
+    .select("strategy_used")
+    .not("strategy_used", "is", null)
+
+  // Count by strategy
+  const strategyCounts = new Map<string, number>()
+  metrics?.forEach((m: any) => {
+    const strategy = m.strategy_used || "unknown"
+    strategyCounts.set(strategy, (strategyCounts.get(strategy) || 0) + 1)
+  })
+
+  // Convert to array with percentages
+  const total = metrics?.length || 0
+  return Array.from(strategyCounts.entries()).map(([strategy, count]) => ({
+    strategy,
+    count,
+    percentage: total > 0 ? Number(((count / total) * 100).toFixed(1)) : 0,
+  }))
+}
+
+/**
+ * Get recent OCR errors for debugging
+ */
+export async function getRecentOCRErrors(limit: number = 20) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: errors } = await supabase
+    .from("parsing_metrics")
+    .select("created_at, error_message, parse_duration_ms, user_id")
+    .eq("message_type", "image")
+    .eq("success", false)
+    .not("error_message", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  return errors?.map((e: any) => ({
+    createdAt: e.created_at,
+    errorMessage: e.error_message,
+    processingTime: e.parse_duration_ms,
+    userId: e.user_id,
+  })) || []
+}
+
+// ============================================
+// Intent Classification & Command Tracking
+// ============================================
+
+/**
+ * Get intent distribution - which commands are being used
+ */
+export async function getIntentDistribution() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: intents } = await supabase
+    .from("parsing_metrics")
+    .select("intent_action, success")
+    .not("intent_action", "is", null)
+
+  // Count by intent
+  const intentCounts = new Map<string, { total: number; successful: number; failed: number }>()
+
+  intents?.forEach((i: any) => {
+    const intent = i.intent_action || "unknown"
+    const stats = intentCounts.get(intent) || { total: 0, successful: 0, failed: 0 }
+
+    stats.total++
+    if (i.success) stats.successful++
+    else stats.failed++
+
+    intentCounts.set(intent, stats)
+  })
+
+  // Convert to array with percentages
+  const total = intents?.length || 0
+  return Array.from(intentCounts.entries())
+    .map(([intent, stats]) => ({
+      intent,
+      total: stats.total,
+      successful: stats.successful,
+      failed: stats.failed,
+      successRate: Number(((stats.successful / stats.total) * 100).toFixed(2)),
+      percentage: total > 0 ? Number(((stats.total / total) * 100).toFixed(1)) : 0,
+    }))
+    .sort((a, b) => b.total - a.total)
+}
+
+/**
+ * Get entity extraction patterns - what entities are being extracted
+ */
+export async function getEntityExtractionPatterns() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: metrics } = await supabase
+    .from("parsing_metrics")
+    .select("intent_action, intent_entities, success")
+    .not("intent_entities", "is", null)
+    .limit(1000) // Last 1000 with entities
+
+  // Count entity types per intent
+  const entityStats = new Map<string, Map<string, number>>()
+
+  metrics?.forEach((m: any) => {
+    const intent = m.intent_action || "unknown"
+    if (!entityStats.has(intent)) {
+      entityStats.set(intent, new Map())
+    }
+
+    const entities = m.intent_entities as Record<string, any>
+    Object.keys(entities || {}).forEach(entityKey => {
+      const intentEntityMap = entityStats.get(intent)!
+      intentEntityMap.set(entityKey, (intentEntityMap.get(entityKey) || 0) + 1)
+    })
+  })
+
+  // Convert to array
+  const result: any[] = []
+  entityStats.forEach((entityMap, intent) => {
+    entityMap.forEach((count, entityType) => {
+      result.push({
+        intent,
+        entityType,
+        count,
+        percentage: metrics ? Number(((count / metrics.length) * 100).toFixed(1)) : 0,
+      })
+    })
+  })
+
+  return result.sort((a, b) => b.count - a.count)
+}
+
+/**
+ * Get command coverage - which commands exist but aren't being used
+ */
+export async function getCommandCoverage() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // All possible intents (from types.ts)
+  const allIntents = [
+    'add_expense', 'add_income', 'show_expenses', 'edit_transaction', 'delete_transaction',
+    'change_category', 'show_transaction_details', 'set_budget', 'show_budget', 'delete_budget',
+    'add_recurring', 'show_recurring', 'delete_recurring', 'edit_recurring', 'make_expense_recurring',
+    'show_report', 'search_transactions', 'quick_stats', 'analyze_spending',
+    'list_categories', 'add_category', 'remove_category',
+    'login', 'logout', 'help', 'show_help', 'undo_last', 'unknown'
+  ]
+
+  const { data: usedIntents } = await supabase
+    .from("parsing_metrics")
+    .select("intent_action")
+    .not("intent_action", "is", null)
+
+  // Count usage
+  const usageCounts = new Map<string, number>()
+  usedIntents?.forEach((i: any) => {
+    const intent = i.intent_action
+    usageCounts.set(intent, (usageCounts.get(intent) || 0) + 1)
+  })
+
+  // Map to all intents
+  return allIntents.map(intent => ({
+    intent,
+    usageCount: usageCounts.get(intent) || 0,
+    isUsed: usageCounts.has(intent),
+  })).sort((a, b) => b.usageCount - a.usageCount)
+}
+
+/**
+ * Get misclassified intents that need review
+ */
+export async function getMisclassifiedIntents(limit: number = 50) {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: misclassifications } = await supabase
+    .from("intent_misclassifications")
+    .select(`
+      id,
+      original_intent,
+      corrected_intent,
+      original_message,
+      correction_method,
+      time_to_correction_seconds,
+      severity,
+      created_at,
+      resolved
+    `)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  return misclassifications || []
+}
+
+/**
+ * Get cache effectiveness for intent parsing
+ */
+export async function getIntentCacheEffectiveness() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  const { data: metrics } = await supabase
+    .from("parsing_metrics")
+    .select("cache_hit, cache_similarity, success, intent_action")
+
+  const cacheHits = metrics?.filter(m => m.cache_hit === true) || []
+  const totalMessages = metrics?.length || 0
+
+  // Stats by intent
+  const intentCacheStats = new Map<string, { cacheHits: number; total: number }>()
+
+  metrics?.forEach((m: any) => {
+    const intent = m.intent_action || "unknown"
+    const stats = intentCacheStats.get(intent) || { cacheHits: 0, total: 0 }
+
+    stats.total++
+    if (m.cache_hit) stats.cacheHits++
+
+    intentCacheStats.set(intent, stats)
+  })
+
+  // Average similarity for cache hits
+  const avgSimilarity = cacheHits.length > 0
+    ? cacheHits.reduce((sum, m) => sum + (m.cache_similarity || 0), 0) / cacheHits.length
+    : 0
+
+  return {
+    totalCacheHits: cacheHits.length,
+    totalMessages,
+    cacheHitRate: totalMessages > 0 ? Number(((cacheHits.length / totalMessages) * 100).toFixed(2)) : 0,
+    avgSimilarity: Number((avgSimilarity * 100).toFixed(2)),
+    byIntent: Array.from(intentCacheStats.entries()).map(([intent, stats]) => ({
+      intent,
+      cacheHits: stats.cacheHits,
+      total: stats.total,
+      cacheHitRate: stats.total > 0 ? Number(((stats.cacheHits / stats.total) * 100).toFixed(2)) : 0,
+    })).sort((a, b) => b.total - a.total),
+  }
+}
+
+/**
+ * Get retry/rephrase patterns - messages that failed then succeeded
+ */
+export async function getRetryPatterns() {
+  await verifyAdmin()
+  const supabase = await getSupabaseServerClient()
+
+  // Get failed messages and subsequent successful ones from same user within 2 minutes
+  const { data: failedMetrics } = await supabase
+    .from("parsing_metrics")
+    .select("user_id, whatsapp_number, message_text, intent_action, created_at")
+    .eq("success", false)
+    .order("created_at", { ascending: false })
+    .limit(100)
+
+  if (!failedMetrics || failedMetrics.length === 0) {
+    return []
+  }
+
+  // For each failed message, look for successful message from same user within 2 minutes
+  const retryPatterns: any[] = []
+
+  for (const failed of failedMetrics) {
+    const twoMinutesLater = new Date(failed.created_at)
+    twoMinutesLater.setMinutes(twoMinutesLater.getMinutes() + 2)
+
+    const { data: successfulMetrics } = await supabase
+      .from("parsing_metrics")
+      .select("message_text, intent_action, created_at")
+      .eq("user_id", failed.user_id)
+      .eq("success", true)
+      .gte("created_at", failed.created_at)
+      .lte("created_at", twoMinutesLater.toISOString())
+      .order("created_at", { ascending: true })
+      .limit(1)
+
+    if (successfulMetrics && successfulMetrics.length > 0) {
+      const successful = successfulMetrics[0]
+      const timeDiff = new Date(successful.created_at).getTime() - new Date(failed.created_at).getTime()
+
+      retryPatterns.push({
+        failedMessage: failed.message_text,
+        failedIntent: failed.intent_action,
+        successfulMessage: successful.message_text,
+        successfulIntent: successful.intent_action,
+        retryTimeSeconds: Math.round(timeDiff / 1000),
+        userId: failed.user_id,
+      })
+    }
+  }
+
+  return retryPatterns.slice(0, 20) // Return top 20
 }
 

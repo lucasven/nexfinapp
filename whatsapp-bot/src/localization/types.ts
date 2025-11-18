@@ -50,7 +50,22 @@ export interface Messages {
   ocrNoData: string
   ocrError: string
   confirmOcrExpense: (amount: number, description: string) => string
-  
+
+  // OCR Confirmation Flow
+  ocrPreview: (transactions: Array<{amount: number, category?: string, description?: string, date?: string}>) => string
+  ocrConfirmationPrompt: string
+  ocrAllAdded: (count: number, successful: number) => string
+  ocrCancelled: string
+  ocrEditPrompt: (index: number, transaction: {amount: number, category?: string, description?: string}) => string
+  ocrEditSuccess: (index: number) => string
+  ocrTimeout: string
+  ocrNoPending: string
+  ocrInvalidTransactionNumber: (max: number) => string
+
+  // Settings messages
+  ocrSettingUpdated: (autoAdd: boolean) => string
+  ocrSettingCurrent: (autoAdd: boolean) => string
+
   // Error messages
   unknownCommand: string
   aiLimitExceeded: string

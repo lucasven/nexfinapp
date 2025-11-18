@@ -28,8 +28,6 @@ export async function isGroupAuthorized(groupJid: string): Promise<string | null
   try {
     const supabase = getSupabaseClient()
     
-    console.log('[isGroupAuthorized] Checking group:', groupJid)
-    
     const { data, error } = await supabase
       .from('authorized_groups')
       .select('id, is_active, user_id')
@@ -47,7 +45,7 @@ export async function isGroupAuthorized(groupJid: string): Promise<string | null
       return data.user_id
     }
     
-    console.log('[isGroupAuthorized] Group not authorized')
+    //console.log('[isGroupAuthorized] Group not authorized')
     return null
   } catch (error) {
     console.error('[isGroupAuthorized] Exception:', error)

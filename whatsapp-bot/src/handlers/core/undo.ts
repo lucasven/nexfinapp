@@ -114,24 +114,26 @@ export async function handleUndo(whatsappNumber: string): Promise<string> {
     // Perform undo based on action type
     switch (lastAction.action) {
       case 'add_transaction':
-        // Delete the added transaction
+        // Delete the added transaction (verify ownership)
         await supabase
           .from('transactions')
           .delete()
           .eq('id', lastAction.data.id)
-        
+          .eq('user_id', session.userId)
+
         logger.info('Undid add_transaction', { whatsappNumber, transactionId: lastAction.data.user_readable_id })
         break
 
       case 'edit_transaction':
       case 'change_category':
-        // Restore original transaction data
+        // Restore original transaction data (verify ownership)
         const { id, ...originalData } = lastAction.data
         await supabase
           .from('transactions')
           .update(originalData)
           .eq('id', id)
-        
+          .eq('user_id', session.userId)
+
         logger.info('Undid edit/change_category', { whatsappNumber, transactionId: lastAction.data.user_readable_id })
         break
 
@@ -146,23 +148,25 @@ export async function handleUndo(whatsappNumber: string): Promise<string> {
         break
 
       case 'add_recurring':
-        // Delete the added recurring transaction
+        // Delete the added recurring transaction (verify ownership)
         await supabase
           .from('recurring_transactions')
           .delete()
           .eq('id', lastAction.data.id)
-        
+          .eq('user_id', session.userId)
+
         logger.info('Undid add_recurring', { whatsappNumber })
         break
 
       case 'edit_recurring':
-        // Restore original recurring transaction data
+        // Restore original recurring transaction data (verify ownership)
         const { id: editRecurringId, ...originalRecurringData } = lastAction.data
         await supabase
           .from('recurring_transactions')
           .update(originalRecurringData)
           .eq('id', editRecurringId)
-        
+          .eq('user_id', session.userId)
+
         logger.info('Undid edit_recurring', { whatsappNumber })
         break
 
@@ -177,12 +181,13 @@ export async function handleUndo(whatsappNumber: string): Promise<string> {
         break
 
       case 'add_category':
-        // Delete the added category
+        // Delete the added category (verify ownership)
         await supabase
           .from('categories')
           .delete()
           .eq('id', lastAction.data.id)
-        
+          .eq('user_id', session.userId)
+
         logger.info('Undid add_category', { whatsappNumber, categoryName: lastAction.data.name })
         break
 
@@ -197,21 +202,23 @@ export async function handleUndo(whatsappNumber: string): Promise<string> {
         break
 
       case 'set_budget':
-        // Delete the set budget or restore previous value
+        // Delete the set budget or restore previous value (verify ownership)
         if (lastAction.data.previousBudget) {
           // There was a previous budget, restore it
           await supabase
             .from('budgets')
             .update(lastAction.data.previousBudget)
             .eq('id', lastAction.data.id)
+            .eq('user_id', session.userId)
         } else {
           // No previous budget, delete the new one
           await supabase
             .from('budgets')
             .delete()
             .eq('id', lastAction.data.id)
+            .eq('user_id', session.userId)
         }
-        
+
         logger.info('Undid set_budget', { whatsappNumber })
         break
 

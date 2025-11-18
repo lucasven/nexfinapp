@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from 'next-intl'
-import { PencilIcon, Trash2Icon, PlusIcon, AlertCircleIcon } from "lucide-react"
+import { PencilIcon, Trash2Icon, PlusIcon, AlertCircleIcon, ArrowLeftIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,13 +22,17 @@ import { useOnboarding } from "@/hooks/use-onboarding"
 import { TutorialOverlay } from "@/components/onboarding/tutorial-overlay"
 import { skipOnboardingStep } from "@/lib/actions/onboarding"
 import { ResumeTourFAB } from "@/components/onboarding/resume-tour-fab"
+import { Link } from "@/lib/localization/link"
+import { UserMenu } from "@/components/user-menu"
 
 interface CategoriesClientProps {
   categories: Category[]
   userId: string
+  userEmail?: string | null
+  displayName?: string | null
 }
 
-export function CategoriesClient({ categories, userId }: CategoriesClientProps) {
+export function CategoriesClient({ categories, userId, userEmail, displayName }: CategoriesClientProps) {
   const t = useTranslations()
   const router = useRouter()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -148,14 +152,20 @@ export function CategoriesClient({ categories, userId }: CategoriesClientProps) 
 
   return (
     <>
-      <div className="flex items-center justify-between mb-8">
-        <div>
+      <div className="flex items-center gap-4 mb-8">
+        <Button variant="ghost" size="icon" asChild>
+          <Link href="/">
+            <ArrowLeftIcon className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div className="flex-1">
           <h1 className="text-3xl font-bold tracking-tight">{t('category.categories')}</h1>
           <p className="text-muted-foreground mt-1">{t('category.subtitle')}</p>
         </div>
         <div data-onboarding-add-category>
           <CategoryDialog currentStep={currentStep} />
         </div>
+        <UserMenu userEmail={userEmail ?? undefined} displayName={displayName ?? undefined} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

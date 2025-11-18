@@ -85,6 +85,57 @@ You can also send me photos of bank SMS or statements!`,
   confirmOcrExpense: (amount: number, description: string) =>
     `Found:\n💵 $${amount.toFixed(2)}\n📝 ${description}\n\nReply "yes" to confirm or "no" to cancel.`,
 
+  // OCR Confirmation Flow
+  ocrPreview: (transactions: Array<{amount: number, category?: string, description?: string, date?: string}>) => {
+    let message = `📸 *Transactions found in image:*\n\n`;
+    transactions.forEach((t, i) => {
+      const dateStr = t.date ? ` (${t.date})` : '';
+      const category = t.category || 'No category';
+      const description = t.description || 'No description';
+      message += `${i + 1}. $${t.amount.toFixed(2)} - ${category} - ${description}${dateStr}\n`;
+    });
+    message += `\n*Reply:*\n`;
+    message += `✅ "yes" or "confirm" - Add all\n`;
+    message += `✏️ "edit 2" - Edit transaction #2\n`;
+    message += `❌ "no" or "cancel" - Don't add`;
+    return message;
+  },
+  ocrConfirmationPrompt: '💡 *How would you like to proceed?*\n\n✅ "yes" - Confirm all\n✏️ "edit N" - Edit transaction N\n❌ "no" - Cancel',
+  ocrAllAdded: (count: number, successful: number) => {
+    if (successful === count) {
+      return `✅ *Success!*\n\nAll ${count} transactions were added.`;
+    } else {
+      return `⚠️ *Partially completed*\n\n${successful} of ${count} transactions added.\n${count - successful} failed.`;
+    }
+  },
+  ocrCancelled: '❌ Transactions cancelled. No expenses were added.',
+  ocrEditPrompt: (index: number, transaction: {amount: number, category?: string, description?: string}) =>
+    `✏️ *Edit transaction #${index}*\n\n` +
+    `💵 Amount: $${transaction.amount.toFixed(2)}\n` +
+    `📁 Category: ${transaction.category || 'No category'}\n` +
+    `📝 Description: ${transaction.description || 'No description'}\n\n` +
+    `*Reply with what you want to change:*\n` +
+    `• "category: Food" - Change category\n` +
+    `• "amount: 50" - Change amount\n` +
+    `• "description: Groceries" - Change description\n` +
+    `• "cancel" - Go back without changes`,
+  ocrEditSuccess: (index: number) => `✅ Transaction #${index} updated!\n\nReply "yes" to confirm all or "edit N" to edit another.`,
+  ocrTimeout: '⏰ Time expired. The transactions extracted from the image were discarded. Send the image again if you wish.',
+  ocrNoPending: '❌ There are no pending transactions to confirm. Send an image to start.',
+  ocrInvalidTransactionNumber: (max: number) => `❌ Invalid transaction number. Use a number between 1 and ${max}.`,
+
+  // Settings messages
+  ocrSettingUpdated: (autoAdd: boolean) =>
+    autoAdd
+      ? '✅ *OCR configured to auto-add*\n\n📸 Now when you send a receipt photo, transactions will be added immediately without confirmation.\n\n💡 To return to confirmation mode, use: /settings ocr confirm'
+      : '✅ *OCR configured to always confirm*\n\n📸 Now when you send a receipt photo, you\'ll see a preview and can confirm or cancel before adding.\n\n💡 To auto-add, use: /settings ocr auto',
+  ocrSettingCurrent: (autoAdd: boolean) =>
+    `⚙️ *Current OCR setting:* ${autoAdd ? '🚀 Auto-add' : '✋ Always confirm'}\n\n` +
+    `📸 When you send a receipt photo:\n` +
+    (autoAdd
+      ? `✅ Transactions are added immediately\n\n💡 To enable confirmation: /settings ocr confirm`
+      : `✅ You see a preview and can confirm/cancel\n\n💡 To auto-add: /settings ocr auto`),
+
   // Error messages
   unknownCommand: '❓ Sorry, I didn\'t understand. Type "help" to see available commands.',
   genericError: '❌ An error occurred. Please try again.',

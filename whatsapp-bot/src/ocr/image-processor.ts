@@ -1,10 +1,40 @@
 import { createWorker } from 'tesseract.js'
 import { ExpenseData, OCRResult } from '../types.js'
 import sharp from 'sharp'
-import { parseWithAI } from '../services/ai/ai-pattern-generator.js'
+import { parseOCRWithAI } from '../services/ai/ai-pattern-generator.js'
 import { getUserContext } from '../services/ai/ai-pattern-generator.js'
+import { guessCategoryFromDescription as guessCategoryFromDescriptionNew } from '../services/category-matcher.js'
 
-export async function processImage(imageBuffer: Buffer): Promise<OCRResult> {
+/**
+ * Infer transaction type from category name using database category types
+ */
+function inferTypeFromCategory(
+  category: string,
+  categoryTypeMap: Map<string, 'income' | 'expense'>
+): 'income' | 'expense' {
+  // Normalize for matching
+  const normalizedCategory = category.toLowerCase().trim()
+
+  // Try exact match first
+  const exactMatch = categoryTypeMap.get(normalizedCategory)
+  if (exactMatch) {
+    return exactMatch
+  }
+
+  // Try fuzzy matching (partial match)
+  for (const [catName, catType] of categoryTypeMap.entries()) {
+    if (normalizedCategory.includes(catName) || catName.includes(normalizedCategory)) {
+      console.log(`Fuzzy matched category "${category}" to "${catName}" with type "${catType}"`)
+      return catType
+    }
+  }
+
+  // Default to expense if no match found
+  console.warn(`No category type match found for "${category}", defaulting to expense`)
+  return 'expense'
+}
+
+export async function processImage(imageBuffer: Buffer, userId?: string): Promise<OCRResult> {
   try {
     // Preprocess image for better OCR
     const processedImage = await sharp(imageBuffer)
@@ -19,9 +49,20 @@ export async function processImage(imageBuffer: Buffer): Promise<OCRResult> {
     const { data: { text, confidence } } = await worker.recognize(processedImage)
     await worker.terminate()
 
+    // Get user context for category type mapping
+    let categoryTypeMap: Map<string, 'income' | 'expense'> = new Map()
+    if (userId) {
+      try {
+        const userContext = await getUserContext(userId)
+        categoryTypeMap = userContext.categoryTypeMap
+      } catch (error) {
+        console.warn('Failed to fetch user context for category types', error)
+      }
+    }
+
     // Parse expenses from OCR text
     console.log('ocr full text: ', text);
-    const expenses = parseExpensesFromText(text)
+    const expenses = await parseExpensesFromText(text, userId, categoryTypeMap)
 
     return {
       text: text.trim(),
@@ -34,17 +75,21 @@ export async function processImage(imageBuffer: Buffer): Promise<OCRResult> {
   }
 }
 
-function parseExpensesFromText(text: string): ExpenseData[] {
+async function parseExpensesFromText(
+  text: string,
+  userId?: string,
+  categoryTypeMap: Map<string, 'income' | 'expense'> = new Map()
+): Promise<ExpenseData[]> {
   const expenses: ExpenseData[] = []
-  
+
   // First, try specific credit card SMS pattern (single or multiple)
-  const creditCardExpenses = parseCreditCardSMS(text)
+  const creditCardExpenses = await parseCreditCardSMS(text, userId)
   if (creditCardExpenses.length > 0) {
     return creditCardExpenses
   }
 
   // Try to detect multiple transactions in bank statements or receipts
-  const multipleTransactions = parseMultipleTransactions(text)
+  const multipleTransactions = await parseMultipleTransactions(text, userId)
   if (multipleTransactions.length > 0) {
     return multipleTransactions
   }
@@ -56,13 +101,13 @@ function parseExpensesFromText(text: string): ExpenseData[] {
   const patterns = [
     // Pattern 1: "Compra aprovada: R$ 50,00 em ESTABELECIMENTO"
     /(?:compra|despesa|pagamento|débito|debito).*?R\$?\s*([\d.,]+).*?(?:em|para|no|na)\s+([A-Za-záàâãéèêíïóôõöúçñ\s]+)/gi,
-    
+
     // Pattern 2: "R$ 50,00 - ESTABELECIMENTO"
     /R\$?\s*([\d.,]+)\s*[-–]\s*([A-Za-záàâãéèêíïóôõöúçñ\s]+)/gi,
-    
+
     // Pattern 3: "ESTABELECIMENTO R$ 50,00"
     /([A-Za-záàâãéèêíïóôõöúçñ\s]+)\s+R\$?\s*([\d.,]+)/gi,
-    
+
     // Pattern 4: "Débito de R$ 50,00 - ESTABELECIMENTO"
     /(?:débito|debito|saque|transferência|transferencia)\s+de\s+R\$?\s*([\d.,]+).*?[-–]\s*([A-Za-záàâãéèêíïóôõöúçñ\s]+)/gi
   ]
@@ -74,9 +119,16 @@ function parseExpensesFromText(text: string): ExpenseData[] {
       const description = match[2] ? match[2].trim() : ''
 
       if (amount > 0 && amount < 1000000) { // Sanity check
-        // Try to guess category from description
-        const category = guessCategoryFromDescription(description)
-        
+        // Try to guess category from description using new matcher
+        let category: string | undefined = undefined
+        if (userId) {
+          const categoryMatch = await guessCategoryFromDescriptionNew(description, userId, 'expense')
+          category = categoryMatch?.name
+        } else {
+          // Fallback to old method if no userId
+          category = guessCategoryFromDescription(description)
+        }
+
         // Detect payment method from context
         let paymentMethod: string | undefined
         const lowerText = text.toLowerCase()
@@ -103,8 +155,8 @@ function parseExpensesFromText(text: string): ExpenseData[] {
 
   // Remove duplicates
   const unique = expenses.filter((expense, index, self) =>
-    index === self.findIndex(e => 
-      e.amount === expense.amount && 
+    index === self.findIndex(e =>
+      e.amount === expense.amount &&
       e.description === expense.description
     )
   )
@@ -120,44 +172,44 @@ function parseExpensesFromText(text: string): ExpenseData[] {
  *  PAQUISTAO valor RS 8,50 em
  *  13/10/2025 as 17h50."
  */
-function parseCreditCardSMS(text: string): ExpenseData[] {
+async function parseCreditCardSMS(text: string, userId?: string): Promise<ExpenseData[]> {
   const expenses: ExpenseData[] = []
-  
+
   // Split text by "Compra aprovada" to handle multiple transactions
   const transactions = text.split(/(?=Compra aprovada)/i).filter(part => part.trim())
-  
+
   for (const transaction of transactions) {
     // Pattern for "valor RS X,XX" or "valor R$ X,XX"
     const valueMatch = transaction.match(/valor\s+(?:R\$?|RS)\s*([\d.,]+)/i)
-    
+
     if (!valueMatch) {
       continue
     }
 
     const amount = parseFloat(valueMatch[1].replace(/[.,](?=\d{3})/g, '').replace(',', '.'))
-    
+
     if (amount <= 0 || amount >= 1000000) {
       continue
     }
 
     // Extract merchant name (text before "valor")
     const beforeValor = transaction.substring(0, transaction.toLowerCase().indexOf('valor'))
-    
+
     // Split by lines and get merchant info
     const lines = beforeValor.split('\n').filter(line => line.trim())
-    
+
     // Merchant is usually in the last 1-2 lines before "valor"
     let merchantParts: string[] = []
-    
+
     // Look for merchant indicators - collect up to 2 valid lines
     for (let i = lines.length - 1; i >= 0 && merchantParts.length < 2; i--) {
       const line = lines[i].trim()
-      
+
       // Skip card type and holder name patterns
       if (line.match(/^(MC|VISA|ELO|MASTERCARD|AMEX)/i)) continue
       if (line.match(/p\/|para/i)) continue
       if (line.match(/^compra aprovada/i)) continue
-      
+
       // This is likely part of the merchant
       if (line.length > 0) {
         merchantParts.unshift(line) // Add to beginning to maintain order
@@ -174,7 +226,7 @@ function parseCreditCardSMS(text: string): ExpenseData[] {
     let date: string | undefined
     const dateMatchFull = transaction.match(/(\d{1,2}\/\d{1,2}\/\d{4})/i)
     const dateMatchShort = transaction.match(/(\d{1,2}\/\d{1,2})(?:[,\s]|$)/i)
-    
+
     if (dateMatchFull) {
       const [day, month, year] = dateMatchFull[1].split('/')
       date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
@@ -184,8 +236,15 @@ function parseCreditCardSMS(text: string): ExpenseData[] {
       date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
     }
 
-    // Guess category
-    const category = guessCategoryFromDescription(merchantName)
+    // Guess category using new matcher
+    let category: string | undefined = undefined
+    if (userId) {
+      const categoryMatch = await guessCategoryFromDescriptionNew(merchantName, userId, 'expense')
+      category = categoryMatch?.name
+    } else {
+      // Fallback to old method if no userId
+      category = guessCategoryFromDescription(merchantName)
+    }
 
     expenses.push({
       amount,
@@ -196,7 +255,7 @@ function parseCreditCardSMS(text: string): ExpenseData[] {
       paymentMethod: 'Credit Card' // Credit card SMS transactions are always credit card payments
     })
   }
-  
+
   return expenses
 }
 
@@ -252,30 +311,30 @@ function guessCategoryFromDescription(description: string): string | undefined {
 /**
  * Parse multiple transactions from bank statements or receipts
  */
-function parseMultipleTransactions(text: string): ExpenseData[] {
+async function parseMultipleTransactions(text: string, userId?: string): Promise<ExpenseData[]> {
   const transactions: ExpenseData[] = []
-  
+
   // Common patterns for multiple transactions
   const patterns = [
     // Pattern 1: Bank statement format
     // "15/10/2024 14:30 COMPRA CARTAO 50,00 MERCADO ABC"
     /(\d{1,2}\/\d{1,2}\/\d{4})\s+\d{1,2}:\d{2}\s+(?:COMPRA|DEBITO|PAGAMENTO)\s+(?:CARTAO|CARTAO\s+\d+)\s+([\d.,]+)\s+([A-Za-záàâãéèêíïóôõöúçñ\s]+)/gi,
-    
+
     // Pattern 2: Receipt format with multiple items
     // "ITEM 1: 25,00"
     // "ITEM 2: 15,50"
     /(?:item|produto|servico)\s*\d*:?\s*([\d.,]+)/gi,
-    
+
     // Pattern 3: Multiple lines with amounts and descriptions
     // "MERCADO ABC 50,00"
     // "FARMACIA XYZ 25,50"
     /([A-Za-záàâãéèêíïóôõöúçñ\s]+?)\s+([\d.,]+)(?:\s|$)/gi,
-    
+
     // Pattern 4: Date + Amount + Description pattern
     // "15/10 MERCADO 50,00"
     /(\d{1,2}\/\d{1,2})\s+([A-Za-záàâãéèêíïóôõöúçñ\s]+?)\s+([\d.,]+)/gi
   ]
-  
+
   for (const pattern of patterns) {
     let match
     while ((match = pattern.exec(text)) !== null) {
@@ -283,7 +342,7 @@ function parseMultipleTransactions(text: string): ExpenseData[] {
         let amount: number
         let description: string
         let date: string | undefined
-        
+
         if (match.length === 4) {
           // Pattern with date
           date = parseDate(match[1])
@@ -298,10 +357,18 @@ function parseMultipleTransactions(text: string): ExpenseData[] {
           amount = parseAmount(match[1])
           description = 'Transação'
         }
-        
+
         if (amount > 0 && amount < 1000000) {
-          const category = guessCategoryFromDescription(description)
-          
+          // Guess category using new matcher
+          let category: string | undefined = undefined
+          if (userId) {
+            const categoryMatch = await guessCategoryFromDescriptionNew(description, userId, 'expense')
+            category = categoryMatch?.name || 'outros'
+          } else {
+            // Fallback to old method if no userId
+            category = guessCategoryFromDescription(description) || 'outros'
+          }
+
           // Detect payment method from context
           let paymentMethod: string | undefined
           const lowerText = text.toLowerCase()
@@ -314,11 +381,11 @@ function parseMultipleTransactions(text: string): ExpenseData[] {
           } else if (lowerText.includes('dinheiro') || lowerText.includes('cash')) {
             paymentMethod = 'Cash'
           }
-          
+
           transactions.push({
             amount,
             description,
-            category: category || 'outros',
+            category,
             type: 'expense',
             date,
             paymentMethod
@@ -329,16 +396,16 @@ function parseMultipleTransactions(text: string): ExpenseData[] {
       }
     }
   }
-  
+
   // Remove duplicates and filter out very small amounts
   const uniqueTransactions = transactions.filter((tx, index, arr) => {
     return tx.amount >= 1 && // Minimum amount
-           arr.findIndex(t => 
-             t.amount === tx.amount && 
+           arr.findIndex(t =>
+             t.amount === tx.amount &&
              t.description === tx.description
            ) === index
   })
-  
+
   return uniqueTransactions
 }
 
@@ -384,41 +451,77 @@ export async function extractExpenseFromImage(
   userId: string
 ): Promise<ExpenseData[] | null> {
   try {
-    const result = await processImage(imageBuffer)
+    const result = await processImage(imageBuffer, userId)
 
     // NEW: Try AI parsing first if OCR text is available
     if (result.text && result.text.length > 10) {
       try {
-        console.log('Attempting AI parsing of OCR text...')
+        console.log('Attempting OCR-optimized AI parsing...')
         const userContext = await getUserContext(userId)
-        const aiResult = await parseWithAI(result.text, userContext)
-        
+        const aiResult = await parseOCRWithAI(result.text, userContext)
+
         // DEBUG: Log what AI returned
-        console.log('AI parsing result:', JSON.stringify(aiResult, null, 2))
+        console.log('OCR AI parsing result:', JSON.stringify(aiResult, null, 2))
         
         if (aiResult.action === 'add_expense' && aiResult.entities.transactions) {
           // Multiple transactions from AI
-          const expenses: ExpenseData[] = aiResult.entities.transactions.map((tx: any) => ({
-            amount: tx.amount,
-            description: tx.description || '',
-            category: tx.category || 'outros',
-            type: tx.type || 'expense',
-            date: tx.date,
-            paymentMethod: tx.paymentMethod
-          }))
-          console.log(`AI successfully parsed ${expenses.length} expenses from OCR text`)
+          const expenses: ExpenseData[] = aiResult.entities.transactions.map((tx: any, index: number) => {
+            let transactionType: 'income' | 'expense' = tx.type || 'expense'
+
+            // If AI didn't provide type, infer from category
+            if (!tx.type) {
+              console.warn(`⚠️  Transaction ${index + 1} missing required 'type' field. AI did not follow schema.`, {
+                transaction: tx,
+                description: tx.description
+              })
+
+              // Infer type from category using database category types
+              const category = tx.category || 'outros'
+              transactionType = inferTypeFromCategory(category, userContext.categoryTypeMap)
+              console.log(`✅ Inferred type "${transactionType}" from category "${category}" for transaction ${index + 1}`)
+            }
+
+            return {
+              amount: tx.amount,
+              description: tx.description || '',
+              category: tx.category || 'outros',
+              type: transactionType,
+              date: tx.date,
+              paymentMethod: tx.paymentMethod
+            }
+          })
+
+          const missingTypes = expenses.filter((_, i) => !aiResult.entities.transactions?.[i]?.type).length
+          if (missingTypes > 0) {
+            console.warn(`OCR AI failed to provide type field for ${missingTypes}/${expenses.length} transactions`)
+          }
+
+          console.log(`AI successfully parsed ${expenses.length} transactions from OCR text`)
           return expenses
         } else if (aiResult.action === 'add_expense' && aiResult.entities.amount) {
           // Single transaction from AI
+          let transactionType: 'income' | 'expense' = aiResult.entities.type || 'expense'
+
+          if (!aiResult.entities.type) {
+            console.warn(`⚠️  Single transaction missing required 'type' field. AI did not follow schema.`, {
+              description: aiResult.entities.description
+            })
+
+            // Infer type from category using database category types
+            const category = aiResult.entities.category || 'outros'
+            transactionType = inferTypeFromCategory(category, userContext.categoryTypeMap)
+            console.log(`✅ Inferred type "${transactionType}" from category "${category}"`)
+          }
+
           const expense: ExpenseData = {
             amount: aiResult.entities.amount,
             description: aiResult.entities.description || '',
             category: aiResult.entities.category || 'outros',
-            type: aiResult.entities.type || 'expense',
+            type: transactionType,
             date: aiResult.entities.date,
             paymentMethod: aiResult.entities.paymentMethod
           }
-          console.log('AI successfully parsed 1 expense from OCR text')
+          console.log('AI successfully parsed 1 transaction from OCR text')
           return [expense]
         } else {
           // DEBUG: Log when AI result doesn't match expected format

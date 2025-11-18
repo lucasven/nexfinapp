@@ -158,12 +158,23 @@ export async function checkCache(
   messageText: string
 ): Promise<ParsedIntent | null> {
   const result = await searchSimilarMessages(userId, messageText)
-  
+
   if (result.hit && result.intent) {
     return result.intent
   }
-  
+
   return null
+}
+
+/**
+ * Check cache with full result details (similarity score included)
+ * Used for analytics tracking
+ */
+export async function checkCacheWithDetails(
+  userId: string,
+  messageText: string
+): Promise<CacheResult> {
+  return searchSimilarMessages(userId, messageText)
 }
 
 /**

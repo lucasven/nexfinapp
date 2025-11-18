@@ -4,7 +4,23 @@ import { ParsedIntent } from '../../types.js'
 import { messages, formatDate } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
 
+/**
+ * Check if a quoted message contains a duplicate ID
+ */
+export function isDuplicateReply(quotedMessage: string): boolean {
+  return /(?:🆔\s*)?Duplicate\s*ID:\s*([A-Z0-9]{6})/i.test(quotedMessage)
+}
+
+/**
+ * Extract duplicate ID from quoted message
+ */
+export function extractDuplicateIdFromQuote(quotedMessage: string): string | null {
+  const match = quotedMessage.match(/(?:🆔\s*)?Duplicate\s*ID:\s*([A-Z0-9]{6})/i)
+  return match ? match[1] : null
+}
+
 interface PendingTransaction {
+  duplicateId: string  // Unique ID for this duplicate confirmation
   whatsappNumber: string
   userId: string
   expenseData: any
@@ -13,64 +29,123 @@ interface PendingTransaction {
 
 // In-memory storage for pending transactions
 // In production, this should be stored in Redis or database
+// Key format: "whatsappNumber:duplicateId" to support multiple pending duplicates per user
 const pendingTransactions = new Map<string, PendingTransaction>()
 
 /**
+ * Generate a unique 6-character duplicate ID
+ */
+function generateDuplicateId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let id = ''
+  for (let i = 0; i < 6; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return id
+}
+
+/**
  * Store a pending transaction that needs confirmation
+ * @returns The duplicate ID to include in the bot message
  */
 export function storePendingTransaction(
   whatsappNumber: string,
   userId: string,
   expenseData: any
-): void {
+): string {
+  const duplicateId = generateDuplicateId()
+  const key = `${whatsappNumber}:${duplicateId}`
+
   const pending: PendingTransaction = {
+    duplicateId,
     whatsappNumber,
     userId,
     expenseData,
     timestamp: Date.now()
   }
-  
-  pendingTransactions.set(whatsappNumber, pending)
-  
+
+  pendingTransactions.set(key, pending)
+
   // Clean up after 5 minutes
   setTimeout(() => {
-    pendingTransactions.delete(whatsappNumber)
+    pendingTransactions.delete(key)
   }, 5 * 60 * 1000)
+
+  return duplicateId
 }
 
 /**
- * Check if user has a pending transaction
+ * Check if user has ANY pending transactions
  */
 export function hasPendingTransaction(whatsappNumber: string): boolean {
-  return pendingTransactions.has(whatsappNumber)
+  // Check if any key starts with this whatsapp number
+  for (const key of pendingTransactions.keys()) {
+    if (key.startsWith(`${whatsappNumber}:`)) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
- * Get and clear pending transaction
+ * Get and clear specific pending transaction by duplicate ID
  */
-export function getAndClearPendingTransaction(whatsappNumber: string): PendingTransaction | null {
-  const pending = pendingTransactions.get(whatsappNumber)
-  if (pending) {
-    pendingTransactions.delete(whatsappNumber)
-    return pending
+export function getAndClearPendingTransaction(
+  whatsappNumber: string,
+  duplicateId?: string
+): PendingTransaction | null {
+  if (duplicateId) {
+    // Get specific duplicate by ID
+    const key = `${whatsappNumber}:${duplicateId}`
+    const pending = pendingTransactions.get(key)
+    if (pending) {
+      pendingTransactions.delete(key)
+      return pending
+    }
+    return null
+  } else {
+    // Fallback: Get the oldest pending transaction for this user
+    // This handles old messages without duplicate IDs
+    let oldestPending: PendingTransaction | null = null
+    let oldestKey: string | null = null
+
+    for (const [key, pending] of pendingTransactions.entries()) {
+      if (key.startsWith(`${whatsappNumber}:`)) {
+        if (!oldestPending || pending.timestamp < oldestPending.timestamp) {
+          oldestPending = pending
+          oldestKey = key
+        }
+      }
+    }
+
+    if (oldestKey && oldestPending) {
+      pendingTransactions.delete(oldestKey)
+      return oldestPending
+    }
+
+    return null
   }
-  return null
 }
 
 /**
  * Handle user confirmation for duplicate transaction
+ * @param duplicateId Optional - specific duplicate to confirm (from reply)
  */
 export async function handleDuplicateConfirmation(
   whatsappNumber: string,
-  message: string
+  message: string,
+  duplicateId?: string
 ): Promise<string> {
   const session = await getUserSession(whatsappNumber)
   if (!session) {
     return messages.notAuthenticated
   }
 
-  const pending = getAndClearPendingTransaction(whatsappNumber)
+  const pending = getAndClearPendingTransaction(whatsappNumber, duplicateId)
   if (!pending) {
+    if (duplicateId) {
+      return `❌ Confirmação de duplicata ${duplicateId} não encontrada ou expirou.`
+    }
     return messages.duplicateConfirmationNotFound
   }
 
@@ -87,13 +162,14 @@ export async function handleDuplicateConfirmation(
     const { amount, category, description, date, type, paymentMethod } = pending.expenseData
     const supabase = getSupabaseClient()
 
-    // Find category ID
+    // Find category ID (only user's categories and defaults)
     let categoryId = null
     if (category) {
       const { data: categories } = await supabase
         .from('categories')
         .select('id, name')
         .eq('type', type || 'expense')
+        .or(`user_id.is.null,user_id.eq.${session.userId}`)
         .ilike('name', `%${category}%`)
         .limit(1)
 
@@ -108,6 +184,7 @@ export async function handleDuplicateConfirmation(
       const { data: defaultCat } = await supabase
         .from('categories')
         .select('id')
+        .is('user_id', null)
         .eq('name', defaultCategoryName)
         .single()
 

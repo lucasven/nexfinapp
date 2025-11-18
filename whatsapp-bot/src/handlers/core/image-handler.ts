@@ -11,6 +11,8 @@ import { recordParsingMetric } from '../../services/monitoring/metrics-tracker.j
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
 import { getOrCreateSession } from './helpers.js'
 import { executeIntent } from './intent-executor.js'
+import { storePendingOcrTransactions } from '../transactions/ocr-confirmation.js'
+import { getUserOcrPreference } from '../../services/user/preference-manager.js'
 
 export async function handleImageMessage(
   whatsappNumber: string, 
@@ -144,116 +146,112 @@ export async function handleImageMessage(
     
     // Handle multiple transactions from image
     if (expenses.length > 1) {
-      logger.info('Processing multiple transactions from image with AI', {
+      logger.info('OCR extracted multiple transactions', {
         whatsappNumber,
         userId: session.userId,
         transactionCount: expenses.length
       })
-      
-      const transactions = []
-      
-      for (let i = 0; i < expenses.length; i++) {
-        const expense = expenses[i]
-        // Build a message describing the transaction for AI to classify
-        const transactionMessage = `Gastei ${expense.amount} em ${expense.description || 'compra'}`
-        
-        logger.info(`Processing transaction ${i + 1}/${expenses.length} with AI`, {
+
+      // Prepare transactions for confirmation
+      const transactions = expenses.map((expense, i) => {
+        logger.info(`Preparing OCR transaction ${i + 1}/${expenses.length}`, {
           whatsappNumber,
           userId: session.userId,
           transactionIndex: i,
-          messageForAI: transactionMessage,
-          ocrCategory: expense.category,
-          ocrDescription: expense.description
+          type: expense.type,
+          category: expense.category,
+          description: expense.description,
+          amount: expense.amount
         })
-        
-        try {
-          // Use AI to get better category based on description and user's custom categories
-          const aiResult = await parseWithAI(transactionMessage, userContext)
-          
-          logger.info(`AI classification completed for transaction ${i + 1}`, {
-            whatsappNumber,
-            userId: session.userId,
-            transactionIndex: i,
-            aiAction: aiResult.action,
-            aiCategory: aiResult.entities.category,
-            aiDescription: aiResult.entities.description,
-            aiConfidence: aiResult.confidence,
-            ocrCategory: expense.category
-          })
-          
-          transactions.push({
-            amount: expense.amount,
-            category: aiResult.entities.category || expense.category,
-            description: aiResult.entities.description || expense.description,
-            type: expense.type || 'expense',
-            date: expense.date,
-            paymentMethod: expense.paymentMethod,
-          })
-        } catch (aiError) {
-          logger.warn('AI parsing failed for OCR transaction, using OCR category', { 
-            whatsappNumber,
-            userId: session.userId,
-            transactionIndex: i,
-            description: expense.description,
-            ocrCategory: expense.category,
-            error: aiError 
-          })
-          // Fall back to OCR category if AI fails
-          transactions.push({
-            amount: expense.amount,
-            category: expense.category,
-            description: expense.description,
-            type: expense.type,
-            date: expense.date,
-            paymentMethod: expense.paymentMethod,
-          })
+
+        return {
+          amount: expense.amount,
+          category: expense.category,
+          description: expense.description,
+          type: expense.type,
+          date: expense.date,
+          paymentMethod: expense.paymentMethod,
         }
-      }
-      
-      logger.info('All multiple transactions processed', {
-        whatsappNumber,
-        userId: session.userId,
-        totalTransactions: transactions.length,
-        transactions: transactions.map(t => ({ 
-          amount: t.amount, 
-          category: t.category, 
-          description: t.description 
-        }))
       })
 
-      const intent = {
-        action: 'add_expense' as const,
-        confidence: 0.8,
-        entities: { transactions }
-      }
+      // Check user preference for OCR behavior
+      const autoAdd = await getUserOcrPreference(session.userId)
+      logger.info('Checked OCR preference for multiple transactions', {
+        whatsappNumber,
+        userId: session.userId,
+        autoAdd
+      })
 
-      const result = await executeIntent(whatsappNumber, intent, session)
-      
-      await recordParsingMetric({
+      // Record parsing metric for analytics (without linking to transactions yet)
+      const parsingMetricId = await recordParsingMetric({
         userId: session.userId,
         whatsappNumber,
         messageText: caption || '[image]',
         messageType: 'image',
         strategyUsed: 'ai_pattern',
         intentAction: 'add_expense',
-        confidence: 0.8,
+        confidence: 0.95,
         success: true,
-        parseDurationMs: Date.now() - startTime
+        parseDurationMs: Date.now() - startTime,
+        intentEntities: { transactions }
       })
-      
-      if (Array.isArray(result)) {
-        // For multiple transactions, add OCR success message to the first message
-        result[0] = `${messages.ocrSuccess(expenses.length)}\n\n${result[0]}`
-        return result
+
+      if (autoAdd) {
+        // AUTO-ADD MODE: Add all transactions immediately (legacy behavior)
+        logger.info('Auto-adding OCR transactions (user preference)', {
+          whatsappNumber,
+          userId: session.userId,
+          transactionCount: transactions.length
+        })
+
+        const results: string[] = []
+        let successCount = 0
+
+        for (let i = 0; i < transactions.length; i++) {
+          const transaction = transactions[i]
+          try {
+            const action = transaction.type === 'income' ? 'add_income' as const : 'add_expense' as const
+            const intent = {
+              action,
+              confidence: 0.95,
+              entities: transaction,
+            }
+
+            const result = await executeIntent(whatsappNumber, intent, session, parsingMetricId)
+            results.push(`${i + 1}/${transactions.length} - ${result}`)
+            successCount++
+          } catch (error) {
+            logger.error('Error auto-adding OCR transaction', {
+              whatsappNumber,
+              index: i,
+              description: transaction.description,
+            }, error as Error)
+            results.push(`${i + 1}/${transactions.length} - ❌ Erro: ${transaction.description}`)
+          }
+        }
+
+        results.push(messages.ocrAllAdded(transactions.length, successCount))
+        return results
       } else {
-        return `${messages.ocrSuccess(expenses.length)}\n\n${result}`
+        // CONFIRM MODE: Store for user confirmation (default behavior)
+        storePendingOcrTransactions(whatsappNumber, session.userId, transactions, parsingMetricId)
+
+        logger.info('OCR transactions stored, awaiting user confirmation', {
+          whatsappNumber,
+          userId: session.userId,
+          transactionCount: transactions.length,
+          parsingMetricId
+        })
+
+        // Show preview and ask for confirmation
+        return messages.ocrPreview(transactions)
       }
     }
 
-    // Single transaction - use AI to refine category
+    // Single transaction - prepare for confirmation
     const expense = expenses[0]
-    
-    logger.info('Processing single transaction from image with AI', {
+
+    logger.info('OCR extracted single transaction', {
       whatsappNumber,
       userId: session.userId,
       ocrData: {
@@ -265,130 +263,107 @@ export async function handleImageMessage(
         paymentMethod: expense.paymentMethod
       }
     })
-    
-    // Build a message for AI classification
-    let messageForAI = `Gastei ${expense.amount} em ${expense.description || 'compra'}`
-    if (caption) {
-      messageForAI = `${messageForAI}. ${caption}`
+
+    // Optionally enhance with AI if caption provided
+    let finalTransaction = {
+      amount: expense.amount,
+      category: expense.category,
+      description: expense.description,
+      type: expense.type,
+      date: expense.date,
+      paymentMethod: expense.paymentMethod,
     }
-    
-    logger.info('Constructed message for AI classification', {
+
+    if (caption) {
+      try {
+        // Build a message for AI classification with caption context
+        const verb = expense.type === 'income' ? 'Recebi' : 'Gastei'
+        const messageForAI = `${verb} ${expense.amount} ${expense.type === 'income' ? 'de' : 'em'} ${expense.description || 'transação'}. ${caption}`
+
+        logger.info('Caption provided - calling AI for enhanced classification', {
+          whatsappNumber,
+          userId: session.userId,
+          messageForAI,
+          caption
+        })
+
+        const aiResult = await parseWithAI(messageForAI, userContext)
+
+        if (aiResult) {
+          // Enhance transaction with AI results
+          finalTransaction = {
+            ...finalTransaction,
+            category: aiResult.entities.category || finalTransaction.category,
+            description: aiResult.entities.description || finalTransaction.description,
+            date: aiResult.entities.date || finalTransaction.date,
+            paymentMethod: aiResult.entities.paymentMethod || finalTransaction.paymentMethod,
+          }
+
+          logger.info('AI enhanced single transaction', {
+            whatsappNumber,
+            userId: session.userId,
+            enhanced: finalTransaction
+          })
+        }
+      } catch (error) {
+        logger.warn('AI enhancement failed, using OCR data', {
+          whatsappNumber,
+          userId: session.userId,
+          error
+        })
+      }
+    }
+
+    // Check user preference for OCR behavior
+    const autoAdd = await getUserOcrPreference(session.userId)
+    logger.info('Checked OCR preference for single transaction', {
       whatsappNumber,
       userId: session.userId,
-      messageForAI,
-      hasCaption: !!caption
+      autoAdd
     })
-    
-    try {
-      // Use AI to get better category classification
-      logger.info('Calling AI for category classification', {
+
+    // Record parsing metric for analytics
+    const parsingMetricId = await recordParsingMetric({
+      userId: session.userId,
+      whatsappNumber,
+      messageText: caption || '[image]',
+      messageType: 'image',
+      strategyUsed: 'ai_pattern',
+      intentAction: 'add_expense',
+      confidence: 0.95,
+      success: true,
+      parseDurationMs: Date.now() - startTime,
+      intentEntities: finalTransaction
+    })
+
+    if (autoAdd) {
+      // AUTO-ADD MODE: Add transaction immediately (legacy behavior)
+      logger.info('Auto-adding single OCR transaction (user preference)', {
         whatsappNumber,
-        userId: session.userId,
-        messageForAI
+        userId: session.userId
       })
-      const aiResult = await parseWithAI(messageForAI, userContext)
-      
-      logger.info('AI classification result', {
-        whatsappNumber,
-        userId: session.userId,
-        aiResult: {
-          action: aiResult.action,
-          confidence: aiResult.confidence,
-          category: aiResult.entities.category,
-          description: aiResult.entities.description,
-          date: aiResult.entities.date,
-          paymentMethod: aiResult.entities.paymentMethod
-        },
-        ocrCategory: expense.category,
-        willUseCategory: aiResult.entities.category || expense.category
-      })
-      
-      const action = aiResult.action === 'add_income' ? 'add_income' as const : 'add_expense' as const
+
+      const action = finalTransaction.type === 'income' ? 'add_income' as const : 'add_expense' as const
       const intent = {
         action,
-        confidence: aiResult.confidence || 0.8,
-        entities: {
-          amount: expense.amount,
-          category: aiResult.entities.category || expense.category,
-          description: aiResult.entities.description || expense.description,
-          type: expense.type,
-          date: aiResult.entities.date || expense.date,
-          paymentMethod: aiResult.entities.paymentMethod || expense.paymentMethod,
-        }
+        confidence: 0.95,
+        entities: finalTransaction,
       }
-      
-      logger.info('Final intent for single transaction', {
+
+      const result = await executeIntent(whatsappNumber, intent, session, parsingMetricId)
+      return result
+    } else {
+      // CONFIRM MODE: Store for user confirmation (default behavior)
+      storePendingOcrTransactions(whatsappNumber, session.userId, [finalTransaction], parsingMetricId)
+
+      logger.info('Single OCR transaction stored, awaiting user confirmation', {
         whatsappNumber,
         userId: session.userId,
-        intent: {
-          action: intent.action,
-          confidence: intent.confidence,
-          entities: intent.entities
-        }
+        parsingMetricId
       })
 
-      const result = await executeIntent(whatsappNumber, intent, session)
-      
-      await recordParsingMetric({
-        userId: session.userId,
-        whatsappNumber,
-        messageText: caption || '[image]',
-        messageType: 'image',
-        strategyUsed: 'ai_pattern',
-        intentAction: intent.action,
-        confidence: intent.confidence,
-        success: true,
-        parseDurationMs: Date.now() - startTime
-      })
-      
-      return `${messages.ocrSuccess(1)}\n\n${result}`
-    } catch (aiError) {
-      logger.warn('AI parsing failed for OCR transaction, falling back to OCR data', { 
-        whatsappNumber,
-        userId: session.userId,
-        messageForAI,
-        error: aiError 
-      })
-      
-      // Fall back to OCR data if AI fails
-      const intent = {
-        action: 'add_expense' as const,
-        confidence: 0.8,
-        entities: {
-          amount: expense.amount,
-          category: expense.category,
-          description: expense.description,
-          type: expense.type,
-          date: expense.date,
-          paymentMethod: expense.paymentMethod,
-        }
-      }
-      
-      logger.info('Using fallback intent with OCR data', {
-        whatsappNumber,
-        userId: session.userId,
-        intent: {
-          action: intent.action,
-          confidence: intent.confidence,
-          entities: intent.entities
-        }
-      })
-
-      const result = await executeIntent(whatsappNumber, intent, session)
-      
-      await recordParsingMetric({
-        userId: session.userId,
-        whatsappNumber,
-        messageText: caption || '[image]',
-        messageType: 'image',
-        strategyUsed: 'local_nlp',
-        intentAction: 'add_expense',
-        confidence: 0.8,
-        success: true,
-        parseDurationMs: Date.now() - startTime
-      })
-      
-      return `${messages.ocrSuccess(1)}\n\n${result}`
+      // Show preview and ask for confirmation
+      return messages.ocrPreview([finalTransaction])
     }
   } catch (error) {
     logger.error('Critical error processing image', { 

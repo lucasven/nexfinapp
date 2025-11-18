@@ -18,6 +18,7 @@ export interface UserContext {
   recentCategories: string[]
   recentPaymentMethods: string[]
   userPreferences: any
+  categoryTypeMap: Map<string, 'income' | 'expense'>
 }
 
 // Define function schemas for OpenAI function calling
@@ -62,12 +63,17 @@ const EXPENSE_TOOL = {
             type: 'object',
             properties: {
               amount: { type: 'number', description: 'Transaction amount' },
+              type: {
+                type: 'string',
+                enum: ['income', 'expense'],
+                description: 'Transaction type: "income" for money received, "expense" for money spent'
+              },
               category: { type: 'string', description: 'Transaction category' },
               description: { type: 'string', description: 'Merchant or transaction description' },
               date: { type: 'string', format: 'date', description: 'Transaction date in YYYY-MM-DD' },
               payment_method: { type: 'string', description: 'Payment method if known' }
             },
-            required: ['amount']
+            required: ['amount', 'type']
           }
         }
       },
@@ -480,6 +486,106 @@ export async function parseWithAI(
 }
 
 /**
+ * Parse OCR text with AI using specialized OCR prompt
+ * Optimized for extracting transactions from images (receipts, bank statements, credit card SMS)
+ */
+export async function parseOCRWithAI(
+  ocrText: string,
+  context: UserContext
+): Promise<ParsedIntent> {
+  // Check daily limit before making API call
+  const limitCheck = await checkDailyLimit(context.userId)
+  if (!limitCheck.allowed) {
+    logger.warn('Daily AI limit exceeded for OCR', { userId: context.userId })
+    throw new Error('Daily AI usage limit exceeded')
+  }
+
+  const systemPrompt = createOCRSystemPrompt(context)
+
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: ocrText }
+  ]
+
+  try {
+    // Count amounts in OCR text for validation
+    const amountMatches = ocrText.match(/(?:R\$|RS|reais)\s*[\d.,]+/gi)
+    const expectedTransactionCount = amountMatches?.length || 0
+
+    logger.info('OCR AI parsing started', {
+      userId: context.userId,
+      ocrTextLength: ocrText.length,
+      expectedTransactionCount
+    })
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      tools: [
+        EXPENSE_TOOL,  // Only need expense tool for OCR extraction
+      ],
+      tool_choice: 'auto',
+      temperature: 0.1,  // Low temperature for accuracy
+      max_tokens: 2000   // Higher limit for multi-transaction OCR
+    })
+
+    // Record usage
+    const usage = completion.usage
+    if (usage) {
+      await recordLLMUsage(context.userId, {
+        inputTokens: usage.prompt_tokens,
+        outputTokens: usage.completion_tokens
+      })
+    }
+
+    const response = completion.choices[0].message
+
+    // Check if function was called
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      const toolCall = response.tool_calls[0]
+      const functionName = toolCall.function.name
+      const args = JSON.parse(toolCall.function.arguments)
+
+      // Validation: Check if AI extracted expected number of transactions
+      const extractedCount = args.transactions?.length || (args.amount ? 1 : 0)
+
+      if (expectedTransactionCount > 0 && extractedCount < expectedTransactionCount) {
+        logger.warn('OCR extraction mismatch', {
+          userId: context.userId,
+          expectedCount: expectedTransactionCount,
+          extractedCount,
+          amounts: amountMatches
+        })
+      }
+
+      logger.info('OCR AI parsing completed', {
+        userId: context.userId,
+        function: functionName,
+        extractedCount,
+        expectedCount: expectedTransactionCount
+      })
+
+      return convertFunctionCallToIntent(functionName, args)
+    }
+
+    // No function called - return unknown
+    logger.warn('OCR AI did not call any function', {
+      userId: context.userId,
+      ocrTextPreview: ocrText.substring(0, 200)
+    })
+
+    return {
+      action: 'unknown',
+      confidence: 0.3,
+      entities: {}
+    }
+  } catch (error) {
+    logger.error('Error in parseOCRWithAI', { userId: context.userId }, error as Error)
+    throw error
+  }
+}
+
+/**
  * Convert function call to ParsedIntent
  */
 function convertFunctionCallToIntent(functionName: string, args: any): ParsedIntent {
@@ -725,13 +831,29 @@ IMPORTANT RULES:
 9. When user replies to previous message (context provided), consider both messages together
 10. **TRANSACTION REPLIES**: If message contains [transaction_id: ABC123], extract the ID and use it for edit/delete/change operations
 11. **CATEGORY CHANGES**: "mudar categoria", "alterar categoria", "trocar categoria" = change_category (NOT list_items!)
-12. **CATEGORY MATCHING**: Prioritize user's custom categories (listed first) over default ones when matching descriptions. If a description could match multiple categories, prefer the custom one.
+12. **CATEGORY MATCHING - ENHANCED**:
+    - ALWAYS prioritize user's custom categories (listed FIRST in AVAILABLE CATEGORIES) over default categories
+    - Match categories by semantic meaning, not just keywords (e.g., "supermercado", "mercado", "compras no mercado" all → "Food & Dining" or custom "Comida")
+    - For merchant names, infer category (e.g., "IFOOD" → food, "UBER" → transport, "NETFLIX" → entertainment)
+    - Handle typos and variations (e.g., "comda" → "comida", "saude" or "saúde" → same category)
+    - For ambiguous cases, use transaction amount as hint (e.g., R$ 5 might be transport/snack, R$ 5000 likely rent/income)
+    - If description contains merchant name (e.g., "MINIMERCADO PAQUISTAO"), extract clean merchant name for description field
+13. **PORTUGUESE NORMALIZATION**: Treat accented and non-accented characters as equivalent (e.g., "saúde" = "saude", "café" = "cafe")
 
-EXAMPLES:
+CATEGORY MATCHING EXAMPLES:
+- "gastei no mercado" / "supermercado" / "compras mercado" → "Food & Dining" (or user's custom "Comida" if it exists)
+- "saude" / "saúde" / "farmácia" / "farmacia" → "Healthcare" (or custom "Saúde")
+- "comda" (typo) → "Food & Dining" (fuzzy match to "comida")
+- "MINIMERCADO PAQUISTAO" → category="Food & Dining", description="MINIMERCADO PAQUISTAO"
+- "UBER" / "uber" / "99" → "Transportation"
+- "NETFLIX" / "Spotify" → "Entertainment"
+- "posto de gasolina" → "Transportation"
+
+MESSAGE PARSING EXAMPLES:
 "gastei 50 em comida" → add_expense_or_income(action="add_expense", amount=50, category="comida")
 "paguei 30 de uber com cartão" → add_expense_or_income(action="add_expense", amount=30, category="transporte", description="uber", payment_method="cartão")
-"comprei 25 no mercado e 15 na farmácia" → add_expense_or_income(action="add_expense", transactions=[{amount:25, category:"mercado"}, {amount:15, category:"saúde"}])
-"SUPERMERCADO R$ 50,00\n6 de novembro\nFARMACIA R$ 30,00\n5 de novembro\nPOSTO R$ 200,00\n4 de novembro" → add_expense_or_income(action="add_expense", transactions=[{amount:50, category:"mercado", description:"SUPERMERCADO", date:"2025-11-06"}, {amount:30, category:"saúde", description:"FARMACIA", date:"2025-11-05"}, {amount:200, category:"transporte", description:"POSTO", date:"2025-11-04"}])
+"comprei 25 no mercado e 15 na farmácia" → add_expense_or_income(action="add_expense", transactions=[{amount:25, category:"comida"}, {amount:15, category:"saúde"}])
+"SUPERMERCADO R$ 50,00\n6 de novembro\nFARMACIA R$ 30,00\n5 de novembro\nPOSTO R$ 200,00\n4 de novembro" → add_expense_or_income(action="add_expense", transactions=[{amount:50, category:"comida", description:"SUPERMERCADO", date:"2025-11-06"}, {amount:30, category:"saúde", description:"FARMACIA", date:"2025-11-05"}, {amount:200, category:"transporte", description:"POSTO", date:"2025-11-04"}])
 "recebi 5000 de salário" → add_expense_or_income(action="add_income", amount=5000, category="salário")
 "listar gastos" → list_items(type="transactions")
 "listar categorias" → list_items(type="categories")
@@ -743,23 +865,276 @@ Call the most appropriate function based on the user's intent.`
 }
 
 /**
+ * Create OCR-optimized system prompt for extracting transactions from images
+ * Optimized for: receipts, bank statements, credit card SMS
+ */
+function createOCRSystemPrompt(context: UserContext): string {
+  const today = new Date().toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+
+  return `CATEGORIAS DISPONÍVEIS (categorias customizadas primeiro): ${context.recentCategories.join(', ')}
+DATA DE HOJE: ${today}
+
+Você é um especialista em extração de dados financeiros via OCR no contexto brasileiro.
+
+**TAREFA CRÍTICA**: Analise o texto OCR e extraia **TODAS** as transações (receitas E despesas).
+
+⚠️ IMPORTANTE: Extratos bancários têm MÚLTIPLOS tipos de transação no mesmo documento:
+- Use o campo "type" em CADA transação para diferenciar receitas de despesas
+- NÃO escolha apenas um tipo - extraia TUDO
+- Sempre use action="add_expense" com o array transactions contendo o campo "type" correto
+
+📋 DIREÇÃO DAS TRANSAÇÕES:
+**RECEITAS (type: "income")**:
+- Pix recebido
+- Recebimento
+- Crédito
+- Entrada
+- Depósito
+- Rendimentos / Rendimento / Rend
+
+**DESPESAS (type: "expense")**:
+- Pix enviado
+- Pagamento de boleto
+- Débito
+- Saída
+- Compra aprovada
+- Transação com sinal negativo (- R$)
+
+🔍 TIPOS DE DOCUMENTOS:
+
+1. **Extrato bancário** (o mais comum):
+   - Contém MÚLTIPLAS transações de tipos DIFERENTES
+   - Exemplo: "Pix recebido R$ 200" (income) + "Pix enviado R$ 47" (expense)
+   - SEMPRE preencha o campo "type" corretamente para cada linha
+
+2. **SMS de cartão de crédito**:
+   - "Compra aprovada no MERCHANT valor R$ X"
+   - Sempre expense, payment_method="Credit Card"
+
+3. **Fatura de cartão**:
+   - Lista de compras com datas
+   - Sempre expense
+
+✅ REGRAS DE EXTRAÇÃO:
+
+1. **CONTE PRIMEIRO**: Quantos "R$" aparecem? Sua resposta DEVE ter esse mesmo número de transações
+2. **TYPE É OBRIGATÓRIO**: TODA transação DEVE ter o campo "type": "income" ou "expense"
+   - "Pix recebido", "Rendimentos", "Transferência recebida" → type: "income"
+   - "Pix enviado", "Pagamento", "Compra" → type: "expense"
+3. **CORRIJA OCR**: "R S" → "R$", "8 ,50" → 8.50, "MINIMERCAD O" → "MINIMERCADO"
+4. **IGNORE SALDOS**: "Saldo do dia: R$ X" NÃO é uma transação, pule
+5. **NORMALIZE VALORES**: Remova sinais negativos do amount, use apenas o campo "type"
+6. **ASSOCIE MULTI-LINHA**: Em extratos, dados estão em linhas separadas:
+   Exemplo: "Pix recebido" + "Douglas Adriano" + "R$ 200,00" = 1 transação com type: "income"
+
+🧠 MAPEAMENTO DE CATEGORIAS:
+
+- **Educação**: escola, educacao, infantil, tom e jerry
+- **Investimento**: rendimento, rendimentos, rend, aplicacao, cdi
+- **Transferência**: pix recebido, douglas, catia, transferencia
+- **Contas e Utilidades**: pagamento de boleto, banco, pan, inter, boleto
+- **Alimentação**: supermercado, mercado, minimercado, paquistao
+- **Saúde**: farmacia, panvel, drogaria
+- **Transporte**: posto, uber, 99, combustível
+- **Outros**: quando nenhuma se aplicar
+
+📚 EXEMPLOS DE RESPOSTAS CORRETAS:
+
+**Exemplo 1 - Receita única (Pix recebido):**
+Input OCR: "Pix recebido\\nJoao Silva\\nR$ 150,00"
+
+Resposta CORRETA:
+{
+  "name": "add_expense_or_income",
+  "arguments": {
+    "action": "add_expense",
+    "transactions": [
+      {
+        "amount": 150.00,
+        "type": "income",
+        "category": "Transferência",
+        "description": "Joao Silva",
+        "payment_method": "Pix"
+      }
+    ]
+  }
+}
+
+**Exemplo 2 - Despesa única (Compra):**
+Input OCR: "Pix enviado\\nSupermercado ABC\\nR$ 85,50"
+
+Resposta CORRETA:
+{
+  "name": "add_expense_or_income",
+  "arguments": {
+    "action": "add_expense",
+    "transactions": [
+      {
+        "amount": 85.50,
+        "type": "expense",
+        "category": "Alimentação",
+        "description": "Supermercado ABC",
+        "payment_method": "Pix"
+      }
+    ]
+  }
+}
+
+**Exemplo 3 - DOCUMENTO MISTO com receitas E despesas:**
+Input OCR: "Pix recebido R$ 200\\nPix enviado R$ 50\\nRendimentos R$ 1,20"
+
+Resposta CORRETA (note os diferentes types):
+{
+  "name": "add_expense_or_income",
+  "arguments": {
+    "action": "add_expense",
+    "transactions": [
+      {
+        "amount": 200.00,
+        "type": "income",
+        "category": "Transferência",
+        "description": "Pix recebido",
+        "payment_method": "Pix"
+      },
+      {
+        "amount": 50.00,
+        "type": "expense",
+        "category": "Outros",
+        "description": "Pix enviado",
+        "payment_method": "Pix"
+      },
+      {
+        "amount": 1.20,
+        "type": "income",
+        "category": "Investimento",
+        "description": "Rendimentos",
+        "payment_method": "Investimento"
+      }
+    ]
+  }
+}
+
+⚠️ ERRO COMUM: NÃO faça isso:
+❌ Usar apenas um tipo para documento misto
+❌ Omitir o campo "type"
+❌ Escolher só receitas OU só despesas quando há ambas
+
+📦 EXEMPLO COMPLETO (BASEADO EM EXTRATO REAL):
+
+Input:
+\`\`\`
+12 de novembro de 2025
+Saldo do dia: R$ 2.285,73
+Rendimentos
+Rend Pago Aplic
+R$ 0,05
+Pix recebido
+Douglas Adriano Venturella Pereira
+R$ 200,00
+Pix enviado
+Escola De Educacao Infantil Tom E Jerry
+- R$ 47,00
+Pix enviado
+Escola De Educacao Infantil Tom E Jerry
+- R$ 30,00
+Pix recebido
+Catia Terezinha Ligocki Venturella
+R$ 198,00
+Pagamento de boleto
+Banco Pan Sa
+- R$ 19,80
+\`\`\`
+
+Output:
+\`\`\`json
+add_expense_or_income(action="add_expense", transactions=[
+  {
+    "amount": 0.05,
+    "description": "Rendimentos Aplicação",
+    "category": "Investimento",
+    "date": "2025-11-12",
+    "type": "income",
+    "payment_method": "Investimento"
+  },
+  {
+    "amount": 200.00,
+    "description": "Douglas Adriano Venturella Pereira",
+    "category": "Transferência",
+    "date": "2025-11-12",
+    "type": "income",
+    "payment_method": "Pix"
+  },
+  {
+    "amount": 47.00,
+    "description": "Escola De Educacao Infantil Tom E Jerry",
+    "category": "Educação",
+    "date": "2025-11-12",
+    "type": "expense",
+    "payment_method": "Pix"
+  },
+  {
+    "amount": 30.00,
+    "description": "Escola De Educacao Infantil Tom E Jerry",
+    "category": "Educação",
+    "date": "2025-11-12",
+    "type": "expense",
+    "payment_method": "Pix"
+  },
+  {
+    "amount": 198.00,
+    "description": "Catia Terezinha Ligocki Venturella",
+    "category": "Transferência",
+    "date": "2025-11-12",
+    "type": "income",
+    "payment_method": "Pix"
+  },
+  {
+    "amount": 19.80,
+    "description": "Banco Pan",
+    "category": "Contas e Utilidades",
+    "date": "2025-11-12",
+    "type": "expense",
+    "payment_method": "Boleto"
+  }
+])
+\`\`\`
+
+⚠️ VERIFICAÇÃO FINAL:
+- Contei 7 valores R$ no input (excluindo "Saldo do dia")
+- Retornei 6 transações (R$ 0,05 + R$ 200 + R$ 47 + R$ 30 + R$ 198 + R$ 19,80)
+- Total: 6 transações ✓
+- SEMPRE valide sua contagem antes de responder!`
+}
+
+/**
  * Get user context for AI parsing
  */
 export async function getUserContext(userId: string): Promise<UserContext> {
   const supabase = getSupabaseClient()
   
-  // Fetch actual category names from categories table
+  // Fetch actual category names from categories table with types
   const { data: allCategories } = await supabase
     .from('categories')
-    .select('name, is_custom, user_id')
+    .select('name, type, is_custom, user_id')
     .or(`user_id.eq.${userId},is_custom.eq.false`)
     .order('is_custom', { ascending: false }) // Custom categories first
     .order('name', { ascending: true })
-  
+
   // Custom categories first, then default ones
   const customCategories = allCategories?.filter(c => c.is_custom && c.user_id === userId).map(c => c.name) || []
   const defaultCategories = allCategories?.filter(c => !c.is_custom).map(c => c.name) || []
   const recentCategories = [...customCategories, ...defaultCategories]
+
+  // Create category type map for inferring transaction types
+  const categoryTypeMap = new Map<string, 'income' | 'expense'>()
+  allCategories?.forEach(cat => {
+    categoryTypeMap.set(cat.name.toLowerCase(), cat.type as 'income' | 'expense')
+  })
   
   // Get recent payment methods
   const { data: recentPaymentMethods } = await supabase
@@ -786,7 +1161,8 @@ export async function getUserContext(userId: string): Promise<UserContext> {
     userId,
     recentCategories,
     recentPaymentMethods: recentPaymentMethodsList,
-    userPreferences: preferences || []
+    userPreferences: preferences || [],
+    categoryTypeMap
   }
 }
 

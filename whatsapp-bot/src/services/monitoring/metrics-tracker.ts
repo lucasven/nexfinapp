@@ -16,6 +16,7 @@ export type MessageType = 'text' | 'image' | 'command'
 export type ParsingStrategy =
   | 'correction_state'
   | 'duplicate_confirmation'
+  | 'ocr_confirmation'
   | 'correction_intent'
   | 'explicit_command'
   | 'learned_pattern'
@@ -39,6 +40,16 @@ export interface ParsingMetric {
   executionDurationMs?: number
   permissionRequired?: string
   permissionGranted?: boolean
+  // New fields for enhanced intent tracking
+  intentEntities?: Record<string, any>
+  executionResult?: {
+    transactionIds?: string[]
+    success: boolean
+    errorDetails?: string
+  }
+  cacheHit?: boolean
+  cacheSimilarity?: number
+  linkedTransactionId?: string
 }
 
 export interface StrategyStats {
@@ -54,11 +65,11 @@ export interface StrategyStats {
 /**
  * Record a parsing metric to the database
  */
-export async function recordParsingMetric(metric: ParsingMetric): Promise<void> {
+export async function recordParsingMetric(metric: ParsingMetric): Promise<string | null> {
   try {
     const supabase = getSupabaseClient()
-    
-    const { error } = await supabase
+
+    const { data, error } = await supabase
       .from('parsing_metrics')
       .insert({
         user_id: metric.userId || null,
@@ -73,15 +84,27 @@ export async function recordParsingMetric(metric: ParsingMetric): Promise<void> 
         parse_duration_ms: metric.parseDurationMs || null,
         execution_duration_ms: metric.executionDurationMs || null,
         permission_required: metric.permissionRequired || null,
-        permission_granted: metric.permissionGranted || null
+        permission_granted: metric.permissionGranted || null,
+        // New fields for enhanced intent tracking
+        intent_entities: metric.intentEntities || null,
+        execution_result: metric.executionResult || null,
+        cache_hit: metric.cacheHit || false,
+        cache_similarity: metric.cacheSimilarity || null,
+        linked_transaction_id: metric.linkedTransactionId || null
       })
+      .select('id')
+      .single()
 
     if (error) {
       logger.error('Failed to record parsing metric', { error: error.message })
+      return null
     }
+
+    return data?.id || null
   } catch (error) {
     // Don't throw - metrics should never break the main flow
     logger.error('Error recording parsing metric', error as Error)
+    return null
   }
 }
 
