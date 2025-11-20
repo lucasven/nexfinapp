@@ -200,7 +200,18 @@ export async function generateRecurringPayments(recurringTransactionId: string) 
 
   // Generate for current and next 2 months
   for (let i = 0; i < 3; i++) {
-    const targetDate = new Date(currentYear, currentMonth + i, recurring.day_of_month)
+    const targetMonth = currentMonth + i
+    const targetYear = currentYear + Math.floor(targetMonth / 12)
+    const adjustedMonth = targetMonth % 12
+
+    // Get the last day of the target month
+    const lastDayOfMonth = new Date(targetYear, adjustedMonth + 1, 0).getDate()
+
+    // Use the smaller of day_of_month and last day of month
+    // This handles cases like day_of_month=31 in February
+    const actualDay = Math.min(recurring.day_of_month, lastDayOfMonth)
+
+    const targetDate = new Date(targetYear, adjustedMonth, actualDay)
     const dueDate = targetDate.toISOString().split("T")[0]
 
     // Check if payment already exists
@@ -246,6 +257,11 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
   }
 
   if (paid && !payment.transaction_id) {
+    // Generate user-readable ID using the database function
+    const { data: readableIdData, error: idError } = await supabase.rpc("generate_transaction_id")
+
+    if (idError) throw idError
+
     // Create actual transaction
     const { data: transaction } = await supabase
       .from("transactions")
@@ -257,6 +273,7 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
         description: payment.recurring_transaction.description,
         payment_method: payment.recurring_transaction.payment_method,
         date: payment.due_date,
+        user_readable_id: readableIdData,
       })
       .select()
       .single()
