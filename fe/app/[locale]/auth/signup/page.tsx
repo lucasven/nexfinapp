@@ -133,25 +133,41 @@ export default function SignupPage() {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (user) {
-          // Get enhanced user properties for analytics
-          const enhancedProperties = await getUserAnalyticsProperties()
+          // Get enhanced user properties for analytics (non-blocking)
+          try {
+            const enhancedProperties = await getUserAnalyticsProperties()
 
-          // Identify user in PostHog with comprehensive properties
-          if (enhancedProperties) {
-            identifyUser(user.id, enhancedProperties)
+            // Identify user in PostHog with comprehensive properties
+            if (enhancedProperties) {
+              identifyUser(user.id, enhancedProperties)
+            }
+
+            // Track signup completion
+            trackEvent(AnalyticsEvent.USER_SIGNED_UP, {
+              auth_method: 'email_password',
+              source: 'beta_invitation',
+              locale: enhancedProperties?.locale || locale,
+            })
+
+            // Track invitation acceptance
+            trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
+              email,
+            })
+          } catch (analyticsError) {
+            // Log but don't block signup if analytics fails
+            console.warn('Failed to fetch analytics properties:', analyticsError)
+
+            // Track with basic info
+            identifyUser(user.id, { email: user.email })
+            trackEvent(AnalyticsEvent.USER_SIGNED_UP, {
+              auth_method: 'email_password',
+              source: 'beta_invitation',
+              locale: locale,
+            })
+            trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
+              email,
+            })
           }
-
-          // Track signup completion
-          trackEvent(AnalyticsEvent.USER_SIGNED_UP, {
-            auth_method: 'email_password',
-            source: 'beta_invitation',
-            locale: enhancedProperties?.locale || locale,
-          })
-
-          // Track invitation acceptance
-          trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
-            email,
-          })
         }
 
         setSuccess(true)

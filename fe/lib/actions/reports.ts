@@ -130,8 +130,8 @@ export async function getMonthlyReport(month: number, year: number) {
 
   // Track report viewing
   await trackServerEvent(
-    AnalyticsEvent.REPORT_VIEWED,
     user.id,
+    AnalyticsEvent.REPORT_VIEWED,
     {
       report_type: 'monthly',
       report_month: month,
@@ -192,8 +192,8 @@ export async function getYearlyComparison(year: number) {
   const totalExpenses = monthlyData.reduce((sum, m) => sum + m.expenses, 0)
 
   await trackServerEvent(
-    AnalyticsEvent.REPORT_VIEWED,
     user.id,
+    AnalyticsEvent.REPORT_VIEWED,
     {
       report_type: 'yearly',
       report_year: year,

@@ -39,21 +39,33 @@ export default function LoginPage() {
 
       if (error) throw error
 
-      // Get enhanced user properties for analytics
-      const enhancedProperties = await getUserAnalyticsProperties()
+      // Get enhanced user properties for analytics (non-blocking)
+      try {
+        const enhancedProperties = await getUserAnalyticsProperties()
 
-      // Identify user in PostHog with comprehensive properties
-      if (enhancedProperties) {
-        identifyUser(data.user.id, enhancedProperties)
+        // Identify user in PostHog with comprehensive properties
+        if (enhancedProperties) {
+          identifyUser(data.user.id, enhancedProperties)
+        }
+
+        // Track login event
+        trackEvent(AnalyticsEvent.USER_LOGGED_IN, {
+          auth_method: 'email_password',
+          locale: enhancedProperties?.locale || locale,
+          has_whatsapp_connected: enhancedProperties?.has_whatsapp_connected || false,
+          total_transactions: enhancedProperties?.total_transactions || 0,
+        })
+      } catch (analyticsError) {
+        // Log but don't block login if analytics fails
+        console.warn('Failed to fetch analytics properties:', analyticsError)
+
+        // Track with basic info
+        identifyUser(data.user.id, { email: data.user.email })
+        trackEvent(AnalyticsEvent.USER_LOGGED_IN, {
+          auth_method: 'email_password',
+          locale: locale,
+        })
       }
-
-      // Track login event
-      trackEvent(AnalyticsEvent.USER_LOGGED_IN, {
-        auth_method: 'email_password',
-        locale: enhancedProperties?.locale || locale,
-        has_whatsapp_connected: enhancedProperties?.has_whatsapp_connected || false,
-        total_transactions: enhancedProperties?.total_transactions || 0,
-      })
 
       router.push("/")
       router.refresh()

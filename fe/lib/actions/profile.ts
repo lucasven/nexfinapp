@@ -104,8 +104,8 @@ export async function updateProfile(data: { display_name?: string; locale?: 'pt-
   // Track profile update event
   const changedFields = Object.keys(data)
   await trackServerEvent(
-    AnalyticsEvent.PROFILE_UPDATED,
     user.id,
+    AnalyticsEvent.PROFILE_UPDATED,
     {
       changed_fields: changedFields,
       has_display_name: !!data.display_name,
@@ -164,8 +164,8 @@ export async function setUserLocale(locale: 'pt-br' | 'en') {
 
   // Track locale change event
   await trackServerEvent(
-    AnalyticsEvent.LOCALE_CHANGED,
     user.id,
+    AnalyticsEvent.LOCALE_CHANGED,
     {
       old_locale: oldLocale,
       new_locale: locale,
@@ -230,8 +230,8 @@ export async function addAuthorizedNumber(data: {
 
   // Track WhatsApp number addition
   await trackServerEvent(
-    AnalyticsEvent.WHATSAPP_NUMBER_ADDED,
     user.id,
+    AnalyticsEvent.WHATSAPP_NUMBER_ADDED,
     {
       is_primary: data.is_primary,
       permission_can_view: data.permissions.can_view,
@@ -316,8 +316,8 @@ export async function deleteAuthorizedNumber(id: string) {
 
   // Track WhatsApp number removal
   await trackServerEvent(
-    AnalyticsEvent.WHATSAPP_NUMBER_REMOVED,
     user.id,
+    AnalyticsEvent.WHATSAPP_NUMBER_REMOVED,
     {
       was_primary: numberToDelete?.is_primary || false,
     }

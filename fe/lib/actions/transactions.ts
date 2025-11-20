@@ -66,6 +66,14 @@ export async function createTransaction(formData: {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  // Check if this is the user's first transaction BEFORE insertion to avoid race conditions
+  const { count: existingTransactionCount } = await supabase
+    .from("transactions")
+    .select("*", { count: 'exact', head: true })
+    .eq("user_id", user.id)
+
+  const isFirstTransaction = existingTransactionCount === 0
+
   // Generate user-readable ID using the database function
   const { data: readableIdData, error: idError } = await supabase.rpc("generate_transaction_id")
 
@@ -82,14 +90,6 @@ export async function createTransaction(formData: {
     .single()
 
   if (error) throw error
-
-  // Check if this is the user's first transaction
-  const { count: transactionCount } = await supabase
-    .from("transactions")
-    .select("*", { count: 'exact', head: true })
-    .eq("user_id", user.id)
-
-  const isFirstTransaction = transactionCount === 1
 
   // Track transaction creation event
   await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_CREATED, {

@@ -92,8 +92,8 @@ export async function createRecurringTransaction(formData: {
 
   // Track recurring transaction creation
   await trackServerEvent(
-    AnalyticsEvent.RECURRING_TRANSACTION_CREATED,
     user.id,
+    AnalyticsEvent.RECURRING_TRANSACTION_CREATED,
     {
       transaction_type: formData.type,
       amount: formData.amount,
@@ -141,8 +141,8 @@ export async function updateRecurringTransaction(
   // Track recurring transaction update
   const changedFields = Object.keys(formData)
   await trackServerEvent(
-    AnalyticsEvent.RECURRING_TRANSACTION_UPDATED,
     user.id,
+    AnalyticsEvent.RECURRING_TRANSACTION_UPDATED,
     {
       changed_fields: changedFields,
       is_active_changed: formData.is_active !== undefined,
@@ -168,8 +168,8 @@ export async function deleteRecurringTransaction(id: string) {
 
   // Track recurring transaction deletion
   await trackServerEvent(
-    AnalyticsEvent.RECURRING_TRANSACTION_DELETED,
     user.id,
+    AnalyticsEvent.RECURRING_TRANSACTION_DELETED,
     {}
   )
 
@@ -273,8 +273,8 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
 
     // Track payment marked as paid
     await trackServerEvent(
-      AnalyticsEvent.RECURRING_PAYMENT_PAID,
       user.id,
+      AnalyticsEvent.RECURRING_PAYMENT_PAID,
       {
         transaction_type: payment.recurring_transaction.type,
         amount: payment.recurring_transaction.amount,
@@ -296,8 +296,8 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
 
     // Track payment marked as unpaid
     await trackServerEvent(
-      AnalyticsEvent.RECURRING_PAYMENT_UNPAID,
       user.id,
+      AnalyticsEvent.RECURRING_PAYMENT_UNPAID,
       {
         transaction_type: payment.recurring_transaction.type,
         amount: payment.recurring_transaction.amount,

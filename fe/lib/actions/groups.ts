@@ -55,10 +55,10 @@ export async function toggleGroupAuthorization(
 
   // Track group authorization toggle
   await trackServerEvent(
+    user.id,
     isActive
       ? AnalyticsEvent.WHATSAPP_GROUP_AUTHORIZED
       : AnalyticsEvent.WHATSAPP_GROUP_DEACTIVATED,
-    user.id,
     {
       group_id: groupId,
     }
@@ -88,8 +88,8 @@ export async function deleteAuthorizedGroup(groupId: string): Promise<void> {
 
   // Track group removal
   await trackServerEvent(
-    AnalyticsEvent.WHATSAPP_GROUP_REMOVED,
     user.id,
+    AnalyticsEvent.WHATSAPP_GROUP_REMOVED,
     {
       group_id: groupId,
     }
