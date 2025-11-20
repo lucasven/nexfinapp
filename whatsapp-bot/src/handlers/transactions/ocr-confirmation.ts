@@ -7,6 +7,8 @@ import { getUserSession } from '../../auth/session-manager.js'
 import { messages } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { handleAddExpense } from './expenses.js'
+import { trackEvent } from '../../analytics/index.js'
+import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
 
 // In-memory storage for pending OCR transactions
 // TODO: Consider moving to Redis or database for production scalability
@@ -148,6 +150,16 @@ export async function handleOcrConfirmation(
   // Clear pending transactions
   clearPendingOcrTransactions(whatsappNumber)
 
+  // Track OCR confirmation accepted
+  trackEvent(
+    WhatsAppAnalyticsEvent.OCR_CONFIRMATION_ACCEPTED,
+    pendingState.userId,
+    {
+      [WhatsAppAnalyticsProperty.EXTRACTION_COUNT]: transactions.length,
+      success_count: successCount,
+    }
+  )
+
   // Add summary message at the end
   messageList.push(messages.ocrAllAdded(transactions.length, successCount))
 
@@ -172,6 +184,16 @@ export async function handleOcrCancel(whatsappNumber: string): Promise<string> {
     logger.warn('No pending OCR transactions to cancel', { whatsappNumber })
     return messages.ocrNoPending
   }
+
+  // Track OCR confirmation rejected
+  trackEvent(
+    WhatsAppAnalyticsEvent.OCR_CONFIRMATION_REJECTED,
+    pendingState.userId,
+    {
+      [WhatsAppAnalyticsProperty.EXTRACTION_COUNT]: pendingState.transactions.length,
+      rejection_reason: 'user_cancelled',
+    }
+  )
 
   clearPendingOcrTransactions(whatsappNumber)
 

@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
+import { updateUserPropertiesInAnalytics } from "@/lib/analytics/user-properties"
 
 export async function getTransactions(filters?: {
   startDate?: string
@@ -65,6 +66,14 @@ export async function createTransaction(formData: {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  // Check if this is the user's first transaction BEFORE insertion to avoid race conditions
+  const { count: existingTransactionCount } = await supabase
+    .from("transactions")
+    .select("*", { count: 'exact', head: true })
+    .eq("user_id", user.id)
+
+  const isFirstTransaction = existingTransactionCount === 0
+
   // Generate user-readable ID using the database function
   const { data: readableIdData, error: idError } = await supabase.rpc("generate_transaction_id")
 
@@ -88,7 +97,13 @@ export async function createTransaction(formData: {
     [AnalyticsProperty.TRANSACTION_AMOUNT]: formData.amount,
     [AnalyticsProperty.TRANSACTION_TYPE]: formData.type,
     [AnalyticsProperty.CATEGORY_ID]: formData.category_id,
+    is_first_transaction: isFirstTransaction,
   })
+
+  // Refresh user properties in analytics after first transaction (key milestone)
+  if (isFirstTransaction) {
+    await updateUserPropertiesInAnalytics(user.id)
+  }
 
   revalidatePath("/")
   return data

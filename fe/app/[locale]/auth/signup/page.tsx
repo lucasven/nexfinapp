@@ -10,14 +10,16 @@ import { Label } from "@/components/ui/label"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Link } from "@/lib/localization/link"
-import { useTranslations } from 'next-intl'
-import { trackEvent } from "@/lib/analytics/tracker"
+import { useTranslations, useLocale } from 'next-intl'
+import { trackEvent, identifyUser } from "@/lib/analytics/tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
+import { getUserAnalyticsProperties } from "@/lib/actions/analytics"
 import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 
 export default function SignupPage() {
   const t = useTranslations()
+  const locale = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
@@ -127,10 +129,46 @@ export default function SignupPage() {
 
         if (updateError) throw updateError
 
-        // Track invitation acceptance
-        trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
-          email,
-        })
+        // Get current user session
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user) {
+          // Get enhanced user properties for analytics (non-blocking)
+          try {
+            const enhancedProperties = await getUserAnalyticsProperties()
+
+            // Identify user in PostHog with comprehensive properties
+            if (enhancedProperties) {
+              identifyUser(user.id, enhancedProperties)
+            }
+
+            // Track signup completion
+            trackEvent(AnalyticsEvent.USER_SIGNED_UP, {
+              auth_method: 'email_password',
+              source: 'beta_invitation',
+              locale: enhancedProperties?.locale || locale,
+            })
+
+            // Track invitation acceptance
+            trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
+              email,
+            })
+          } catch (analyticsError) {
+            // Log but don't block signup if analytics fails
+            console.warn('Failed to fetch analytics properties:', analyticsError)
+
+            // Track with basic info
+            identifyUser(user.id, { email: user.email })
+            trackEvent(AnalyticsEvent.USER_SIGNED_UP, {
+              auth_method: 'email_password',
+              source: 'beta_invitation',
+              locale: locale,
+            })
+            trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
+              email,
+            })
+          }
+        }
 
         setSuccess(true)
         setTimeout(() => {
@@ -151,7 +189,7 @@ export default function SignupPage() {
         }
 
         // Proceed with signup
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -161,11 +199,29 @@ export default function SignupPage() {
 
         if (error) throw error
 
-        // Track invitation acceptance if this was an invited user
-        if (isInvited) {
-          trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
-            email,
+        // If user was created successfully, identify and track
+        if (data.user) {
+          // Identify user in PostHog
+          identifyUser(data.user.id, {
+            email: data.user.email,
+            locale: locale,
+            is_admin: false,
+            account_created_at: data.user.created_at,
           })
+
+          // Track signup event
+          trackEvent(AnalyticsEvent.USER_SIGNED_UP, {
+            auth_method: 'email_password',
+            source: isInvited ? 'beta_invitation' : 'beta_approved',
+            locale: locale,
+          })
+
+          // Track invitation acceptance if this was an invited user
+          if (isInvited) {
+            trackEvent(AnalyticsEvent.USER_ACCEPTED_BETA_INVITATION, {
+              email,
+            })
+          }
         }
 
         setSuccess(true)

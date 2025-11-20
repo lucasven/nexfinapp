@@ -32,7 +32,7 @@ function getPostHogClient(): PostHog {
 
 /**
  * Track an analytics event from server-side code
- * 
+ *
  * @param userId - User ID (distinct_id in PostHog)
  * @param event - The event to track
  * @param properties - Optional event properties
@@ -44,10 +44,19 @@ export async function trackServerEvent(
 ): Promise<void> {
   try {
     const client = getPostHogClient()
+
+    // Add consistent platform and environment context
+    const enhancedProperties = {
+      ...properties,
+      platform: 'web',
+      source: 'frontend',
+      environment: process.env.NODE_ENV || 'production',
+    }
+
     client.capture({
       distinctId: userId,
       event,
-      properties,
+      properties: enhancedProperties,
     })
   } catch (error) {
     console.error('Failed to track server event:', error)

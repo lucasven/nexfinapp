@@ -6,6 +6,8 @@ import { checkForDuplicate } from '../../services/detection/duplicate-detector.j
 import { storePendingTransaction } from './duplicate-confirmation.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { findCategoryWithFallback } from '../../services/category-matcher.js'
+import { trackEvent } from '../../analytics/index.js'
+import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
 
 export async function handleAddExpense(
   whatsappNumber: string,
@@ -67,8 +69,20 @@ export async function handleAddExpense(
     }
 
     const duplicateCheck = await checkForDuplicate(session.userId, expenseData)
-    
+
     if (duplicateCheck.isDuplicate) {
+      // Track duplicate detection
+      trackEvent(
+        WhatsAppAnalyticsEvent.WHATSAPP_DUPLICATE_DETECTED,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.TRANSACTION_AMOUNT]: amount,
+          [WhatsAppAnalyticsProperty.TRANSACTION_TYPE]: type || 'expense',
+          duplicate_confidence: duplicateCheck.confidence,
+          auto_blocked: duplicateCheck.confidence >= 0.95,
+        }
+      )
+
       if (duplicateCheck.confidence >= 0.95) {
         // Auto-block high confidence duplicates
         return messages.duplicateBlocked(duplicateCheck.reason || 'Transação muito similar encontrada')
@@ -121,7 +135,52 @@ export async function handleAddExpense(
 
     if (error) {
       logger.error('Error creating transaction', { whatsappNumber, transactionId: userReadableId }, error)
+
+      // Track transaction creation failure
+      trackEvent(
+        WhatsAppAnalyticsEvent.WHATSAPP_TRANSACTION_FAILED,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.TRANSACTION_AMOUNT]: amount,
+          [WhatsAppAnalyticsProperty.TRANSACTION_TYPE]: type || 'expense',
+          [WhatsAppAnalyticsProperty.ERROR_MESSAGE]: error.message,
+        }
+      )
+
       return messages.expenseError
+    }
+
+    // Get category name for tracking
+    const categoryName = data.category?.name || 'Sem categoria'
+
+    // Track successful transaction creation
+    trackEvent(
+      WhatsAppAnalyticsEvent.WHATSAPP_TRANSACTION_CREATED,
+      session.userId,
+      {
+        [WhatsAppAnalyticsProperty.TRANSACTION_ID]: data.id,
+        [WhatsAppAnalyticsProperty.TRANSACTION_AMOUNT]: amount,
+        [WhatsAppAnalyticsProperty.TRANSACTION_TYPE]: type || 'expense',
+        [WhatsAppAnalyticsProperty.TRANSACTION_SOURCE]: 'manual',
+        [WhatsAppAnalyticsProperty.CATEGORY_ID]: categoryId,
+        [WhatsAppAnalyticsProperty.CATEGORY_NAME]: categoryName,
+        [WhatsAppAnalyticsProperty.CATEGORY_MATCHING_METHOD]: categoryMatch.matchType,
+        category_match_confidence: matchConfidence,
+      }
+    )
+
+    // Track category matching event
+    if (category) {
+      trackEvent(
+        WhatsAppAnalyticsEvent.NLP_CATEGORY_MATCHED,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.CATEGORY_NAME]: matchedCategoryName,
+          [WhatsAppAnalyticsProperty.CATEGORY_MATCHING_METHOD]: categoryMatch.matchType,
+          [WhatsAppAnalyticsProperty.INTENT_CONFIDENCE]: matchConfidence,
+          input_category: category,
+        }
+      )
     }
 
     // Link back from parsing_metrics to transaction (bidirectional link)
@@ -152,7 +211,6 @@ export async function handleAddExpense(
       }
     }
 
-    const categoryName = data.category?.name || 'Sem categoria'
     const formattedDate = formatDate(new Date(transactionDate))
     const paymentMethodText = paymentMethod ? `\n💳 Método: ${paymentMethod}` : ''
     const transactionIdText = `\n🆔 ID: ${userReadableId}`

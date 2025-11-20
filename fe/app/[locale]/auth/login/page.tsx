@@ -10,11 +10,15 @@ import { Label } from "@/components/ui/label"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Link } from "@/lib/localization/link"
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { Loader2 } from "lucide-react"
+import { identifyUser, trackEvent } from "@/lib/analytics/tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
+import { getUserAnalyticsProperties } from "@/lib/actions/analytics"
 
 export default function LoginPage() {
   const t = useTranslations()
+  const locale = useLocale()
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -28,12 +32,40 @@ export default function LoginPage() {
 
     try {
       const supabase = getSupabaseBrowserClient()
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) throw error
+
+      // Get enhanced user properties for analytics (non-blocking)
+      try {
+        const enhancedProperties = await getUserAnalyticsProperties()
+
+        // Identify user in PostHog with comprehensive properties
+        if (enhancedProperties) {
+          identifyUser(data.user.id, enhancedProperties)
+        }
+
+        // Track login event
+        trackEvent(AnalyticsEvent.USER_LOGGED_IN, {
+          auth_method: 'email_password',
+          locale: enhancedProperties?.locale || locale,
+          has_whatsapp_connected: enhancedProperties?.has_whatsapp_connected || false,
+          total_transactions: enhancedProperties?.total_transactions || 0,
+        })
+      } catch (analyticsError) {
+        // Log but don't block login if analytics fails
+        console.warn('Failed to fetch analytics properties:', analyticsError)
+
+        // Track with basic info
+        identifyUser(data.user.id, { email: data.user.email })
+        trackEvent(AnalyticsEvent.USER_LOGGED_IN, {
+          auth_method: 'email_password',
+          locale: locale,
+        })
+      }
 
       router.push("/")
       router.refresh()

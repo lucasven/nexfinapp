@@ -3,6 +3,8 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { AuthorizedGroup } from "@/lib/types"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 
 /**
  * Get all authorized groups for the current user
@@ -51,6 +53,17 @@ export async function toggleGroupAuthorization(
 
   if (error) throw error
 
+  // Track group authorization toggle
+  await trackServerEvent(
+    user.id,
+    isActive
+      ? AnalyticsEvent.WHATSAPP_GROUP_AUTHORIZED
+      : AnalyticsEvent.WHATSAPP_GROUP_DEACTIVATED,
+    {
+      group_id: groupId,
+    }
+  )
+
   revalidatePath("/profile")
 }
 
@@ -72,6 +85,15 @@ export async function deleteAuthorizedGroup(groupId: string): Promise<void> {
     .eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track group removal
+  await trackServerEvent(
+    user.id,
+    AnalyticsEvent.WHATSAPP_GROUP_REMOVED,
+    {
+      group_id: groupId,
+    }
+  )
 
   revalidatePath("/profile")
 }

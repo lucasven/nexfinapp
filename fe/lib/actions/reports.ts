@@ -1,6 +1,8 @@
 "use server"
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 
 export async function getMonthlyReport(month: number, year: number) {
   const supabase = await getSupabaseServerClient()
@@ -126,6 +128,21 @@ export async function getMonthlyReport(month: number, year: number) {
     }>
   ).sort((a, b) => a.date.localeCompare(b.date))
 
+  // Track report viewing
+  await trackServerEvent(
+    user.id,
+    AnalyticsEvent.REPORT_VIEWED,
+    {
+      report_type: 'monthly',
+      report_month: month,
+      report_year: year,
+      transaction_count: transactions.length,
+      total_income: income,
+      total_expenses: expenses,
+      category_count: categories.length,
+    }
+  )
+
   return {
     income,
     expenses,
@@ -168,6 +185,21 @@ export async function getYearlyComparison(year: number) {
         expenses,
       }
     }),
+  )
+
+  // Track yearly report viewing
+  const totalIncome = monthlyData.reduce((sum, m) => sum + m.income, 0)
+  const totalExpenses = monthlyData.reduce((sum, m) => sum + m.expenses, 0)
+
+  await trackServerEvent(
+    user.id,
+    AnalyticsEvent.REPORT_VIEWED,
+    {
+      report_type: 'yearly',
+      report_year: year,
+      total_income: totalIncome,
+      total_expenses: totalExpenses,
+    }
   )
 
   return monthlyData
