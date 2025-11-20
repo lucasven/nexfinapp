@@ -5,7 +5,7 @@ import { AnalyticsEvent, EventProperties } from './events'
 
 /**
  * Track an analytics event
- * 
+ *
  * @param event - The event to track (use AnalyticsEvent enum)
  * @param properties - Optional event properties
  */
@@ -19,7 +19,15 @@ export function trackEvent(
   }
 
   try {
-    posthog.capture(event, properties)
+    // Add consistent platform and environment context
+    const enhancedProperties = {
+      ...properties,
+      platform: 'web',
+      source: 'frontend',
+      environment: process.env.NODE_ENV || 'production',
+    }
+
+    posthog.capture(event, enhancedProperties)
   } catch (error) {
     console.error('Failed to track event:', error)
   }

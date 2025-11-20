@@ -19,8 +19,12 @@ import { handleMessage } from './handlers/core/message-handler.js'
 import { authorizeGroup } from './services/groups/group-manager.js'
 import { checkAuthorization } from './middleware/authorization.js'
 import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
+import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 
 dotenv.config()
+
+// Initialize PostHog analytics
+initializePostHog()
 
 const logger = pino({ level: 'silent' }) // Silent by default, only show our custom logs
 const authStatePath = process.env.AUTH_STATE_PATH || './auth-state'
@@ -884,5 +888,18 @@ http.createServer(async (req: any, res: any) => {
     console.error('   Health check server is still running')
     // Don't exit - keep the server running for health checks
   })
+})
+
+// Graceful shutdown handling
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Shutting down gracefully...')
+  await shutdownPostHog()
+  process.exit(0)
+})
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Shutting down gracefully...')
+  await shutdownPostHog()
+  process.exit(0)
 })
 

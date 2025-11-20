@@ -3,6 +3,9 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { UserProfile, AuthorizedWhatsAppNumber } from "@/lib/types"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
+import { updateUserPropertiesInAnalytics } from "@/lib/analytics/user-properties"
 
 export async function getProfile(): Promise<UserProfile | null> {
   const supabase = await getSupabaseServerClient()
@@ -98,6 +101,19 @@ export async function updateProfile(data: { display_name?: string; locale?: 'pt-
     }
   }
 
+  // Track profile update event
+  const changedFields = Object.keys(data)
+  await trackServerEvent(
+    AnalyticsEvent.PROFILE_UPDATED,
+    user.id,
+    {
+      changed_fields: changedFields,
+      has_display_name: !!data.display_name,
+      has_locale: !!data.locale,
+      locale: data.locale,
+    }
+  )
+
   revalidatePath("/profile")
   return profile
 }
@@ -128,6 +144,10 @@ export async function setUserLocale(locale: 'pt-br' | 'en') {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  // Get current locale before updating
+  const currentProfile = await getProfile()
+  const oldLocale = currentProfile?.locale
+
   // Ensure profile exists
   await getProfile()
 
@@ -141,6 +161,16 @@ export async function setUserLocale(locale: 'pt-br' | 'en') {
     .eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track locale change event
+  await trackServerEvent(
+    AnalyticsEvent.LOCALE_CHANGED,
+    user.id,
+    {
+      old_locale: oldLocale,
+      new_locale: locale,
+    }
+  )
 
   revalidatePath("/")
 }
@@ -198,6 +228,24 @@ export async function addAuthorizedNumber(data: {
 
   if (error) throw error
 
+  // Track WhatsApp number addition
+  await trackServerEvent(
+    AnalyticsEvent.WHATSAPP_NUMBER_ADDED,
+    user.id,
+    {
+      is_primary: data.is_primary,
+      permission_can_view: data.permissions.can_view,
+      permission_can_add: data.permissions.can_add,
+      permission_can_edit: data.permissions.can_edit,
+      permission_can_delete: data.permissions.can_delete,
+      permission_can_manage_budgets: data.permissions.can_manage_budgets,
+      permission_can_view_reports: data.permissions.can_view_reports,
+    }
+  )
+
+  // Refresh user properties in analytics (WhatsApp connection is a key milestone)
+  await updateUserPropertiesInAnalytics(user.id)
+
   revalidatePath("/profile")
   return newNumber
 }
@@ -250,6 +298,14 @@ export async function deleteAuthorizedNumber(id: string) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  // Get number details before deletion for analytics
+  const { data: numberToDelete } = await supabase
+    .from("authorized_whatsapp_numbers")
+    .select("is_primary")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single()
+
   const { error } = await supabase
     .from("authorized_whatsapp_numbers")
     .delete()
@@ -257,6 +313,15 @@ export async function deleteAuthorizedNumber(id: string) {
     .eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track WhatsApp number removal
+  await trackServerEvent(
+    AnalyticsEvent.WHATSAPP_NUMBER_REMOVED,
+    user.id,
+    {
+      was_primary: numberToDelete?.is_primary || false,
+    }
+  )
 
   revalidatePath("/profile")
 }

@@ -2,6 +2,8 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { trackServerEvent } from "@/lib/analytics/server-tracker"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 
 export async function getRecurringTransactions() {
   const supabase = await getSupabaseServerClient()
@@ -88,6 +90,18 @@ export async function createRecurringTransaction(formData: {
   // Generate payments for current and next month
   await generateRecurringPayments(data.id)
 
+  // Track recurring transaction creation
+  await trackServerEvent(
+    AnalyticsEvent.RECURRING_TRANSACTION_CREATED,
+    user.id,
+    {
+      transaction_type: formData.type,
+      amount: formData.amount,
+      day_of_month: formData.day_of_month,
+      has_payment_method: !!formData.payment_method,
+    }
+  )
+
   revalidatePath("/recurring")
   return data
 }
@@ -124,6 +138,18 @@ export async function updateRecurringTransaction(
 
   if (error) throw error
 
+  // Track recurring transaction update
+  const changedFields = Object.keys(formData)
+  await trackServerEvent(
+    AnalyticsEvent.RECURRING_TRANSACTION_UPDATED,
+    user.id,
+    {
+      changed_fields: changedFields,
+      is_active_changed: formData.is_active !== undefined,
+      new_is_active: formData.is_active,
+    }
+  )
+
   revalidatePath("/recurring")
   return data
 }
@@ -139,6 +165,13 @@ export async function deleteRecurringTransaction(id: string) {
   const { error } = await supabase.from("recurring_transactions").delete().eq("id", id).eq("user_id", user.id)
 
   if (error) throw error
+
+  // Track recurring transaction deletion
+  await trackServerEvent(
+    AnalyticsEvent.RECURRING_TRANSACTION_DELETED,
+    user.id,
+    {}
+  )
 
   revalidatePath("/recurring")
 }
@@ -237,6 +270,16 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
         transaction_id: transaction?.id,
       })
       .eq("id", paymentId)
+
+    // Track payment marked as paid
+    await trackServerEvent(
+      AnalyticsEvent.RECURRING_PAYMENT_PAID,
+      user.id,
+      {
+        transaction_type: payment.recurring_transaction.type,
+        amount: payment.recurring_transaction.amount,
+      }
+    )
   } else if (!paid && payment.transaction_id) {
     // Delete the transaction
     await supabase.from("transactions").delete().eq("id", payment.transaction_id)
@@ -250,6 +293,16 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
         transaction_id: null,
       })
       .eq("id", paymentId)
+
+    // Track payment marked as unpaid
+    await trackServerEvent(
+      AnalyticsEvent.RECURRING_PAYMENT_UNPAID,
+      user.id,
+      {
+        transaction_type: payment.recurring_transaction.type,
+        amount: payment.recurring_transaction.amount,
+      }
+    )
   }
 
   revalidatePath("/recurring")

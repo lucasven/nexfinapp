@@ -38,11 +38,21 @@ export enum AnalyticsEvent {
   RECURRING_CREATED = 'recurring_created',
   RECURRING_UPDATED = 'recurring_updated',
   RECURRING_DELETED = 'recurring_deleted',
-  
+  RECURRING_TRANSACTION_CREATED = 'recurring_transaction_created',
+  RECURRING_TRANSACTION_UPDATED = 'recurring_transaction_updated',
+  RECURRING_TRANSACTION_DELETED = 'recurring_transaction_deleted',
+  RECURRING_PAYMENT_PAID = 'recurring_payment_paid',
+  RECURRING_PAYMENT_UNPAID = 'recurring_payment_unpaid',
+
+  // Profile Events
+  PROFILE_UPDATED = 'profile_updated',
+  LOCALE_CHANGED = 'locale_changed',
+
   // WhatsApp Integration Events
   WHATSAPP_NUMBER_ADDED = 'whatsapp_number_added',
   WHATSAPP_NUMBER_REMOVED = 'whatsapp_number_removed',
   WHATSAPP_GROUP_AUTHORIZED = 'whatsapp_group_authorized',
+  WHATSAPP_GROUP_DEACTIVATED = 'whatsapp_group_deactivated',
   WHATSAPP_GROUP_REMOVED = 'whatsapp_group_removed',
   
   // Beta/Landing Events

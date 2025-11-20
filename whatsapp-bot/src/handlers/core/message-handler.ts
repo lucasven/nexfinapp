@@ -9,9 +9,39 @@ import { logger } from '../../services/monitoring/logger.js'
 import { isGroupAuthorized, updateGroupLastMessage } from '../../services/groups/group-manager.js'
 import { handleTextMessage } from './text-handler.js'
 import { handleImageMessage } from './image-handler.js'
+import { trackEvent, hashSensitiveData } from '../../analytics/index.js'
+import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
 
 export async function handleMessage(context: MessageContext): Promise<string | string[] | null> {
   const { from, isGroup, groupJid, groupName, message, hasImage, imageBuffer, quotedMessage } = context
+
+  // Track message received event
+  const messageType = hasImage ? 'image' : 'text'
+  const distinctId = hashSensitiveData(from)
+
+  if (isGroup && groupJid) {
+    trackEvent(
+      WhatsAppAnalyticsEvent.WHATSAPP_GROUP_MESSAGE_RECEIVED,
+      distinctId,
+      {
+        [WhatsAppAnalyticsProperty.MESSAGE_TYPE]: messageType,
+        [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: true,
+        [WhatsAppAnalyticsProperty.GROUP_JID]: hashSensitiveData(groupJid),
+        [WhatsAppAnalyticsProperty.GROUP_NAME]: groupName || 'unknown',
+        [WhatsAppAnalyticsProperty.MESSAGE_LENGTH]: message?.length || 0,
+      }
+    )
+  } else {
+    trackEvent(
+      WhatsAppAnalyticsEvent.WHATSAPP_MESSAGE_RECEIVED,
+      distinctId,
+      {
+        [WhatsAppAnalyticsProperty.MESSAGE_TYPE]: messageType,
+        [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: false,
+        [WhatsAppAnalyticsProperty.MESSAGE_LENGTH]: message?.length || 0,
+      }
+    )
+  }
 
   if(!isGroup)
     logger.info('Message received', {
@@ -41,7 +71,33 @@ export async function handleMessage(context: MessageContext): Promise<string | s
 
   // Handle image messages
   if (hasImage && imageBuffer) {
-    return await handleImageMessage(from, imageBuffer, message, groupOwnerId)
+    try {
+      const result = await handleImageMessage(from, imageBuffer, message, groupOwnerId)
+
+      // Track successful processing
+      trackEvent(
+        WhatsAppAnalyticsEvent.WHATSAPP_MESSAGE_PROCESSED,
+        distinctId,
+        {
+          [WhatsAppAnalyticsProperty.MESSAGE_TYPE]: 'image',
+          [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: isGroup,
+        }
+      )
+
+      return result
+    } catch (error) {
+      // Track failure
+      trackEvent(
+        WhatsAppAnalyticsEvent.WHATSAPP_MESSAGE_FAILED,
+        distinctId,
+        {
+          [WhatsAppAnalyticsProperty.MESSAGE_TYPE]: 'image',
+          [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: isGroup,
+          [WhatsAppAnalyticsProperty.ERROR_MESSAGE]: error instanceof Error ? error.message : 'Unknown error',
+        }
+      )
+      throw error
+    }
   }
 
   // Handle text messages
@@ -49,5 +105,31 @@ export async function handleMessage(context: MessageContext): Promise<string | s
     return null
   }
 
-  return await handleTextMessage(from, message, quotedMessage, groupOwnerId)
+  try {
+    const result = await handleTextMessage(from, message, quotedMessage, groupOwnerId)
+
+    // Track successful processing
+    trackEvent(
+      WhatsAppAnalyticsEvent.WHATSAPP_MESSAGE_PROCESSED,
+      distinctId,
+      {
+        [WhatsAppAnalyticsProperty.MESSAGE_TYPE]: 'text',
+        [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: isGroup,
+      }
+    )
+
+    return result
+  } catch (error) {
+    // Track failure
+    trackEvent(
+      WhatsAppAnalyticsEvent.WHATSAPP_MESSAGE_FAILED,
+      distinctId,
+      {
+        [WhatsAppAnalyticsProperty.MESSAGE_TYPE]: 'text',
+        [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: isGroup,
+        [WhatsAppAnalyticsProperty.ERROR_MESSAGE]: error instanceof Error ? error.message : 'Unknown error',
+      }
+    )
+    throw error
+  }
 }

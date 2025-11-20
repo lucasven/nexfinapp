@@ -13,6 +13,8 @@ import { getOrCreateSession } from './helpers.js'
 import { executeIntent } from './intent-executor.js'
 import { storePendingOcrTransactions } from '../transactions/ocr-confirmation.js'
 import { getUserOcrPreference } from '../../services/user/preference-manager.js'
+import { trackEvent } from '../../analytics/index.js'
+import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
 
 export async function handleImageMessage(
   whatsappNumber: string, 
@@ -81,23 +83,43 @@ export async function handleImageMessage(
     return messages.loginPrompt
   }
 
-  logger.info('Session confirmed, updating user activity', { 
-    whatsappNumber, 
-    userId: session.userId 
+  logger.info('Session confirmed, updating user activity', {
+    whatsappNumber,
+    userId: session.userId
   })
   await updateUserActivity(whatsappNumber)
 
+  // Track OCR image received
+  trackEvent(
+    WhatsAppAnalyticsEvent.OCR_IMAGE_RECEIVED,
+    session.userId,
+    {
+      [WhatsAppAnalyticsProperty.IMAGE_SIZE_KB]: Math.round(imageBuffer.length / 1024),
+      [WhatsAppAnalyticsProperty.IS_GROUP_MESSAGE]: !!groupOwnerId,
+    }
+  )
+
   try {
     // Process image with OCR
-    logger.info('Starting OCR extraction from image', { 
-      whatsappNumber, 
+    logger.info('Starting OCR extraction from image', {
+      whatsappNumber,
       userId: session.userId,
-      imageSize: imageBuffer.length 
+      imageSize: imageBuffer.length
     })
+
+    // Track OCR extraction started
+    trackEvent(
+      WhatsAppAnalyticsEvent.OCR_EXTRACTION_STARTED,
+      session.userId,
+      {
+        [WhatsAppAnalyticsProperty.IMAGE_SIZE_KB]: Math.round(imageBuffer.length / 1024),
+      }
+    )
+
     const expenses = await extractExpenseFromImage(imageBuffer, session.userId)
-    
-    logger.info('OCR extraction completed', { 
-      whatsappNumber, 
+
+    logger.info('OCR extraction completed', {
+      whatsappNumber,
       userId: session.userId,
       expenseCount: expenses?.length || 0,
       expenses: expenses?.map(e => ({
@@ -111,10 +133,20 @@ export async function handleImageMessage(
     })
 
     if (!expenses || expenses.length === 0) {
-      logger.warn('No expenses found in image', { 
-        whatsappNumber, 
+      // Track OCR failure (no data extracted)
+      trackEvent(
+        WhatsAppAnalyticsEvent.OCR_EXTRACTION_FAILED,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.ERROR_TYPE]: 'no_data_extracted',
+          [WhatsAppAnalyticsProperty.PROCESSING_TIME_MS]: Date.now() - startTime,
+        }
+      )
+
+      logger.warn('No expenses found in image', {
+        whatsappNumber,
         userId: session.userId,
-        ocrProcessingTime: Date.now() - startTime 
+        ocrProcessingTime: Date.now() - startTime
       })
       await recordParsingMetric({
         userId: session.userId,
@@ -128,6 +160,17 @@ export async function handleImageMessage(
       })
       return messages.ocrNoData
     }
+
+    // Track successful OCR extraction
+    trackEvent(
+      WhatsAppAnalyticsEvent.OCR_EXTRACTION_COMPLETED,
+      session.userId,
+      {
+        [WhatsAppAnalyticsProperty.EXTRACTION_COUNT]: expenses.length,
+        [WhatsAppAnalyticsProperty.PROCESSING_TIME_MS]: Date.now() - startTime,
+        [WhatsAppAnalyticsProperty.OCR_ENGINE]: 'tesseract',
+      }
+    )
 
     logger.info('Expenses extracted from image', {
       whatsappNumber,

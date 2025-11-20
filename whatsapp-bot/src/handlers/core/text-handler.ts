@@ -20,6 +20,8 @@ import { getOrCreateSession } from './helpers.js'
 import { ACTION_PERMISSION_MAP, getActionDescription } from './permissions.js'
 import { executeIntent } from './intent-executor.js'
 import { setUserOcrPreference, getUserPreferences } from '../../services/user/preference-manager.js'
+import { trackEvent } from '../../analytics/index.js'
+import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
 
 export async function handleTextMessage(
   whatsappNumber: string,
@@ -169,13 +171,27 @@ export async function handleTextMessage(
     if (message.trim().startsWith('/')) {
       strategy = 'explicit_command'
       const commandResult = parseIntent(message)
-      
+
       if (commandResult.action !== 'unknown' && commandResult.confidence >= 0.9) {
         logger.info('Explicit command detected', {
           whatsappNumber,
           action: commandResult.action,
           confidence: commandResult.confidence
         })
+
+        // Track Layer 1 match (explicit command)
+        const tempSession = await getUserSession(whatsappNumber)
+        if (tempSession) {
+          trackEvent(
+            WhatsAppAnalyticsEvent.NLP_LAYER_1_MATCH,
+            tempSession.userId,
+            {
+              [WhatsAppAnalyticsProperty.INTENT_LAYER]: '1_explicit',
+              [WhatsAppAnalyticsProperty.INTENT_TYPE]: commandResult.action,
+              [WhatsAppAnalyticsProperty.INTENT_CONFIDENCE]: commandResult.confidence,
+            }
+          )
+        }
         
         // Handle login and help without authentication
         if (commandResult.action === 'login') {
@@ -470,6 +486,19 @@ export async function handleTextMessage(
         similarity: cacheResult.similarity
       })
 
+      // Track Layer 2 hit (semantic cache)
+      trackEvent(
+        WhatsAppAnalyticsEvent.NLP_LAYER_2_HIT,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.INTENT_LAYER]: '2_semantic_cache',
+          [WhatsAppAnalyticsProperty.INTENT_TYPE]: cachedIntent.action,
+          [WhatsAppAnalyticsProperty.INTENT_CONFIDENCE]: cachedIntent.confidence,
+          [WhatsAppAnalyticsProperty.CACHE_HIT]: true,
+          [WhatsAppAnalyticsProperty.SIMILARITY_SCORE]: cacheResult.similarity,
+        }
+      )
+
       // Check permissions for cached action
       const requiredPermission = ACTION_PERMISSION_MAP[cachedIntent.action]
       if (requiredPermission) {
@@ -572,8 +601,10 @@ export async function handleTextMessage(
     
     try {
       const userContext = await getUserContext(session.userId)
+      const llmStartTime = Date.now()
       const aiResult = await parseWithAI(enhancedMessage, userContext, quotedMessage)
-      
+      const llmDuration = Date.now() - llmStartTime
+
       logger.info('LLM result', {
         whatsappNumber,
         userId: session.userId,
@@ -581,6 +612,19 @@ export async function handleTextMessage(
         confidence: aiResult.confidence,
         parseDurationMs: Date.now() - startTime
       })
+
+      // Track Layer 3 call (OpenAI LLM)
+      trackEvent(
+        WhatsAppAnalyticsEvent.NLP_LAYER_3_CALL,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.INTENT_LAYER]: '3_llm',
+          [WhatsAppAnalyticsProperty.INTENT_TYPE]: aiResult.action,
+          [WhatsAppAnalyticsProperty.INTENT_CONFIDENCE]: aiResult.confidence,
+          [WhatsAppAnalyticsProperty.PROCESSING_TIME_MS]: llmDuration,
+          [WhatsAppAnalyticsProperty.OPENAI_MODEL]: 'gpt-4o-mini',
+        }
+      )
       
       // Check permissions
       const requiredPermission = ACTION_PERMISSION_MAP[aiResult.action]
@@ -627,6 +671,18 @@ export async function handleTextMessage(
         intentEntities: aiResult.entities
       })
 
+      // Track successful intent parsing
+      trackEvent(
+        WhatsAppAnalyticsEvent.NLP_INTENT_PARSED,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.INTENT_TYPE]: aiResult.action,
+          [WhatsAppAnalyticsProperty.INTENT_CONFIDENCE]: aiResult.confidence,
+          [WhatsAppAnalyticsProperty.INTENT_LAYER]: strategy === 'ai_function_calling' ? '3_llm' : strategy === 'semantic_cache' ? '2_semantic_cache' : '1_explicit',
+          [WhatsAppAnalyticsProperty.PROCESSING_TIME_MS]: Date.now() - startTime,
+        }
+      )
+
       // Execute the intent
       let result = await executeIntent(whatsappNumber, aiResult, session, parsingMetricId)
 
@@ -639,9 +695,21 @@ export async function handleTextMessage(
         whatsappNumber,
         userId: session.userId
       }, error as Error)
-      
+
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
-      
+
+      // Track NLP intent parsing failure
+      trackEvent(
+        WhatsAppAnalyticsEvent.NLP_INTENT_FAILED,
+        session.userId,
+        {
+          [WhatsAppAnalyticsProperty.INTENT_LAYER]: '3_llm',
+          [WhatsAppAnalyticsProperty.ERROR_TYPE]: errorMessage.includes('limit exceeded') ? 'daily_limit_exceeded' : 'llm_error',
+          [WhatsAppAnalyticsProperty.ERROR_MESSAGE]: errorMessage,
+          [WhatsAppAnalyticsProperty.PROCESSING_TIME_MS]: Date.now() - startTime,
+        }
+      )
+
       // Check if it's a limit exceeded error
       if (errorMessage.includes('limit exceeded')) {
         await recordParsingMetric({
@@ -654,10 +722,10 @@ export async function handleTextMessage(
           errorMessage: 'Daily limit exceeded',
           parseDurationMs: Date.now() - startTime
         })
-        
+
         return messages.aiLimitExceeded || 'Limite diário atingido. Use comandos explícitos como: /add 50 comida'
       }
-      
+
       await recordParsingMetric({
         whatsappNumber,
         userId: session.userId,
@@ -668,7 +736,7 @@ export async function handleTextMessage(
         errorMessage: errorMessage,
         parseDurationMs: Date.now() - startTime
       })
-      
+
       return `❌ Erro ao processar: ${errorMessage}\n\n💡 Tente usar um comando explícito como: /add 50 comida`
     }
   } catch (error) {

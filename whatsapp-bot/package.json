@@ -34,6 +34,7 @@
     "libphonenumber-js": "^1.10.51",
     "openai": "^4.28.0",
     "pino": "^8.17.2",
+    "posthog-node": "^5.11.2",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.33.2",
