@@ -172,7 +172,7 @@ export default function SignupPage() {
 
         setSuccess(true)
         setTimeout(() => {
-          router.push("/") // Go to home page
+          router.push("/onboarding") // Redirect to onboarding for WhatsApp setup
         }, 2000)
       } else {
         // Regular signup flow - check beta status first
@@ -226,7 +226,7 @@ export default function SignupPage() {
 
         setSuccess(true)
         setTimeout(() => {
-          router.push("/auth/login")
+          router.push("/onboarding") // Redirect to onboarding for WhatsApp setup
         }, 2000)
       }
     } catch (err: any) {
@@ -261,9 +261,9 @@ export default function SignupPage() {
 
             {success && (
               <div className="bg-green-50 text-green-600 p-3 rounded-md text-sm">
-                {hasSession 
-                  ? "Password set successfully! Redirecting..." 
-                  : "Account created successfully! Redirecting to login..."
+                {hasSession
+                  ? "Password set successfully! Redirecting to onboarding..."
+                  : "Account created successfully! Setting up your account..."
                 }
               </div>
             )}

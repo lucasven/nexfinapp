@@ -7,7 +7,10 @@ export type Locale = 'pt-br' | 'en'
 export interface Messages {
   // Welcome and help messages
   welcome: string
-  
+
+  // Onboarding greeting message
+  onboardingGreeting: (userName: string | null) => string
+
   // Authentication messages
   loginPrompt: string
   loginSuccess: string

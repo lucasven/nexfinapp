@@ -1,6 +1,9 @@
 export type Locale = 'pt-br' | 'en'
 
 export interface Messages {
+  // Allow additional sections for extensibility
+  [key: string]: any
+
   // Common
   common: {
     cancel: string
@@ -12,6 +15,8 @@ export interface Messages {
     loading: string
     saving: string
     deleting: string
+    sending: string
+    updating: string
     select: string
     optional: string
     required: string
@@ -311,11 +316,39 @@ export interface Messages {
     email: string
     password: string
     confirmPassword: string
-    forgotPassword: string
     noAccount: string
     haveAccount: string
     signInWithEmail: string
     signUpWithEmail: string
+    forgotPassword: {
+      label: string
+      title: string
+      description: string
+      sendLink: string
+      info: string
+      success: {
+        title: string
+        description: string
+        note: string
+      }
+      sendAnother: string
+    }
+    resetPassword: {
+      title: string
+      description: string
+      button: string
+      invalidToken: string
+      sessionError: string
+      error: string
+      success: {
+        title: string
+        description: string
+      }
+      invalidTitle: string
+      linkExpired: string
+      requestNew: string
+    }
+    [key: string]: any  // Allow any additional auth-related properties
   }
 
   // Months
@@ -355,7 +388,7 @@ export interface Messages {
     getStarted: string
     complete: string
 
-    welcome: {
+    welcome: string | {
       title: string
       heading: string
       intro: string
@@ -417,6 +450,7 @@ export interface Messages {
         description: string
       }
     }
+    [key: string]: any  // Allow additional onboarding keys for different flows
   }
 }
 

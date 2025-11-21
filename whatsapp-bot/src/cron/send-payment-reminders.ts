@@ -10,9 +10,8 @@
  */
 
 import { createClient } from "@supabase/supabase-js"
+import { getUserLocale, getMessages } from "../localization/i18n.js"
 import { sendMessage } from "../services/whatsapp/whatsapp-service.js"
-import { getUserLocale } from "../services/user/user-service.js"
-import { getLocalizedMessage } from "../localization/index.js"
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
@@ -24,6 +23,24 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+// Raw type from Supabase (nested relations return as arrays)
+interface RecurringPaymentRaw {
+  id: string
+  due_date: string
+  user_id: string
+  recurring_transaction: Array<{
+    amount: number
+    type: "income" | "expense"
+    description: string | null
+    auto_pay: boolean
+    category: Array<{
+      name: string
+      icon: string
+    }>
+  }>
+}
+
+// Normalized type for easier access
 interface RecurringPayment {
   id: string
   due_date: string
@@ -37,6 +54,22 @@ interface RecurringPayment {
       name: string
       icon: string
     }
+  }
+}
+
+// Helper to normalize Supabase response
+function normalizePayment(raw: RecurringPaymentRaw): RecurringPayment | null {
+  const rt = raw.recurring_transaction?.[0]
+  if (!rt) return null
+
+  return {
+    id: raw.id,
+    due_date: raw.due_date,
+    user_id: raw.user_id,
+    recurring_transaction: {
+      ...rt,
+      category: rt.category?.[0] || { name: "Unknown", icon: "📦" },
+    },
   }
 }
 
@@ -207,11 +240,20 @@ async function sendPaymentReminders() {
 
     if (overdueError) throw overdueError
 
+    // Normalize Supabase responses and filter out auto-pay payments
+    const normalizedUpcoming = (upcomingPayments as RecurringPaymentRaw[] || [])
+      .map(normalizePayment)
+      .filter((p): p is RecurringPayment => p !== null)
+
+    const normalizedOverdue = (overduePayments as RecurringPaymentRaw[] || [])
+      .map(normalizePayment)
+      .filter((p): p is RecurringPayment => p !== null)
+
     // Filter out auto-pay payments (they'll be handled automatically)
-    const filteredUpcoming = (upcomingPayments as RecurringPayment[] || []).filter(
+    const filteredUpcoming = normalizedUpcoming.filter(
       (p) => !p.recurring_transaction?.auto_pay
     )
-    const filteredOverdue = (overduePayments as RecurringPayment[] || []).filter(
+    const filteredOverdue = normalizedOverdue.filter(
       (p) => !p.recurring_transaction?.auto_pay
     )
 
