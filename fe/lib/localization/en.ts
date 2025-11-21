@@ -21,6 +21,7 @@ export const messages: Messages = {
     day: 'Day',
     confirmDelete: 'Are you sure you want to delete?',
     locale: 'en-US',
+    uncategorized: 'Uncategorized',
   },
 
   nav: {

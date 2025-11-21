@@ -22,7 +22,7 @@ interface RecurringPayment {
     category: {
       name: string
       icon: string
-    }
+    } | null
   }
 }
 
@@ -218,10 +218,10 @@ function PaymentRow({ payment, locale, isOverdue, onMarkAsPaid, isPending }: Pay
     <div
       className={`flex items-center gap-3 p-3 rounded-lg border ${isOverdue ? "border-destructive/50 bg-destructive/5" : "border-border bg-muted/30"}`}
     >
-      <div className="flex-shrink-0 text-2xl">{rt.category.icon}</div>
+      <div className="flex-shrink-0 text-2xl">{rt.category?.icon || "📦"}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium truncate">{rt.category.name}</p>
+          <p className="text-sm font-medium truncate">{rt.category?.name || t("common.uncategorized")}</p>
           {rt.description && (
             <p className="text-xs text-muted-foreground truncate">• {rt.description}</p>
           )}

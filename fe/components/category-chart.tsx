@@ -31,7 +31,7 @@ export function CategoryChart({ data, type }: CategoryChartProps) {
   const filteredData = data
     .filter((item) => item.type === type)
     .map((item, index) => ({
-      name: `${item.icon} ${item.name}`,
+      name: `${item.icon || "📦"} ${item.name || "Uncategorized"}`,
       value: item.total,
       fill: COLORS[index % COLORS.length],
     }))
@@ -83,7 +83,7 @@ export function CategoryChart({ data, type }: CategoryChartProps) {
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                   <span>
-                    {item.icon} {item.name}
+                    {item.icon || "📦"} {item.name || "Uncategorized"}
                   </span>
                   <span className="text-muted-foreground">({item.count})</span>
                 </div>
