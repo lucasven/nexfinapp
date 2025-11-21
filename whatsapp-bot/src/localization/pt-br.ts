@@ -64,6 +64,8 @@ Envie fotos de SMS bancários ou extratos - eu extraio os dados automaticamente!
     `✅ Despesa recorrente adicionada!\n💵 Valor: R$ ${amount.toFixed(2)}\n📁 Categoria: ${category}\n📅 Dia do mês: ${day}`,
   recurringError: '❌ Erro ao adicionar despesa recorrente.',
   noRecurring: '🔄 Você não tem despesas recorrentes cadastradas.',
+  recurringAutoPayNotification: (params) =>
+    `🤖 *Pagamento Automático Executado*\n\n${params.type} ${params.typeLabel} criada automaticamente:\n\n💰 Valor: ${params.amount}\n📁 ${params.category}${params.description ? `\n📝 ${params.description}` : ''}\n📅 Data: ${params.date}\n🔖 ID: #${params.transactionId}\n\n✅ Esta despesa recorrente foi processada automaticamente.\n\n_Você pode editar ou excluir usando o ID acima._`,
 
   // Report messages
   reportHeader: (month: string, year: number) => 

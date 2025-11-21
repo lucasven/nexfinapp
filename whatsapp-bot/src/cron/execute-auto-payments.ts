@@ -13,7 +13,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { sendMessage } from "../services/whatsapp/whatsapp-service.js"
 import { getUserLocale } from "../services/user/user-service.js"
-import { getLocalizedMessage } from "../localization/index.js"
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
@@ -124,10 +123,13 @@ async function sendAutoPayNotification(
     const amount = payment.recurring_transaction.amount.toFixed(2)
     const type = payment.recurring_transaction.type
 
-    // Build notification message
-    const message = getLocalizedMessage(locale, "recurring.autoPay.notification", {
+    // Get localized messages
+    const messages = await import(`../localization/${locale}.js`)
+
+    // Build notification message using localized function
+    const message = messages.messages.recurringAutoPayNotification({
       type: type === "expense" ? "💸" : "💰",
-      typeLabel: type === "expense" ? "Despesa" : "Receita",
+      typeLabel: type === "expense" ? (locale === "pt-br" ? "Despesa" : "Expense") : (locale === "pt-br" ? "Receita" : "Income"),
       amount: `R$ ${amount}`,
       category: `${category.icon} ${category.name}`,
       description: payment.recurring_transaction.description || "",

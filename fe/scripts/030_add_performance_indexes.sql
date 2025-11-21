@@ -1,4 +1,4 @@
--- Migration 029: Add performance indexes for recurring payments
+-- Migration 030: Add performance indexes for recurring payments
 -- These indexes optimize common queries for dashboard widgets and cron jobs
 
 -- Index for finding unpaid recurring payments in a date range

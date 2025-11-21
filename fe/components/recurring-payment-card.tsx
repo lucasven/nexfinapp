@@ -6,6 +6,7 @@ import type { RecurringPayment } from "@/lib/types"
 import { format } from "date-fns"
 import { markPaymentAsPaid } from "@/lib/actions/recurring"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 
 interface RecurringPaymentCardProps {
   payment: RecurringPayment & {
@@ -23,6 +24,7 @@ interface RecurringPaymentCardProps {
 
 export function RecurringPaymentCard({ payment }: RecurringPaymentCardProps) {
   const router = useRouter()
+  const t = useTranslations()
 
   const handleToggle = async (checked: boolean) => {
     try {
@@ -48,8 +50,8 @@ export function RecurringPaymentCard({ payment }: RecurringPaymentCardProps) {
             </span>
           </div>
           <div className="text-sm text-muted-foreground">
-            Due: {format(new Date(payment.due_date), "MMM dd, yyyy")}
-            {isOverdue && <span className="text-red-600 ml-2 font-medium">Overdue</span>}
+            {t('recurring.dueDate')}: {format(new Date(payment.due_date), "MMM dd, yyyy")}
+            {isOverdue && <span className="text-red-600 ml-2 font-medium">{t('recurring.overdue')}</span>}
           </div>
         </div>
 

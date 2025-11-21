@@ -92,7 +92,7 @@ export function UpcomingRecurringWidget({ payments }: UpcomingRecurringWidgetPro
           </CardTitle>
           {overduePayments.length > 0 && (
             <Badge variant="destructive" className="ml-2">
-              {overduePayments.length} {t("recurring.overdue")}
+              {overduePayments.length} {t("recurring.overdueLabel")}
             </Badge>
           )}
           {upcomingPayments.length > 0 && (
