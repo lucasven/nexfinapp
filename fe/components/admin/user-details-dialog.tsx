@@ -8,12 +8,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { getUserDetails } from "@/lib/actions/admin"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { getUserDetails, deleteUser } from "@/lib/actions/admin"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { trackEvent } from "@/lib/analytics/tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
+import { Trash2, AlertTriangle, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 interface UserDetailsDialogProps {
   userId: string
@@ -24,14 +38,18 @@ interface UserDetailsDialogProps {
 export function UserDetailsDialog({ userId, open, onClose }: UserDetailsDialogProps) {
   const [details, setDetails] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("")
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (open && userId) {
       setLoading(true)
+      setDeleteConfirmEmail("") // Reset confirmation
       getUserDetails(userId)
         .then((data) => {
           setDetails(data)
-          
+
           // Track user details view
           trackEvent(AnalyticsEvent.ADMIN_USER_DETAILS_VIEWED, {
             [AnalyticsProperty.TARGET_USER_ID]: userId,
@@ -45,6 +63,37 @@ export function UserDetailsDialog({ userId, open, onClose }: UserDetailsDialogPr
         })
     }
   }, [userId, open])
+
+  const handleDeleteUser = async () => {
+    if (deleteConfirmEmail !== details?.profile?.email) {
+      toast.error("Please type the user's email exactly to confirm deletion.")
+      return
+    }
+
+    setDeleting(true)
+    try {
+      const result = await deleteUser(userId)
+
+      if (result.success) {
+        toast.success(result.message || "User deleted successfully")
+
+        // Track deletion
+        trackEvent(AnalyticsEvent.ADMIN_USER_DELETED, {
+          [AnalyticsProperty.TARGET_USER_ID]: userId,
+          deleted_records: result.deletedData?.data_summary?.total_records_deleted || 0,
+        })
+
+        setShowDeleteConfirm(false)
+        onClose()
+      } else {
+        toast.error(result.message || "Deletion failed")
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete user")
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
@@ -62,11 +111,12 @@ export function UserDetailsDialog({ userId, open, onClose }: UserDetailsDialogPr
           </div>
         ) : details ? (
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
               <TabsTrigger value="ai">AI Usage</TabsTrigger>
+              <TabsTrigger value="danger" className="text-destructive">Danger Zone</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile" className="space-y-4">
@@ -264,6 +314,51 @@ export function UserDetailsDialog({ userId, open, onClose }: UserDetailsDialogPr
                 <div className="text-muted-foreground">No AI usage data available</div>
               )}
             </TabsContent>
+
+            <TabsContent value="danger" className="space-y-4">
+              <Card className="border-destructive">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-destructive/10 p-4 rounded-lg space-y-2">
+                    <p className="text-sm font-medium">Delete User Account</p>
+                    <p className="text-sm text-muted-foreground">
+                      Permanently delete this user and all their data. This action cannot be undone.
+                    </p>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div>• All transactions will be deleted</div>
+                      <div>• All budgets and categories will be removed</div>
+                      <div>• WhatsApp integration will be disconnected</div>
+                      <div>• AI usage history will be erased</div>
+                      <div>• User will be unable to log in</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                      LGPD Compliance
+                    </p>
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
+                      This deletion will be logged for compliance purposes. The audit log will retain:
+                      user email, deletion timestamp, and summary of deleted data.
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete User Account
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         ) : (
           <div className="py-8 text-center text-destructive">
@@ -271,6 +366,50 @@ export function UserDetailsDialog({ userId, open, onClose }: UserDetailsDialogPr
           </div>
         )}
       </DialogContent>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete User Account?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <p>
+                This will permanently delete <strong>{details?.profile?.email}</strong> and all their data.
+                This action cannot be undone.
+              </p>
+              <div className="bg-muted p-3 rounded-md space-y-1 text-sm">
+                <div>📊 Transactions: {details?.transactionSummary?.count || 0}</div>
+                <div>💬 WhatsApp Numbers: {details?.whatsappNumbers?.length || 0}</div>
+                <div>👥 Authorized Groups: {details?.authorizedGroups?.length || 0}</div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Type the user's email to confirm:</p>
+                <Input
+                  type="email"
+                  placeholder={details?.profile?.email}
+                  value={deleteConfirmEmail}
+                  onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                  disabled={deleting}
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              disabled={deleting || deleteConfirmEmail !== details?.profile?.email}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {deleting ? "Deleting..." : "Delete Forever"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

@@ -10,6 +10,12 @@ export enum AnalyticsEvent {
   USER_SIGNED_UP = 'user_signed_up',
   USER_LOGGED_IN = 'user_logged_in',
   USER_LOGGED_OUT = 'user_logged_out',
+  PASSWORD_RESET_REQUESTED = 'password_reset_requested',
+  PASSWORD_RESET_COMPLETED = 'password_reset_completed',
+  PASSWORD_RESET_FAILED = 'password_reset_failed',
+  MAGIC_LINK_REQUESTED = 'magic_link_requested',
+  MAGIC_LINK_LOGIN_SUCCESS = 'magic_link_login_success',
+  MAGIC_LINK_LOGIN_FAILED = 'magic_link_login_failed',
   
   // Transaction Events
   TRANSACTION_CREATED = 'transaction_created',
@@ -69,6 +75,7 @@ export enum AnalyticsEvent {
   ADMIN_BETA_INVITATION_FAILED = 'admin_beta_invitation_failed',
   ADMIN_BETA_INVITATION_RESENT = 'admin_beta_invitation_resent',
   ADMIN_USER_DETAILS_VIEWED = 'admin_user_details_viewed',
+  ADMIN_USER_DELETED = 'admin_user_deleted',
   
   // User Invitation Events
   USER_ACCEPTED_BETA_INVITATION = 'user_accepted_beta_invitation',
@@ -78,6 +85,8 @@ export enum AnalyticsEvent {
   ONBOARDING_STEP_COMPLETED = 'onboarding_step_completed',
   ONBOARDING_STEP_SKIPPED = 'onboarding_step_skipped',
   ONBOARDING_COMPLETED = 'onboarding_completed',
+  ONBOARDING_SKIPPED = 'onboarding_skipped',
+  ONBOARDING_WHATSAPP_ADDED = 'onboarding_whatsapp_added',
   WHATSAPP_GREETING_SENT = 'whatsapp_greeting_sent',
   WHATSAPP_GREETING_FAILED = 'whatsapp_greeting_failed',
 

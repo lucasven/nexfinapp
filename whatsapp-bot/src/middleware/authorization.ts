@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '../services/database/supabase-client.js'
 import type { UserIdentifiers } from '../utils/user-identifiers.js'
 import { syncUserIdentifiers, shouldSyncIdentifiers } from '../services/user/identifier-sync.js'
+import { queueGreetingForNewUser, shouldReceiveGreeting } from '../services/onboarding/queue-greeting.js'
 
 export interface AuthorizationResult {
   authorized: boolean
@@ -84,6 +85,25 @@ export async function checkAuthorizationWithIdentifiers(
         })
         .catch(syncError => {
           console.error('[Authorization] Failed to sync identifiers (non-critical):', syncError)
+        })
+
+      // Check if user should receive a greeting (first-time user)
+      // This runs in the background and doesn't block authorization
+      shouldReceiveGreeting(result.user_id)
+        .then(shouldGreet => {
+          if (shouldGreet) {
+            console.log('[Authorization] New user detected, queuing greeting message...')
+            return queueGreetingForNewUser(result.user_id, identifiers)
+          }
+          return false
+        })
+        .then(queued => {
+          if (queued) {
+            console.log('[Authorization] ✅ Greeting queued for first-time user')
+          }
+        })
+        .catch(greetError => {
+          console.error('[Authorization] Failed to queue greeting (non-critical):', greetError)
         })
 
       return {

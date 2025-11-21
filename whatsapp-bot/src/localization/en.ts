@@ -35,6 +35,42 @@ I'm your assistant for managing your finances. Here's what I can do:
 
 You can also send me photos of bank SMS or statements!`,
 
+  // Onboarding greeting message
+  onboardingGreeting: (userName: string | null) => `👋 Hello${userName ? ' ' + userName : ''}! Welcome to NexFinApp!
+
+I'm your financial assistant on WhatsApp. Let's get started!
+
+📋 *First Steps:*
+1. Create your first expense category
+2. Add an expense
+3. Set up budgets
+
+👥 *To use in a group (for couples or families)*
+1. Create a group with the people you want to share with
+2. Click on the group name
+3. Click on Invite via group link
+4. Click on Send link via WhatsApp
+5. Send the link to the bot and it will join automatically
+
+💬 *How to use:*
+You can speak naturally! For example:
+• "Spent $50 on food"
+• "Add $30 expense on transport"
+• "Show my expenses"
+• "Received $3000 salary"
+
+📸 *Special Tip:*
+You can also send me photos of bank SMS and I'll extract the data automatically using OCR!
+
+💰 *Advanced Features:*
+• Set monthly budgets for categories
+• Get alerts when approaching limits
+• View detailed financial reports
+
+Type "help" anytime to see everything I can do.
+
+Let's begin? 🚀`,
+
   // Authentication messages
   loginPrompt: '🔐 To get started, log in with:\n"Login: your-email@example.com your-password"',
   loginSuccess: '✅ Login successful! You can now manage your expenses.',

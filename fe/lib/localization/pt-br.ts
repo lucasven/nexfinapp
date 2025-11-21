@@ -11,6 +11,8 @@ export const messages: Messages = {
     loading: 'Carregando...',
     saving: 'Salvando...',
     deleting: 'Excluindo...',
+    sending: 'Enviando...',
+    updating: 'Atualizando...',
     select: 'Selecionar',
     optional: 'Opcional',
     required: 'Obrigatório',
@@ -294,13 +296,104 @@ export const messages: Messages = {
     login: 'Entrar',
     signup: 'Criar Conta',
     email: 'E-mail',
+    emailPlaceholder: 'voce@exemplo.com',
     password: 'Senha',
     confirmPassword: 'Confirmar Senha',
-    forgotPassword: 'Esqueceu a senha?',
+    newPassword: 'Nova Senha',
+    passwordRequirement: 'Deve ter pelo menos 6 caracteres',
+    passwordTooShort: 'A senha deve ter pelo menos 6 caracteres',
+    passwordMismatch: 'As senhas não coincidem',
+    emailRequired: 'E-mail é obrigatório',
     noAccount: 'Não tem uma conta?',
     haveAccount: 'Já tem uma conta?',
     signInWithEmail: 'Entrar com E-mail',
     signUpWithEmail: 'Criar Conta com E-mail',
+    backToLogin: 'Voltar para o login',
+    loginDescription: 'Escolha seu método de login preferido',
+
+    passwordResetError: 'Falha ao enviar e-mail de redefinição. Por favor, tente novamente.',
+    magicLinkError: 'Falha ao enviar link mágico. Por favor, tente novamente.',
+
+    // Forgot Password (nested structure with label for link)
+    forgotPassword: {
+      label: 'Esqueceu a senha?',
+      title: 'Esqueceu a Senha?',
+      description: 'Digite seu e-mail e enviaremos um link para redefinir sua senha',
+      sendLink: 'Enviar Link de Redefinição',
+      info: 'Você receberá um e-mail com um link seguro para redefinir sua senha. O link expira em 1 hora.',
+      success: {
+        title: 'Verifique seu e-mail!',
+        description: 'Enviamos um link de redefinição de senha para {email}. Clique no link no e-mail para criar uma nova senha.',
+        note: 'Não recebeu o e-mail? Verifique sua pasta de spam ou tente novamente.',
+      },
+      sendAnother: 'Enviar outro e-mail',
+    },
+
+    // Reset Password (nested structure)
+    resetPassword: {
+      title: 'Redefinir Senha',
+      description: 'Escolha uma nova senha para sua conta',
+      button: 'Redefinir Senha',
+      invalidToken: 'Link de redefinição inválido ou expirado. Por favor, solicite um novo.',
+      sessionError: 'Não foi possível verificar o link de redefinição. Por favor, tente novamente.',
+      error: 'Falha ao redefinir senha. Por favor, tente novamente.',
+      success: {
+        title: 'Senha redefinida com sucesso!',
+        description: 'Sua senha foi atualizada. Redirecionando você para o login...',
+      },
+      invalidTitle: 'Link de Redefinição Inválido',
+      linkExpired: 'Links de redefinição de senha expiram após 1 hora por segurança. Por favor, solicite um novo link.',
+      requestNew: 'Solicitar Novo Link',
+    },
+
+    // Magic Link (nested structure with label for tab)
+    magicLink: {
+      label: 'Link Mágico',
+      info: 'Enviaremos um link de login seguro via e-mail. Sem necessidade de senha!',
+      sendLink: 'Enviar Link Mágico',
+      success: {
+        title: 'Verifique seu e-mail!',
+        description: 'Enviamos um link mágico para {email}. Clique no link no e-mail para fazer login instantaneamente.',
+        note: 'O link expirará em 1 hora. Não recebeu? Verifique sua pasta de spam.',
+      },
+      sendAnother: 'Enviar outro link',
+    },
+  },
+
+  settings: {
+    account: {
+      title: 'Configurações da Conta',
+      subtitle: 'Gerencie suas informações de conta e dados',
+      accountInfo: 'Informações da Conta',
+      dataSummary: 'Resumo dos Seus Dados',
+      transactions: 'Transações',
+      categories: 'Categorias',
+      budgets: 'Orçamentos',
+      recurringPayments: 'Pagamentos Recorrentes',
+      whatsappNumbers: 'Números do WhatsApp',
+      authorizedGroups: 'Grupos Autorizados',
+      dataRights: 'Seus Direitos sobre Dados (LGPD)',
+      dataRightsDescription: 'De acordo com a Lei Geral de Proteção de Dados (LGPD), você tem o direito de:',
+      rightAccess: 'Acessar seus dados pessoais',
+      rightCorrect: 'Corrigir dados imprecisos',
+      rightDelete: 'Solicitar exclusão dos seus dados',
+      rightPortability: 'Portabilidade de dados',
+      dangerZone: 'Zona de Perigo',
+      deleteAccount: 'Excluir Minha Conta',
+      deleteAccountWarning: 'Excluir permanentemente sua conta e todos os dados associados. Esta ação não pode ser desfeita.',
+      deleteAccountInfo: 'Isso excluirá permanentemente:',
+      deleteAllTransactions: 'Todas as suas transações',
+      deleteAllBudgets: 'Todos os orçamentos e categorias',
+      deleteWhatsappIntegration: 'Integração com WhatsApp',
+      deleteAiUsageHistory: 'Histórico de uso de IA',
+      accountWillBeInaccessible: 'Sua conta ficará permanentemente inacessível',
+      confirmDeletion: 'Para confirmar a exclusão, digite EXCLUIR MINHA CONTA abaixo:',
+      deleteForever: 'Excluir Permanentemente',
+      deleting: 'Excluindo...',
+      deletionSuccess: 'Sua conta foi excluída com sucesso. Redirecionando...',
+      deletionFailed: 'Falha ao excluir conta. Por favor, tente novamente.',
+      confirmationRequired: 'Por favor, digite EXCLUIR MINHA CONTA para confirmar',
+    },
   },
 
   months: {
@@ -329,7 +422,67 @@ export const messages: Messages = {
   },
 
   onboarding: {
-    progress: 'Passo {current} de {total}',
+    // New flat keys for the new onboarding page
+    welcome: 'Bem-vindo ao NexFinApp!',
+    subtitle: 'Vamos configurar tudo em poucos passos',
+    progress: 'Progresso',
+    skipForNow: 'Pular por enquanto',
+    continueToApp: 'Continuar para o app',
+
+    step1: {
+      title: 'Passo 1: Conecte seu WhatsApp',
+      description: 'Adicione seu número do WhatsApp para rastrear despesas via chat',
+      benefits: {
+        title: 'Por que conectar o WhatsApp?',
+        1: 'Rastreie despesas instantaneamente enviando uma mensagem',
+        2: 'Escaneie recibos usando a câmera do seu celular',
+        3: 'Receba alertas de orçamento e insights de gastos',
+      },
+      button: 'Adicionar Número do WhatsApp',
+    },
+
+    step2: {
+      title: 'Passo 2: Verifique seu WhatsApp',
+      description: 'Estamos enviando uma mensagem de boas-vindas com instruções',
+      waiting: {
+        title: 'Mensagem a caminho!',
+        description: 'Você deve receber uma mensagem de boas-vindas no WhatsApp em breve. Ela vai te guiar sobre como usar o bot.',
+      },
+      next: {
+        title: 'O que acontece depois?',
+        1: 'Abra a mensagem do nosso bot no WhatsApp',
+        2: 'Tente enviar sua primeira despesa (ex: "Gastei R$50 no mercado")',
+        3: 'Volte aqui para ver seu painel e configurar orçamentos',
+      },
+      button: 'Recebi a mensagem, continuar',
+    },
+
+    step3: {
+      title: 'Tudo Pronto!',
+      description: 'Você está pronto para começar a rastrear suas despesas',
+      complete: {
+        title: 'Configuração Completa!',
+        description: 'Agora você pode rastrear despesas via WhatsApp ou pelo painel web',
+      },
+      suggestions: {
+        title: 'Próximos passos sugeridos:',
+        1: {
+          title: 'Configure orçamentos',
+          description: 'Crie orçamentos mensais para diferentes categorias',
+        },
+        2: {
+          title: 'Personalize categorias',
+          description: 'Adicione categorias que combinam com seus hábitos de gastos',
+        },
+        3: {
+          title: 'Teste o bot do WhatsApp',
+          description: 'Envie sua primeira despesa via WhatsApp',
+        },
+      },
+      button: 'Ir para o Painel',
+    },
+
+    // Legacy keys for backward compatibility
     back: 'Voltar',
     next: 'Próximo',
     skip: 'Pular',
@@ -337,7 +490,7 @@ export const messages: Messages = {
     getStarted: 'Começar',
     complete: 'Concluir',
 
-    welcome: {
+    welcomeOld: {
       title: 'Boas-vindas',
       heading: 'Bem-vindo ao NexFinApp!',
       intro: 'Seu assistente financeiro pessoal via WhatsApp',

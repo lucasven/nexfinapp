@@ -1,5 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys'
 import { getSupabaseClient } from '../database/supabase-client.js'
+import { getUserLocale, getMessages } from '../../localization/i18n.js'
 
 export interface OnboardingMessage {
   id: string
@@ -17,48 +18,22 @@ export interface OnboardingMessage {
 
 /**
  * Sends an onboarding greeting message to a new user
+ * Now uses localized greeting messages based on user's preferred language
  */
 export async function sendOnboardingGreeting(
   sock: WASocket,
   whatsappNumber: string,
-  userName: string | null
+  userName: string | null,
+  userId: string
 ): Promise<void> {
   const jid = `${whatsappNumber}@s.whatsapp.net`
 
-  const greeting = `👋 Olá${userName ? ' ' + userName : ''}! Bem-vindo ao NexFinApp!
+  // Get user's preferred locale
+  const locale = await getUserLocale(userId)
+  const messages = getMessages(locale)
 
-Eu sou seu assistente financeiro pelo WhatsApp. Vamos começar?
-
-📋 *Primeiros Passos:*
-1. Criar sua primeira categoria de despesa
-2. Adicionar uma despesa
-3. Configurar orçamentos
-
-👥 *Se quiser usar em um grupo (para casais ou famílias)*
-1. Crie um grupo com quem você deseja usar o bot
-2. Clique no nome do grupo
-3. Clique em Convidar via link do grupo
-4. Clique em Enviar link via WhatsApp
-5. Envie o link para o bot e ele entrará no grupo automaticamente
-
-💬 *Como usar:*
-Você pode me falar naturalmente! Por exemplo:
-• "Gastei 50 reais em comida"
-• "Adiciona despesa de 30 em transporte"
-• "Mostrar minhas despesas"
-• "Recebi salário de 3000"
-
-📸 *Dica Especial:*
-Você também pode me enviar fotos de SMS bancários que eu extraio os dados automaticamente usando OCR!
-
-💰 *Recursos Avançados:*
-• Configure orçamentos mensais para categorias
-• Receba alertas quando estiver perto do limite
-• Visualize relatórios detalhados das suas finanças
-
-Digite "ajuda" a qualquer momento para ver tudo que posso fazer.
-
-Vamos começar? 🚀`
+  // Get the localized onboarding greeting
+  const greeting = messages.onboardingGreeting(userName)
 
   await sock.sendMessage(jid, { text: greeting })
 }
@@ -117,7 +92,7 @@ export async function processOnboardingMessages(sock: WASocket | null): Promise<
         }
 
         if (msg.message_type === 'greeting') {
-          await sendOnboardingGreeting(sock, msg.whatsapp_number, msg.user_name)
+          await sendOnboardingGreeting(sock, msg.whatsapp_number, msg.user_name, msg.user_id)
 
           // Mark as sent
           await supabase
@@ -129,7 +104,7 @@ export async function processOnboardingMessages(sock: WASocket | null): Promise<
             })
             .eq('id', msg.id)
 
-          console.log(`[Onboarding] Greeting sent to ${msg.whatsapp_number}`)
+          console.log(`[Onboarding] Greeting sent to ${msg.whatsapp_number} in user's preferred language`)
         }
       } catch (error: any) {
         console.error(`[Onboarding] Error sending message ${msg.id}:`, error)

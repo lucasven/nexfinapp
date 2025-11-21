@@ -319,6 +319,113 @@ export async function resendBetaInvitation(email: string) {
   const supabase = await getSupabaseServerClient()
   const adminClient = getSupabaseAdminClient() // Use admin client for auth.admin methods
 
+  // Check if auth user already exists by listing users and filtering
+  // Note: listUsers doesn't support server-side filtering, so we fetch and filter client-side
+  let existingUser = null
+  let page = 1
+  const perPage = 1000
+
+  try {
+    // Paginate through users to find exact email match
+    while (true) {
+      const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers({
+        page,
+        perPage,
+      })
+
+      if (listError) {
+        console.error("Failed to list users:", listError)
+        break
+      }
+
+      // Find exact email match (case-insensitive)
+      const found = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+      if (found) {
+        existingUser = found
+        break
+      }
+
+      // No more users to check
+      if (!usersData?.users || usersData.users.length < perPage) {
+        break
+      }
+
+      page++
+    }
+  } catch (error) {
+    console.error("Error checking for existing user:", error)
+    // Don't throw - continue with invite attempt
+  }
+
+  console.log(`Checking for existing user: ${email}`, {
+    found: !!existingUser,
+    emailConfirmed: existingUser?.email_confirmed_at,
+    userId: existingUser?.id
+  })
+
+  // Handle existing user scenarios
+  if (existingUser) {
+    if (existingUser.email_confirmed_at) {
+      // User exists and has confirmed email - send recovery link instead of invite
+      console.log(`User ${email} has confirmed email, generating recovery link instead of invite`)
+
+      // Use resetPasswordForEmail to send actual email (via service role client)
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`,
+      })
+
+      if (resetError) {
+        console.error("Failed to send password reset email:", resetError)
+        await supabase
+          .from("beta_signups")
+          .update({
+            invitation_sent: false,
+            invitation_error: `Failed to send recovery email: ${resetError.message}`
+          })
+          .eq("email", email)
+        throw resetError
+      }
+
+      console.log(`Recovery email sent successfully to ${email}`)
+
+      // Update invitation tracking
+      await supabase
+        .from("beta_signups")
+        .update({
+          invitation_sent: true,
+          invitation_sent_at: new Date().toISOString(),
+          invitation_error: null
+        })
+        .eq("email", email)
+
+      await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_RESENT, {
+        email,
+        type: "recovery_email",
+      })
+
+      revalidatePath("/admin/beta-signups")
+      return { type: "recovery" }
+    } else {
+      // User exists but hasn't confirmed - delete and re-invite
+      console.log(`Deleting unconfirmed auth user for ${email} (id: ${existingUser.id}) before reinviting`)
+
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(existingUser.id)
+      if (deleteError) {
+        console.error("Failed to delete existing unconfirmed user:", deleteError)
+
+        await supabase
+          .from("beta_signups")
+          .update({
+            invitation_sent: false,
+            invitation_error: `User exists but could not delete: ${deleteError.message}`
+          })
+          .eq("email", email)
+
+        throw new Error(`User exists but could not delete before reinviting: ${deleteError.message}`)
+      }
+    }
+  }
+
   // Send invitation email using Supabase Admin API (requires service role)
   const { error } = await adminClient.auth.admin.inviteUserByEmail(
     email,
@@ -334,35 +441,35 @@ export async function resendBetaInvitation(email: string) {
 
   if (error) {
     console.error("Failed to resend invitation email:", error)
-    
+
     // Track error
     await supabase
       .from("beta_signups")
-      .update({ 
+      .update({
         invitation_sent: false,
-        invitation_error: error.message 
+        invitation_error: error.message
       })
       .eq("email", email)
-    
+
     // Track failed resend event
     await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_FAILED, {
       error: error.message,
       is_resend: true,
     })
-    
+
     throw error
   }
 
   // Update invitation tracking
   await supabase
     .from("beta_signups")
-    .update({ 
+    .update({
       invitation_sent: true,
       invitation_sent_at: new Date().toISOString(),
       invitation_error: null
     })
     .eq("email", email)
-  
+
   // Track resend event
   await trackServerEvent(email, AnalyticsEvent.ADMIN_BETA_INVITATION_RESENT, {
     email,
@@ -1838,5 +1945,83 @@ export async function getRetryPatterns() {
   }
 
   return retryPatterns.slice(0, 20) // Return top 20
+}
+
+/**
+ * Delete a user and all their data (LGPD compliance)
+ * This is a destructive action that cannot be undone
+ *
+ * Steps:
+ * 1. Call database function to delete all user data
+ * 2. Delete user from auth.users using Admin API
+ * 3. Return summary of deleted data
+ */
+export async function deleteUser(userId: string): Promise<{
+  success: boolean
+  message: string
+  deletedData?: any
+}> {
+  await verifyAdmin()
+
+  try {
+    const supabase = await getSupabaseServerClient()
+    const adminClient = getSupabaseAdminClient()
+
+    // Get current user (admin performing the deletion)
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    if (!currentUser) {
+      throw new Error('Not authenticated')
+    }
+
+    // Verify user exists before attempting deletion
+    const { data: { user: targetUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId)
+    if (getUserError || !targetUser) {
+      return {
+        success: false,
+        message: 'User not found'
+      }
+    }
+
+    // Call database function to delete all user data
+    const { data: deletionResult, error: dbError } = await supabase
+      .rpc('delete_user_data', {
+        p_user_id: userId,
+        p_deleted_by_user_id: currentUser.id,
+        p_deletion_type: 'admin'
+      })
+
+    if (dbError) {
+      console.error('[Admin] Error deleting user data:', dbError)
+      throw new Error(`Failed to delete user data: ${dbError.message}`)
+    }
+
+    console.log('[Admin] User data deleted:', deletionResult)
+
+    // Delete user from auth.users using Admin API
+    const { error: authError } = await adminClient.auth.admin.deleteUser(userId)
+
+    if (authError) {
+      console.error('[Admin] Error deleting auth user:', authError)
+      // Data was deleted but auth user remains - this is a problem
+      return {
+        success: false,
+        message: `User data deleted but failed to remove auth account: ${authError.message}`,
+        deletedData: deletionResult
+      }
+    }
+
+    return {
+      success: true,
+      message: `User deleted successfully. ${deletionResult.data_summary.total_records_deleted} records removed.`,
+      deletedData: deletionResult
+    }
+
+  } catch (error: any) {
+    console.error('[Admin] Error in deleteUser:', error)
+    return {
+      success: false,
+      message: error.message || 'Failed to delete user'
+    }
+  }
 }
 

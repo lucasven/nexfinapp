@@ -2,6 +2,10 @@
 node_modules/
 whatsapp-bot/node_modules/
 whatsapp-bot/samples/
+.bmad/
+.claude/
+.cursor/
+.playwright-mcp/
 
 # Next.js
 .next/

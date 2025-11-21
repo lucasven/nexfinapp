@@ -35,6 +35,42 @@ Envie fotos de SMS bancários ou extratos - eu extraio os dados automaticamente!
 
 💡 Sua sessão é automática pelo WhatsApp. Apenas converse comigo naturalmente!`,
 
+  // Onboarding greeting message
+  onboardingGreeting: (userName: string | null) => `👋 Olá${userName ? ' ' + userName : ''}! Bem-vindo ao NexFinApp!
+
+Eu sou seu assistente financeiro pelo WhatsApp. Vamos começar?
+
+📋 *Primeiros Passos:*
+1. Criar sua primeira categoria de despesa
+2. Adicionar uma despesa
+3. Configurar orçamentos
+
+👥 *Se quiser usar em um grupo (para casais ou famílias)*
+1. Crie um grupo com quem você deseja usar o bot
+2. Clique no nome do grupo
+3. Clique em Convidar via link do grupo
+4. Clique em Enviar link via WhatsApp
+5. Envie o link para o bot e ele entrará no grupo automaticamente
+
+💬 *Como usar:*
+Você pode me falar naturalmente! Por exemplo:
+• "Gastei 50 reais em comida"
+• "Adiciona despesa de 30 em transporte"
+• "Mostrar minhas despesas"
+• "Recebi salário de 3000"
+
+📸 *Dica Especial:*
+Você também pode me enviar fotos de SMS bancários que eu extraio os dados automaticamente usando OCR!
+
+💰 *Recursos Avançados:*
+• Configure orçamentos mensais para categorias
+• Receba alertas quando estiver perto do limite
+• Visualize relatórios detalhados das suas finanças
+
+Digite "ajuda" a qualquer momento para ver tudo que posso fazer.
+
+Vamos começar? 🚀`,
+
   // Authentication messages
   loginPrompt: '🔐 Para começar, adicione o seu número de whatsapp no seu perfil"',
   loginSuccess: '✅ Login realizado com sucesso! Agora você pode gerenciar suas despesas.',
