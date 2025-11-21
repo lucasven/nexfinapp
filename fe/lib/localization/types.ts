@@ -25,6 +25,7 @@ export interface Messages {
     day: string
     confirmDelete: string
     locale: string
+    uncategorized: string
   }
 
   // Navigation

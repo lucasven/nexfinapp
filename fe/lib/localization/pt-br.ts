@@ -21,6 +21,7 @@ export const messages: Messages = {
     day: 'Dia',
     confirmDelete: 'Tem certeza que deseja excluir?',
     locale: 'pt-BR',
+    uncategorized: 'Sem categoria',
   },
 
   nav: {

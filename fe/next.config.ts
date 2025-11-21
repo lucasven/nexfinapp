@@ -9,6 +9,23 @@ const nextConfig: NextConfig = {
     // ESLint can still be run manually with `npm run lint`
     ignoreDuringBuilds: true,
   },
+  async redirects() {
+    return [
+      // Redirect old Vercel domain to production domain
+      // This prevents PWA installations on the wrong domain
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "nexfinapp.vercel.app",
+          },
+        ],
+        destination: "https://nexfin.app.br/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
