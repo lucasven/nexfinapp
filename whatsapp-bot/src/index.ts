@@ -1,6 +1,6 @@
-import makeWASocket, { 
-  DisconnectReason, 
-  useMultiFileAuthState, 
+import makeWASocket, {
+  DisconnectReason,
+  useMultiFileAuthState,
   WAMessage,
   WASocket,
   proto,
@@ -17,9 +17,10 @@ import * as path from 'path'
 import http from 'http'
 import { handleMessage } from './handlers/core/message-handler.js'
 import { authorizeGroup } from './services/groups/group-manager.js'
-import { checkAuthorization } from './middleware/authorization.js'
+import { checkAuthorization, checkAuthorizationWithIdentifiers } from './middleware/authorization.js'
 import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
+import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
 
 dotenv.config()
 
@@ -419,30 +420,15 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       }
     }
 
-    // Get sender number (normalize by stripping non-digits)
-    let rawSender = isGroup && message.key.participant
-      ? message.key.participant.split('@')[0]
-      : from.split('@')[0]
-    
-    // Handle WhatsApp LID format (e.g., "5511999999999:10@s.whatsapp.net")
-    // In groups, WhatsApp sometimes appends :lid where lid is a local identifier
-    if (rawSender.includes(':')) {
-      rawSender = rawSender.split(':')[0]
-    }
-    
-    // Debug logging for group messages
-    if (isGroup) {
-      // console.log('[DEBUG] Group message received:', {
-      //   from,
-      //   participant: message.key.participant,
-      //   rawSender,
-      //   rawSenderBeforeLidSplit: message.key.participant?.split('@')[0],
-      //   isGroup
-      // })
-    }
-    
-    // Normalize phone number - keep only digits
-    const sender = rawSender.replace(/\D/g, '')
+    // Extract all user identifiers using new multi-identifier system
+    const userIdentifiers = extractUserIdentifiers(message, isGroup)
+
+    // Use phone number for backward compatibility (if available)
+    // Otherwise, use the full JID as the identifier
+    const sender = userIdentifiers.phoneNumber || userIdentifiers.jid
+
+    // Log identifier info for debugging (sanitized)
+    console.log('[User Identification]', formatIdentifiersForLog(userIdentifiers))
 
     // Check for image
     const hasImage = !!msg?.imageMessage
@@ -469,7 +455,8 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       message: messageText,
       hasImage,
       imageBuffer,
-      quotedMessage
+      quotedMessage,
+      userIdentifiers // Pass full identifiers for multi-identifier support
     })
 
     // Send response if we have one

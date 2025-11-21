@@ -13,7 +13,7 @@ import { trackEvent, hashSensitiveData } from '../../analytics/index.js'
 import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
 
 export async function handleMessage(context: MessageContext): Promise<string | string[] | null> {
-  const { from, isGroup, groupJid, groupName, message, hasImage, imageBuffer, quotedMessage } = context
+  const { from, isGroup, groupJid, groupName, message, hasImage, imageBuffer, quotedMessage, userIdentifiers } = context
 
   // Track message received event
   const messageType = hasImage ? 'image' : 'text'
@@ -106,7 +106,7 @@ export async function handleMessage(context: MessageContext): Promise<string | s
   }
 
   try {
-    const result = await handleTextMessage(from, message, quotedMessage, groupOwnerId)
+    const result = await handleTextMessage(from, message, quotedMessage, groupOwnerId, userIdentifiers)
 
     // Track successful processing
     trackEvent(

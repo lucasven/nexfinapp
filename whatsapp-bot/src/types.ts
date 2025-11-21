@@ -83,5 +83,6 @@ export interface MessageContext {
   hasImage: boolean
   imageBuffer?: Buffer
   quotedMessage?: string // For WhatsApp reply context
+  userIdentifiers?: import('./utils/user-identifiers.js').UserIdentifiers // Full user identifiers for multi-identifier support
 }
 

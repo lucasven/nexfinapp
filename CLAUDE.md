@@ -57,20 +57,28 @@ npm test -- path/to/test.ts  # Run specific test file
 ```bash
 # Connect to Supabase and run migrations
 psql $DATABASE_URL < fe/scripts/001_initial_schema.sql
-# Run migrations in order (001 through 017)
+# Run migrations in order (001 through 028)
+# Latest: 028_multi_identifier_support.sql (Multi-identifier user recognition)
 ```
 
 ## Key Implementation Details
 
 ### WhatsApp Bot Message Flow
 1. Message arrives at `whatsapp-bot/src/index.ts`
-2. Permission check via `middleware/permission-checker.ts`
-3. Intent parsing in `handlers/message-handler.ts`:
+2. User identification via multi-identifier system (`utils/user-identifiers.ts`):
+   - Extracts JID (always available), LID (Business accounts), phone number
+   - Supports both regular WhatsApp and WhatsApp Business accounts
+   - Handles group messages with participant identification
+3. Authorization check via `middleware/authorization.ts`:
+   - Cascading lookup: JID → LID → phone number → legacy sessions
+   - Automatic identifier sync on first message
+   - Database function: `find_user_by_whatsapp_identifier()`
+4. Intent parsing in `handlers/message-handler.ts`:
    - Layer 1: Explicit commands (`/add`, `/budget`, etc.)
    - Layer 2: Semantic cache lookup (pgvector similarity search)
    - Layer 3: OpenAI function calling with structured outputs
-4. Transaction handlers in `handlers/transactions/`
-5. Response via localization system (`localization/pt-br.ts`)
+5. Transaction handlers in `handlers/transactions/`
+6. Response via localization system (`localization/pt-br.ts`)
 
 ### Frontend User Flow
 1. Landing page at `/[locale]/` with onboarding
@@ -143,6 +151,22 @@ psql $DATABASE_URL < fe/scripts/001_initial_schema.sql
 - Frontend: Use Supabase client with RLS policies
 - WhatsApp bot: Use service key for full access
 - Always check user permissions before operations
+
+### User Identification (Multi-Identifier System)
+- **Problem**: WhatsApp Business accounts may use anonymous LIDs instead of exposing phone numbers
+- **Solution**: Store and lookup multiple identifiers (JID, LID, phone number)
+- **Implementation**:
+  - `utils/user-identifiers.ts`: Extract identifiers from Baileys messages
+  - Database columns: `whatsapp_jid`, `whatsapp_lid`, `whatsapp_number`, `account_type`, `push_name`
+  - Database function: `find_user_by_whatsapp_identifier(p_jid, p_lid, p_phone_number)`
+  - Cascading lookup: JID (most reliable) → LID (Business) → phone number (backward compatibility)
+  - Automatic sync: `services/user/identifier-sync.ts` updates identifiers on each message
+- **Usage**: Always use `checkAuthorizationWithIdentifiers()` in new code, passing `UserIdentifiers` from message context
+- **Migration**: Script `028_multi_identifier_support.sql` adds new columns and functions
+- **Account Types**:
+  - `regular`: Standard WhatsApp (phone number always available)
+  - `business`: WhatsApp Business (may have LID, verified name)
+  - `unknown`: Cannot determine type
 
 ### Error Handling
 - WhatsApp bot: Graceful fallbacks with user-friendly messages
