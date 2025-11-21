@@ -9,7 +9,8 @@ import { handleLogin } from '../auth/auth.js'
 import { messages } from '../../localization/pt-br.js'
 import { hasPendingTransaction, handleDuplicateConfirmation, isDuplicateReply, extractDuplicateIdFromQuote } from '../transactions/duplicate-confirmation.js'
 import { hasPendingOcrTransactions, handleOcrConfirmation, handleOcrCancel, handleOcrEdit, applyOcrEdit } from '../transactions/ocr-confirmation.js'
-import { checkAuthorization, hasPermission } from '../../middleware/authorization.js'
+import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
+import type { UserIdentifiers } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { recordParsingMetric, ParsingStrategy } from '../../services/monitoring/metrics-tracker.js'
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
@@ -27,7 +28,8 @@ export async function handleTextMessage(
   whatsappNumber: string,
   message: string,
   quotedMessage?: string,
-  groupOwnerId?: string | null
+  groupOwnerId?: string | null,
+  userIdentifiers?: UserIdentifiers
 ): Promise<string | string[]> {
   const startTime = Date.now()
   let strategy: ParsingStrategy = 'unknown'
@@ -394,7 +396,10 @@ export async function handleTextMessage(
         // Check permissions
         const requiredPermission = ACTION_PERMISSION_MAP[commandResult.action]
         if (requiredPermission) {
-          const authResult = await checkAuthorization(whatsappNumber)
+          // Use multi-identifier authorization if available, fallback to legacy
+          const authResult = userIdentifiers
+            ? await checkAuthorizationWithIdentifiers(userIdentifiers)
+            : await checkAuthorization(whatsappNumber)
           
           if (!authResult.authorized || !hasPermission(authResult.permissions, requiredPermission)) {
             const actionDesc = getActionDescription(commandResult.action)
@@ -502,7 +507,10 @@ export async function handleTextMessage(
       // Check permissions for cached action
       const requiredPermission = ACTION_PERMISSION_MAP[cachedIntent.action]
       if (requiredPermission) {
-        const authResult = await checkAuthorization(whatsappNumber)
+        // Use multi-identifier authorization if available, fallback to legacy
+        const authResult = userIdentifiers
+          ? await checkAuthorizationWithIdentifiers(userIdentifiers)
+          : await checkAuthorization(whatsappNumber)
 
         if (!authResult.authorized || !hasPermission(authResult.permissions, requiredPermission)) {
           const actionDesc = getActionDescription(cachedIntent.action)
@@ -629,7 +637,10 @@ export async function handleTextMessage(
       // Check permissions
       const requiredPermission = ACTION_PERMISSION_MAP[aiResult.action]
       if (requiredPermission) {
-        const authResult = await checkAuthorization(whatsappNumber)
+        // Use multi-identifier authorization if available, fallback to legacy
+        const authResult = userIdentifiers
+          ? await checkAuthorizationWithIdentifiers(userIdentifiers)
+          : await checkAuthorization(whatsappNumber)
         
         if (!authResult.authorized || !hasPermission(authResult.permissions, requiredPermission)) {
           const actionDesc = getActionDescription(aiResult.action)
