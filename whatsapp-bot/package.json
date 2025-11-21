@@ -12,6 +12,9 @@
     "cleanup-parsers": "ts-node scripts/cleanup-parsers.ts",
     "data-retention-cleanup": "tsx src/scripts/data-retention-cleanup.ts",
     "extract-ocr": "tsx src/scripts/extract-ocr-samples.ts",
+    "cron:generate-payments": "tsx src/cron/generate-recurring-payments.ts",
+    "cron:execute-auto-pay": "tsx src/cron/execute-auto-payments.ts",
+    "cron:send-reminders": "tsx src/cron/send-payment-reminders.ts",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch"

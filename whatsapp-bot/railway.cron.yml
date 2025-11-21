@@ -12,6 +12,21 @@ jobs:
     command: npm run data-retention-cleanup
     description: "Daily data retention cleanup - archives/deletes old parsing metrics, embeddings, and AI usage logs to prevent database growth"
 
+  - name: generate-recurring-payments
+    schedule: "0 0 1 * *"  # Run monthly on the 1st at midnight UTC
+    command: npm run cron:generate-payments
+    description: "Monthly generation of recurring payment entries for the next 3 months"
+
+  - name: execute-auto-payments
+    schedule: "0 6 * * *"  # Run daily at 6 AM UTC
+    command: npm run cron:execute-auto-pay
+    description: "Daily execution of auto-pay recurring payments and WhatsApp notifications"
+
+  - name: send-payment-reminders
+    schedule: "0 8 * * *"  # Run daily at 8 AM UTC
+    command: npm run cron:send-reminders
+    description: "Daily WhatsApp reminders for upcoming and overdue recurring payments"
+
   - name: health-check
     schedule: "*/30 * * * *"  # Run every 30 minutes
     command: echo "Bot is running - $(date)"

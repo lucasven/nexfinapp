@@ -184,6 +184,20 @@ export interface Messages {
     day: string
     descriptionPlaceholder: string
     selectPaymentMethod: string
+    viewAll: string
+    overdue: string
+    overdueLabel: string
+    upcoming: string
+    overduePayments: string
+    upcomingThisMonth: string
+    dueToday: string
+    dueTomorrow: string
+    daysOverdue: string
+    daysUntilDue: string
+    andXMore: string
+    paymentMarkedAsPaid: string
+    errorMarkingPayment: string
+    markPaid: string
   }
 
   // Reports

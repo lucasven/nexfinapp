@@ -33,6 +33,15 @@ export interface Messages {
   recurringAdded: (amount: number, category: string, day: number) => string
   recurringError: string
   noRecurring: string
+  recurringAutoPayNotification: (params: {
+    type: string
+    typeLabel: string
+    amount: string
+    category: string
+    description: string
+    date: string
+    transactionId: string
+  }) => string
   
   // Report messages
   reportHeader: (month: string, year: number) => string

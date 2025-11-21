@@ -1,8 +1,10 @@
 import { BalanceCard } from "@/components/balance-card"
 import { TransactionList } from "@/components/transaction-list"
 import { UserMenu } from "@/components/user-menu"
+import { UpcomingRecurringWidget } from "@/components/upcoming-recurring-widget"
 import { getBalance, getTransactions } from "@/lib/actions/transactions"
 import { getCategories } from "@/lib/actions/categories"
+import { getRecurringPayments } from "@/lib/actions/recurring"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { checkIsAdmin } from "@/lib/actions/admin"
 import { Link } from "@/lib/localization/link"
@@ -19,10 +21,11 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [balance, categories, transactions, isAdmin] = await Promise.all([
-    getBalance(), 
-    getCategories(), 
+  const [balance, categories, transactions, recurringPayments, isAdmin] = await Promise.all([
+    getBalance(),
+    getCategories(),
     getTransactions(),
+    getRecurringPayments(), // Get current month's recurring payments
     checkIsAdmin()
   ])
 
@@ -68,7 +71,10 @@ export default async function HomePage() {
           </div>
 
           <div className="space-y-6">
-            <BalanceCard income={balance.income} expenses={balance.expenses} balance={balance.balance} />
+            <div className="grid gap-6">
+              <BalanceCard income={balance.income} expenses={balance.expenses} balance={balance.balance} />
+              <UpcomingRecurringWidget payments={recurringPayments} />
+            </div>
 
             <TransactionList transactions={transactions} categories={categories} />
           </div>

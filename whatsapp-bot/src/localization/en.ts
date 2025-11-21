@@ -64,6 +64,8 @@ You can also send me photos of bank SMS or statements!`,
     `✅ Recurring expense added!\n💵 Amount: $${amount.toFixed(2)}\n📁 Category: ${category}\n📅 Day of month: ${day}`,
   recurringError: '❌ Error adding recurring expense.',
   noRecurring: '🔄 You have no recurring expenses registered.',
+  recurringAutoPayNotification: (params) =>
+    `🤖 *Automatic Payment Executed*\n\n${params.type} ${params.typeLabel} created automatically:\n\n💰 Amount: ${params.amount}\n📁 ${params.category}${params.description ? `\n📝 ${params.description}` : ''}\n📅 Date: ${params.date}\n🔖 ID: #${params.transactionId}\n\n✅ This recurring expense was processed automatically.\n\n_You can edit or delete using the ID above._`,
 
   // Report messages
   reportHeader: (month: string, year: number) => 
