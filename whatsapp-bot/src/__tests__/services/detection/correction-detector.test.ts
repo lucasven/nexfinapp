@@ -182,14 +182,14 @@ describe('Correction Detector', () => {
     })
 
     it('should handle messages with correction words but no transaction ID', () => {
-      // Note: "errado" is 6 characters and gets matched as a transaction ID
-      // Using a different test case that doesn't have a 6-char word
+      // "errado" is 6 characters but all letters - no numbers
+      // Implementation correctly rejects it as a transaction ID (requires both letters AND numbers)
       const result = detectCorrectionIntent('ta errado mesmo')
-      
-      // Since "errado" can be matched as a 6-char ID, this becomes an update action
-      expect(result.action).toBe('update')
-      expect(result.confidence).toBe(0.6) // Transaction ID present but no specific pattern
-      expect(result.transactionId).toBe('ERRADO')
+
+      // No valid transaction ID found, so action is unknown with low confidence
+      expect(result.action).toBe('unknown')
+      expect(result.confidence).toBe(0.2) // Correction words present but no valid transaction ID
+      expect(result.transactionId).toBeUndefined()
     })
 
     it('should handle empty message', () => {

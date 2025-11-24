@@ -1,0 +1,107 @@
+# generated: 2025-11-21
+# project: NexFinApp
+# project_key: nexfinapp
+# tracking_system: file-system
+# story_location: docs/stories
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic exists in epic file but not contexted
+#   - contexted: Epic tech context created (required before drafting stories)
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved and story context created
+#   - in-progress: Developer actively working on implementation
+#   - review: Under SM review (via code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epics should be 'contexted' before stories can be 'drafted'
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically drafts next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
+
+generated: 2025-11-21
+project: NexFinApp
+project_key: nexfinapp
+tracking_system: file-system
+story_location: docs/stories
+
+development_status:
+  # Epic 1: Foundation & Message Infrastructure
+  epic-1: contexted
+  1-1-database-schema-migration: done
+  1-2-engagement-handler-directory-structure: done
+  1-3-engagement-service-directory-structure: done
+  1-4-engagement-localization-portuguese: done
+  1-5-engagement-localization-english: done
+  1-6-message-queue-service-foundation: done
+  epic-1-retrospective: completed
+
+  # Epic 2: Conversation-First Welcome
+  epic-2: contexted
+  2-1-first-message-detection: done
+  2-2-conversational-first-response: done
+  2-3-guide-to-first-expense: done
+  2-4-preferred-destination-auto-detection: done
+  2-5-magic-moment-tracking: done
+  2-6-contextual-hints-after-actions: done
+  epic-2-retrospective: completed
+
+  # Epic 3: Progressive Tier Journey
+  epic-3: contexted
+  3-1-tier-progress-tracking-service: done
+  3-2-tier-action-detection-hooks: done
+  3-3-tier-completion-detection-celebrations: done
+  3-4-no-hard-gating-policy: done
+  3-5-skip-onboarding-command: done
+  3-6-tier-completion-analytics: done
+  epic-3-retrospective: completed
+
+  # Epic 4: Engagement State Machine
+  epic-4: contexted
+  4-1-state-machine-service-core: ready-for-dev
+  4-2-activity-tracking-auto-reactivation: backlog
+  4-3-self-select-goodbye-message: backlog
+  4-4-goodbye-response-processing: backlog
+  4-5-48h-timeout-to-dormant: backlog
+  4-6-message-routing-service: backlog
+  4-7-state-transition-logging-analytics: review
+  epic-4-retrospective: optional
+
+  # Epic 5: Scheduled Jobs & Weekly Reviews
+  epic-5: backlog
+  5-1-daily-engagement-job: drafted
+  5-2-weekly-activity-detection: backlog
+  5-3-weekly-review-job-message: backlog
+  5-4-message-queue-processor: backlog
+  5-5-railway-cron-integration: backlog
+  5-6-scheduler-idempotency-guarantees: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: User Preferences & Web Integration
+  epic-6: backlog
+  6-1-whatsapp-opt-out-opt-in-commands: backlog
+  6-2-web-settings-opt-out-toggle: backlog
+  6-3-cross-channel-preference-sync: backlog
+  6-4-opt-out-respect-in-engagement-system: backlog
+  6-5-analytics-dashboard-access: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Testing & Quality Assurance
+  epic-7: backlog
+  7-1-e2e-testing-framework-setup: backlog
+  7-2-state-machine-unit-tests: backlog
+  7-3-scheduler-unit-tests: backlog
+  7-4-goodbye-handler-tests: backlog
+  7-5-30-day-journey-integration-test: backlog
+  7-6-idempotency-verification-tests: backlog
+  epic-7-retrospective: optional

@@ -31,12 +31,14 @@ export interface ExecutionResult {
 /**
  * Execute a parsed intent
  * @param parsingMetricId - ID from parsing_metrics table for transaction linking
+ * @param wasNlpParsed - True if intent was parsed via NLP (semantic cache or LLM), false for explicit commands
  */
 export async function executeIntent(
   whatsappNumber: string,
   intent: any,
   session?: any,
-  parsingMetricId?: string | null
+  parsingMetricId?: string | null,
+  wasNlpParsed?: boolean
 ): Promise<string | string[]> {
   const startTime = Date.now()
 
@@ -50,7 +52,7 @@ export async function executeIntent(
   try {
     // Handle multiple transactions
     if (intent.entities.transactions && intent.entities.transactions.length > 1) {
-      const result = await handleMultipleTransactions(whatsappNumber, intent.entities.transactions, parsingMetricId)
+      const result = await handleMultipleTransactions(whatsappNumber, intent.entities.transactions, parsingMetricId, wasNlpParsed)
       logger.info('Multiple transactions executed', {
         whatsappNumber,
         count: intent.entities.transactions.length,
@@ -94,7 +96,7 @@ export async function executeIntent(
 
       case 'add_expense':
       case 'add_income':
-        result = await handleAddExpense(whatsappNumber, intent, parsingMetricId)
+        result = await handleAddExpense(whatsappNumber, intent, parsingMetricId, wasNlpParsed)
 
         // Learn payment method preference
         if (intent.entities.category && intent.entities.paymentMethod) {
@@ -263,11 +265,13 @@ export async function executeIntent(
  * Handle multiple transactions in a single message
  * Returns an array of messages to send individually
  * @param parsingMetricId - ID from parsing_metrics table for transaction linking
+ * @param wasNlpParsed - True if intent was parsed via NLP (semantic cache or LLM)
  */
 export async function handleMultipleTransactions(
   whatsappNumber: string,
   transactions: any[],
-  parsingMetricId?: string | null
+  parsingMetricId?: string | null,
+  wasNlpParsed?: boolean
 ): Promise<string[]> {
   const messageList: string[] = []
   let successCount = 0
@@ -290,7 +294,7 @@ export async function handleMultipleTransactions(
         entities: transaction
       }
 
-      const result = await handleAddExpense(whatsappNumber, intent, parsingMetricId)
+      const result = await handleAddExpense(whatsappNumber, intent, parsingMetricId, wasNlpParsed)
       messageList.push(`${i + 1}/${transactions.length} - ${result}`)
       successCount++
     } catch (error) {

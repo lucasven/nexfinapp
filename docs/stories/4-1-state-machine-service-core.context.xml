@@ -1,0 +1,95 @@
+<story-context id="4-1-state-machine-service-core" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>1</storyId>
+    <title>State Machine Service Core</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/4-1-state-machine-service-core.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>a state machine service with validated transitions</iWant>
+    <soThat>engagement states change predictably and correctly across all user interactions</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Define transition validation map with VALID_TRANSITIONS constant</task>
+      <task id="2" ac="1,2,3,5">Implement transitionState() function with validation and logging</task>
+      <task id="3" ac="4">Implement state initialization for new users</task>
+      <task id="4" ac="3">Implement transition logging to engagement_state_transitions table</task>
+      <task id="5" ac="1">Implement state-specific timestamp updates (goodbye_sent, remind_later, active)</task>
+      <task id="6" ac="1">Implement query helper functions (getEngagementState, getInactiveUsers, etc.)</task>
+      <task id="7" ac="1-5">Write unit tests for all transitions and edge cases</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.1.1">transitionState() validates all 10 transitions per architecture state diagram</criterion>
+    <criterion id="AC-4.1.2">Invalid transitions are logged and rejected with descriptive error</criterion>
+    <criterion id="AC-4.1.3">Every successful transition creates engagement_state_transitions record</criterion>
+    <criterion id="AC-4.1.4">State machine handles missing user gracefully (creates initial state)</criterion>
+    <criterion id="AC-4.1.5">Concurrent transitions for same user handled safely (optimistic locking)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-4.md" title="Epic 4 Tech Spec" section="Story 4.1: State Machine Service Core" snippet="Defines 5 acceptance criteria, TransitionResult interface, and implementation patterns for state machine service." />
+      <doc path="docs/architecture.md" title="Architecture" section="Novel Pattern Design: Engagement State Machine" snippet="State diagram showing 5 states (ACTIVE, GOODBYE_SENT, HELP_FLOW, REMIND_LATER, DORMANT) and 10 valid transitions. VALID_TRANSITIONS constant defined." />
+      <doc path="docs/prd.md" title="PRD" section="Engagement State Management (FR11-FR19)" snippet="FR11: System maintains 5 engagement states. FR19: Idempotent scheduler prevents duplicates." />
+      <doc path="docs/epics.md" title="Epics" section="Story 4.1: State Machine Service Core" snippet="Acceptance criteria and technical notes for implementing the core state machine with validated transitions." />
+    </docs>
+
+    <code>
+      <file path="whatsapp-bot/src/services/engagement/types.ts" kind="types" symbol="EngagementState, TransitionTrigger, UserEngagementState, StateTransition" lines="1-151" reason="Contains all type definitions for the state machine. EngagementState type at line 22-27, TransitionTrigger at line 32-42, UserEngagementState interface at line 57-67. VALID_TRANSITIONS map already defined at line 135-141." />
+      <file path="whatsapp-bot/src/services/engagement/constants.ts" kind="config" symbol="INACTIVITY_THRESHOLD_DAYS, GOODBYE_TIMEOUT_HOURS, REMIND_LATER_DAYS" lines="1-132" reason="Configuration constants. INACTIVITY_THRESHOLD_DAYS=14 at line 18, GOODBYE_TIMEOUT_HOURS=48 at line 27, REMIND_LATER_DAYS=14 at line 35." />
+      <file path="whatsapp-bot/src/services/engagement/state-machine.ts" kind="service" symbol="transitionState, getEngagementState, initializeEngagementState" lines="1-119" reason="Stub implementation to be completed. TransitionResult interface at line 20-26, transitionState at line 49-65, getEngagementState at line 75-82." />
+      <file path="fe/scripts/034_engagement_system.sql" kind="migration" symbol="user_engagement_states, engagement_state_transitions" lines="1-205" reason="Database schema. user_engagement_states table at line 13-24 with state column CHECK constraint. engagement_state_transitions table at line 47-55 for audit logging." />
+      <file path="whatsapp-bot/src/services/onboarding/tier-tracker.ts" kind="service" symbol="recordAction, getTierProgress" lines="all" reason="Reference implementation pattern. Uses same Supabase client patterns, PostHog analytics, and fire-and-forget error handling." />
+      <file path="whatsapp-bot/src/services/monitoring/logger.js" kind="utility" symbol="logger" lines="all" reason="Logging utility already imported in state-machine.ts. Use for transition logging." />
+    </code>
+
+    <dependencies>
+      <package name="@supabase/supabase-js" version="^2.39.3" purpose="Database access for state storage and queries" />
+      <package name="posthog-node" version="^5.11.2" purpose="Analytics events (used in Story 4.7, prepare structure)" />
+      <package name="pino" version="^8.17.2" purpose="Logging via existing logger service" />
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture.md">All state changes MUST go through transitionState() - never update DB directly</constraint>
+    <constraint source="architecture.md">State transitions must be safe to retry (idempotent where possible)</constraint>
+    <constraint source="architecture.md">Every transition logged to engagement_state_transitions for audit trail</constraint>
+    <constraint source="architecture.md">Use single transaction for atomicity (state update + log insert)</constraint>
+    <constraint source="tech-spec-epic-4.md">NFR2: State transition latency target is less than 100ms</constraint>
+    <constraint source="database">Use service role client for database operations (RLS policies require it)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="transitionState" kind="function" signature="async function transitionState(userId: string, trigger: TransitionTrigger): Promise&lt;TransitionResult&gt;" path="whatsapp-bot/src/services/engagement/state-machine.ts" />
+    <interface name="getEngagementState" kind="function" signature="async function getEngagementState(userId: string): Promise&lt;EngagementState&gt;" path="whatsapp-bot/src/services/engagement/state-machine.ts" />
+    <interface name="getInactiveUsers" kind="function" signature="async function getInactiveUsers(days: number): Promise&lt;UserEngagementState[]&gt;" path="whatsapp-bot/src/services/engagement/state-machine.ts" />
+    <interface name="getExpiredGoodbyes" kind="function" signature="async function getExpiredGoodbyes(): Promise&lt;UserEngagementState[]&gt;" path="whatsapp-bot/src/services/engagement/state-machine.ts" />
+    <interface name="getDueReminders" kind="function" signature="async function getDueReminders(): Promise&lt;UserEngagementState[]&gt;" path="whatsapp-bot/src/services/engagement/state-machine.ts" />
+    <interface name="VALID_TRANSITIONS" kind="constant" signature="Record&lt;EngagementState, Partial&lt;Record&lt;TransitionTrigger, EngagementState&gt;&gt;&gt;" path="whatsapp-bot/src/services/engagement/types.ts" />
+  </interfaces>
+
+  <tests>
+    <standards>
+      Jest testing framework with ts-jest transformer. Tests located in __tests__/ directories mirroring source structure. Use existing mock patterns from __mocks__/supabase.ts. Coverage threshold: 70% for branches, functions, lines, statements. Follow tier-tracker.test.ts organization pattern with 35+ tests.
+    </standards>
+    <locations>
+      <location>whatsapp-bot/src/__tests__/engagement/state-machine.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/services/engagement/</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-4.1.1">Test all 10 valid transitions: active→goodbye_sent, goodbye_sent→active, goodbye_sent→help_flow, goodbye_sent→remind_later, goodbye_sent→dormant (x2 triggers), help_flow→active, remind_later→active, remind_later→dormant, dormant→active</idea>
+      <idea ac="AC-4.1.2">Test invalid transitions: active→dormant (should fail), dormant→goodbye_sent (should fail). Verify error message includes state, trigger, userId.</idea>
+      <idea ac="AC-4.1.3">Test transition logging: verify engagement_state_transitions record created with correct from_state, to_state, trigger, metadata, created_at.</idea>
+      <idea ac="AC-4.1.4">Test new user handling: user without engagement state record gets initialized with state='active' on first user_message trigger.</idea>
+      <idea ac="AC-4.1.5">Test concurrent transitions: simulate two parallel transitionState calls for same user, verify one succeeds and one fails gracefully (optimistic lock).</idea>
+      <idea ac="AC-4.1.1">Test timestamp updates: goodbye_sent transition sets goodbye_sent_at and goodbye_expires_at; remind_later sets remind_at; active clears all timestamps.</idea>
+      <idea ac="AC-4.1.1">Test query helpers: getInactiveUsers returns correct users, getExpiredGoodbyes returns expired only, getDueReminders returns due only.</idea>
+    </ideas>
+  </tests>
+</story-context>

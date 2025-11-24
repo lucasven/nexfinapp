@@ -152,6 +152,52 @@ export interface Messages {
     categories: string
     help: string
   }
+
+  // Engagement: First Message & Welcome
+  engagementFirstMessage: (contextualResponse: string | null) => string
+  engagementFirstExpenseSuccess: string
+  engagementGuideToFirstExpense: string
+  engagementFirstExpenseCelebration: (amount: string, category: string) => string
+
+  // Engagement: Tier Unlock Messages
+  engagementTier1Complete: string
+  engagementTier2Complete: string
+  engagementTier3Complete: string
+
+  // Engagement: Contextual Hints
+  engagementHintAddCategory: string
+  engagementHintSetBudget: string
+  engagementHintViewReport: string
+  engagementHintFirstExpenseCategory: string
+  engagementHintBudgetSuggestion: (count: number, category: string) => string
+
+  // Engagement: Goodbye/Self-Select Messages (Story 4.3)
+  engagementGoodbyeSelfSelect: string // New 3-option goodbye message
+  engagementGoodbyeMessage: string // Legacy goodbye message
+  engagementGoodbyeResponse1: string // confused - help
+  engagementGoodbyeResponse2: string // busy - remind later
+  engagementGoodbyeResponse3: string // all good - dormant
+  engagementGoodbyeTimeout: string // 48h timeout - dormant
+  engagementRemindLaterConfirm: string
+
+  // Engagement: Help Flow (Response 1)
+  engagementHelpFlowStart: string
+
+  // Engagement: Weekly Review
+  engagementWeeklyReviewActive: (summary: { totalTransactions: number; totalAmount: number }) => string
+
+  // Engagement: Opt-Out
+  engagementOptOutConfirm: string
+  engagementOptInConfirm: string
+
+  // Engagement: Dormant Reactivation
+  engagementWelcomeBack: string
+
+  // Engagement: Destination Switching (Story 4.6)
+  engagementDestinationSwitchedToGroup: string
+  engagementDestinationSwitchedToIndividual: string
+  engagementDestinationSwitchFailed: string
+  engagementDestinationNeedGroupFirst: string
 }
 
 export interface FormatHelpers {

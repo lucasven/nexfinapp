@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story-key="3-4-no-hard-gating-policy" generated="2025-11-22">
+  <story>
+    <title>No Hard Gating Policy</title>
+    <epic>3 - Progressive Tier Journey</epic>
+    <objective>Ensure users can perform any action regardless of tier - no blocking</objective>
+  </story>
+
+  <acceptance-criteria>
+    <criterion id="AC-3.4.1">Tier 0 user CAN set budget (Tier 2 action) without error</criterion>
+    <criterion id="AC-3.4.2">Tier 0 user CAN view report (Tier 3 action) without error</criterion>
+    <criterion id="AC-3.4.3">Out-of-order actions still record correctly to their respective tiers</criterion>
+    <criterion id="AC-3.4.4">Each tier celebrates independently when complete (regardless of order)</criterion>
+  </acceptance-criteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/stories/tech-spec-epic-3.md" relevance="high">No gating policy specification</doc>
+      <doc path="docs/prd.md" relevance="high">FR8: Users can perform any action regardless of tier</doc>
+    </docs>
+
+    <code>
+      <file path="whatsapp-bot/src/handlers/budgets/budgets.ts" relevance="high">
+        <purpose>Verify no tier check before budget operations</purpose>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/reports/reports.ts" relevance="high">
+        <purpose>Verify no tier check before report operations</purpose>
+      </file>
+
+      <file path="whatsapp-bot/src/services/onboarding/tier-tracker.ts" relevance="high">
+        <purpose>Verify recordAction handles out-of-order actions</purpose>
+      </file>
+    </code>
+  </artifacts>
+
+  <anti-patterns>
+    <anti-pattern name="tier-gating">
+      // WRONG - Never gate features based on tier
+      if (user.onboarding_tier &lt; 2) {
+        return "You need to complete Tier 1 first"
+      }
+    </anti-pattern>
+
+    <pattern name="correct-approach">
+      // CORRECT - Allow any action, track progress silently
+      const budget = await createBudget(...)
+      trackTierAction(userId, 'set_budget')
+      return formatBudgetResponse(budget)
+    </pattern>
+  </anti-patterns>
+
+  <test-scenarios>
+    <scenario name="out-of-order-tier-2-first">
+      Day 1: User sets budget (Tier 2 action)
+        → tier2.set_budget = true
+        → Tier 2 NOT complete (missing add_recurring, list_categories)
+        → No celebration
+
+      Day 2: User adds expense (Tier 1 action)
+        → tier1.add_expense = true
+        → Tier 1 NOT complete yet
+
+      Day 3: User completes Tier 1 (last action)
+        → tier1.completed_at set
+        → Tier 1 celebration sent
+        → onboarding_tier = 1
+
+      Day 4: User completes Tier 2 (last action)
+        → tier2.completed_at set
+        → Tier 2 celebration sent
+        → onboarding_tier = 2
+    </scenario>
+
+    <scenario name="tier-3-before-tier-1">
+      User views report as first action
+        → tier3.view_report = true
+        → No celebration (tier incomplete)
+        → User continues using app normally
+    </scenario>
+  </test-scenarios>
+
+  <constraints>
+    <constraint type="policy">NEVER add tier checks that block functionality</constraint>
+    <constraint type="policy">Tiers are informational, not gatekeeping</constraint>
+    <constraint type="policy">Each tier celebrates independently</constraint>
+  </constraints>
+
+  <tests>
+    <test-file path="whatsapp-bot/src/__tests__/engagement/tier-journey.test.ts">
+      <test-case>Tier 0 user can set budget</test-case>
+      <test-case>Tier 0 user can view report</test-case>
+      <test-case>Tier 2 action before any Tier 1 records correctly</test-case>
+      <test-case>Tier 3 action before Tier 1 or 2 records correctly</test-case>
+      <test-case>Independent celebrations for out-of-order completion</test-case>
+      <test-case>No tier checks exist in any handler</test-case>
+    </test-file>
+  </tests>
+
+  <implementation-notes>
+    <note>This story is primarily validation - no new code if tier-tracker is correct</note>
+    <note>May need to REMOVE any existing tier checks found in handlers</note>
+    <note>Focus on integration testing of out-of-order scenarios</note>
+    <note>Per PRD: "Users can skip ahead or stop the flow entirely (autonomy)"</note>
+  </implementation-notes>
+</story-context>

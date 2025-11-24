@@ -308,7 +308,107 @@ Available commands:
 
 Use /help <command> for specific details.
     `
-  }
+  },
+
+  // Engagement: First Message & Welcome
+  engagementFirstMessage: (contextualResponse: string | null) =>
+    `Hi! Great to have you here 😊
+${contextualResponse ? `\n${contextualResponse}\n` : ''}
+Try saying something like "spent 50 on lunch" and see the magic happen.`,
+
+  engagementFirstExpenseSuccess: `You just logged your first expense. Easy, right?`,
+
+  engagementGuideToFirstExpense: `Try sending something like "spent 50 on lunch" and I'll take care of the rest!`,
+
+  engagementFirstExpenseCelebration: (amount: string, category: string) =>
+    `Done! I logged ${amount} in ${category} for you. Welcome to NexFin 😊`,
+
+  // Engagement: Tier Unlock Messages
+  engagementTier1Complete: `You've got the basics down!
+Want to go further? Try setting a budget: "set food budget to 500"`,
+
+  engagementTier2Complete: `You're not just tracking—you're planning!
+Want to see the results? Try "report this month" to see your progress.`,
+
+  engagementTier3Complete: `You're a pro now! You have complete control over your finances.
+Any questions, just reach out.`,
+
+  // Engagement: Contextual Hints
+  engagementHintAddCategory: `Tip: you can create custom categories. Try "add category subscriptions"`,
+
+  engagementHintSetBudget: `Tip: set limits to avoid overspending. Try "set transport budget to 300"`,
+
+  engagementHintViewReport: `Tip: see how you're doing. Try "how much did I spend this month?"`,
+
+  engagementHintFirstExpenseCategory: `💡 Want to create custom categories? Send "create category" to learn how!`,
+
+  engagementHintBudgetSuggestion: (count: number, category: string) =>
+    `💡 You have ${count} expenses in ${category}. Want to set a budget? Send "budget ${category} 500"`,
+
+  // Engagement: Goodbye/Self-Select Messages (Story 4.3)
+  engagementGoodbyeSelfSelect: `Hey! I noticed it's been a while since you dropped by 🤔
+
+Everything okay? Let me know:
+1️⃣ Confused about the app
+2️⃣ Just busy right now
+3️⃣ All good, just don't need it anymore
+
+Just reply with the number that fits!`,
+
+  // Legacy goodbye message (kept for backward compatibility)
+  engagementGoodbyeMessage: `Hey! We noticed you've been quiet. No pressure—finances are personal.
+
+Quick question before we go silent:
+1️⃣ I was confused—help me out?
+2️⃣ Just busy—remind me later
+3️⃣ All good, I'll reach out when ready
+
+(Or just ignore this, we'll be here 💙)`,
+
+  // Story 4.4: Goodbye Response Processing - Updated messages per AC-4.4.6
+  engagementGoodbyeResponse1: `No problem! Let me help you get started again. I'll send you some tips over the next few days. How about logging an expense? E.g., 'spent 50 on lunch'`,
+
+  engagementGoodbyeResponse2: `Got it! See you in 2 weeks. I'll be here if you need anything in the meantime.`,
+
+  engagementGoodbyeResponse3: `All good! The door is always open. Just send a message whenever you want to come back.`,
+
+  engagementGoodbyeTimeout: `No worries, we'll stay quiet for now.
+Whenever you want to come back, just send a message.`,
+
+  engagementRemindLaterConfirm: `Hey again! It's been 2 weeks.
+Want to pick up where you left off? Just send an expense.`,
+
+  // Engagement: Help Flow (Response 1)
+  engagementHelpFlowStart: `No problem! Let's start from the beginning.
+
+The basics are simple: tell me about your expenses like you would in a conversation.
+
+For example:
+• "Spent 50 at the grocery store"
+• "Paid 30 for uber yesterday"
+• "Lunch 25 dollars"
+
+Try sending an expense now.`,
+
+  // Engagement: Weekly Review
+  engagementWeeklyReviewActive: (summary: { totalTransactions: number; totalAmount: number }) =>
+    `Hey! You logged ${summary.totalTransactions} expense${summary.totalTransactions > 1 ? 's' : ''} this week, totaling $${summary.totalAmount.toFixed(2)}.
+You're doing great! Want to see the full report? Just send "report".`,
+
+  // Engagement: Opt-Out
+  engagementOptOutConfirm: `Got it! I won't send reminders anymore.
+You can still use all features normally, just reach out anytime.`,
+
+  engagementOptInConfirm: `Enabled! You'll now receive reminders and tips again.`,
+
+  // Engagement: Dormant Reactivation
+  engagementWelcomeBack: `Hey! Great to see you back. Pick up where you left off!`,
+
+  // Engagement: Destination Switching (Story 4.6)
+  engagementDestinationSwitchedToGroup: "Done! I'll now send messages in the group.",
+  engagementDestinationSwitchedToIndividual: "Done! I'll now send messages privately.",
+  engagementDestinationSwitchFailed: "Couldn't change preference. Try again?",
+  engagementDestinationNeedGroupFirst: 'To receive messages in a group, send a message in the group first.'
 }
 
 export const formatCurrency = (value: number): string => {

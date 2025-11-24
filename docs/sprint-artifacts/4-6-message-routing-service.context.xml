@@ -1,0 +1,278 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>6</storyId>
+    <title>Message Routing Service</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/4-6-message-routing-service.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>to route proactive messages to users' preferred destination (individual or group)</iWant>
+    <soThat>messages arrive where users expect them</soThat>
+    <tasks>
+      <task id="1" title="Implement getDestinationJid() service function" ac="1,2,6,7">
+        <subtask>Create services/engagement/message-router.ts file</subtask>
+        <subtask>Import supabaseAdmin client for database access</subtask>
+        <subtask>Implement getDestinationJid(userId: string): Promise&lt;DestinationResult&gt;</subtask>
+        <subtask>Query user_profiles for preferred_destination and group_jid</subtask>
+        <subtask>If preferred_destination = 'individual', return user's individual JID from whatsapp_jid</subtask>
+        <subtask>If preferred_destination = 'group': If group_jid exists, return group JID; If group_jid is null, log warning and fallback to individual JID</subtask>
+        <subtask>Export function from services/engagement/index.ts</subtask>
+      </task>
+      <task id="2" title="Implement updatePreferredDestination() service function" ac="3,4">
+        <subtask>Add function to services/engagement/message-router.ts</subtask>
+        <subtask>Update user_profiles.preferred_destination column</subtask>
+        <subtask>If destination is 'group' and groupJid provided, store group_jid</subtask>
+        <subtask>Log preference change for audit trail</subtask>
+      </task>
+      <task id="3" title="Add destination switch command handler" ac="3,4,5">
+        <subtask>Create intent detection patterns in handlers/core/intent-executor.ts</subtask>
+        <subtask>Add intent type SWITCH_DESTINATION to intent types</subtask>
+        <subtask>Create handler function handleSwitchDestination(userId, messageContext, locale)</subtask>
+      </task>
+      <task id="4" title="Add localization messages for destination switching" ac="5">
+        <subtask>Add to localization/pt-br.ts: destination_switched_to_group, destination_switched_to_individual, destination_switch_failed</subtask>
+        <subtask>Add equivalent keys to localization/en.ts</subtask>
+      </task>
+      <task id="5" title="Integrate with message queue service" ac="1,2">
+        <subtask>Modify services/scheduler/message-sender.ts processMessageQueue()</subtask>
+        <subtask>Before sending, call getDestinationJid(message.user_id)</subtask>
+        <subtask>Use returned JID for Baileys send call</subtask>
+        <subtask>Store destination_jid in queue record for audit</subtask>
+      </task>
+      <task id="6" title="Add group_jid column to user_profiles if not exists" ac="2">
+        <subtask>Check if group_jid column already exists in user_profiles</subtask>
+        <subtask>Story 2.4 created preferred_group_jid - verify column name alignment</subtask>
+      </task>
+      <task id="7" title="Write unit tests for message routing" ac="1-7">
+        <subtask>Create __tests__/services/engagement/message-router.test.ts</subtask>
+        <subtask>Test getDestinationJid() for all preference combinations</subtask>
+        <subtask>Test updatePreferredDestination() updates column correctly</subtask>
+        <subtask>Test switch command handler recognizes all variations</subtask>
+      </task>
+      <task id="8" title="Write integration tests for destination routing" ac="1,2,5">
+        <subtask>Test end-to-end flow of queueing message → processing → correct JID used</subtask>
+        <subtask>Mock Baileys send to verify correct JID passed</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.6.1">When preferred_destination = 'individual', proactive messages are sent to the user's individual JID</criterion>
+    <criterion id="AC-4.6.2">When preferred_destination = 'group', proactive messages are sent to the stored group JID</criterion>
+    <criterion id="AC-4.6.3">User can send "mudar para grupo" / "switch to group" to update preference to group</criterion>
+    <criterion id="AC-4.6.4">User can send "mudar para individual" / "switch to individual" to update preference to individual</criterion>
+    <criterion id="AC-4.6.5">Preference change sends localized confirmation message</criterion>
+    <criterion id="AC-4.6.6">getDestinationJid(userId) returns correct JID based on preference</criterion>
+    <criterion id="AC-4.6.7">If group preference but no stored group JID, falls back to individual JID with warning log</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/prd.md</path>
+        <title>NexFinApp - Product Requirements Document</title>
+        <section>Message Destination (FR24-FR27)</section>
+        <snippet>FR26: System sends all proactive messages to user's preferred destination. FR27: Users can explicitly change their preferred destination via command.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - Smart Onboarding &amp; Engagement System</title>
+        <section>Message Destination Storage Decision</section>
+        <snippet>Decision: user_profiles.preferred_destination column. User-level preference, not per-number. Services: message-router.ts routes to preferred destination.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-4.md</path>
+        <title>Epic Technical Specification: Engagement State Machine</title>
+        <section>Story 4.6: Message Routing Service</section>
+        <snippet>AC4.6.1-AC4.6.5: getDestination() returns stored preference or default 'individual'. Command patterns for switching destinations. All queued messages include resolved destination_jid.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>NexFinApp - Epic Breakdown</title>
+        <section>Story 4.6: Message Routing Service</section>
+        <snippet>Implements routing proactive messages to preferred destination. Supports switch commands in both pt-BR and English.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>whatsapp-bot/src/services/engagement/message-router.ts</path>
+        <kind>service</kind>
+        <symbol>getMessageDestination, setPreferredDestination, autoDetectDestination</symbol>
+        <lines>1-180</lines>
+        <reason>EXISTING implementation from Story 2.4 - getMessageDestination() already exists but returns RouteResult format. Need to extend with getDestinationJid() that returns DestinationResult with fallback_used flag per story tasks.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/engagement/index.ts</path>
+        <kind>module-export</kind>
+        <symbol>getMessageDestination, setPreferredDestination, autoDetectDestination, RouteResult</symbol>
+        <lines>50-56</lines>
+        <reason>Re-exports message-router functions. Add new getDestinationJid export after implementation.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/scheduler/message-sender.ts</path>
+        <kind>service</kind>
+        <symbol>queueMessage, processMessageQueue, getIdempotencyKey</symbol>
+        <lines>1-190</lines>
+        <reason>Message queue service - processMessageQueue() currently a stub. Task 5 integrates getDestinationJid() before sending.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/handlers/core/intent-executor.ts</path>
+        <kind>handler</kind>
+        <symbol>executeIntent, handleMultipleTransactions</symbol>
+        <lines>1-321</lines>
+        <reason>Intent executor routes parsed intents to handlers. Task 3 adds SWITCH_DESTINATION case to switch statement.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>messages</symbol>
+        <lines>1-150</lines>
+        <reason>Portuguese localization. Task 4 adds destination_switched_to_group, destination_switched_to_individual, destination_switch_failed keys.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>messages</symbol>
+        <reason>English localization. Task 4 adds matching keys to pt-br.ts.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/types.ts</path>
+        <kind>types</kind>
+        <symbol>Messages, Locale</symbol>
+        <lines>155-195</lines>
+        <reason>TypeScript types for localization - engagement messages section. Add new destination switch message types.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/__tests__/engagement/message-router.test.ts</path>
+        <kind>test</kind>
+        <symbol>describe('Message Router - Story 2.4')</symbol>
+        <lines>1-200</lines>
+        <reason>Existing tests for Story 2.4. Extend with tests for getDestinationJid fallback logic and switch command handlers.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="node">
+        <package name="@supabase/supabase-js" version="^2.x">Supabase client for database operations</package>
+        <package name="jest" version="^29.x">Testing framework</package>
+        <package name="typescript" version="^5.x">TypeScript compiler</package>
+      </ecosystem>
+      <internal>
+        <dependency>services/database/supabase-client.ts - getSupabaseClient()</dependency>
+        <dependency>services/monitoring/logger.ts - logger</dependency>
+        <dependency>services/engagement/types.ts - EngagementState, MessageType</dependency>
+        <dependency>services/engagement/constants.ts - MAX_MESSAGE_RETRIES</dependency>
+      </internal>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">All state changes MUST go through state machine service - never update DB directly</constraint>
+    <constraint type="pattern">Use structured logging with userId context for all operations</constraint>
+    <constraint type="pattern">All proactive messages MUST be queued via message-sender.queueMessage() - never send directly via Baileys</constraint>
+    <constraint type="naming">TypeScript files: kebab-case (message-router.ts)</constraint>
+    <constraint type="naming">TypeScript functions: camelCase (getDestinationJid)</constraint>
+    <constraint type="naming">Database columns: snake_case (preferred_destination, group_jid)</constraint>
+    <constraint type="error-handling">Scheduler services: Log errors, continue processing batch (never fail batch for one user)</constraint>
+    <constraint type="error-handling">User handlers: Return localized friendly message, log details</constraint>
+    <constraint type="architecture">Message router is lightweight service - queries current preference at send time (not cached)</constraint>
+    <constraint type="architecture">Fallback behavior: If group preference but no group_jid, fallback to individual with warning log</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>DestinationResult (new)</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface DestinationResult {
+  jid: string
+  destination: 'individual' | 'group'
+  fallback_used: boolean
+}
+      </signature>
+      <path>whatsapp-bot/src/services/engagement/message-router.ts</path>
+    </interface>
+    <interface>
+      <name>RouteResult (existing)</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface RouteResult {
+  destination: 'individual' | 'group'
+  destinationJid: string
+  error?: string
+}
+      </signature>
+      <path>whatsapp-bot/src/services/engagement/message-router.ts</path>
+    </interface>
+    <interface>
+      <name>getDestinationJid (new)</name>
+      <kind>async function</kind>
+      <signature>async function getDestinationJid(userId: string): Promise&lt;DestinationResult&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/message-router.ts</path>
+    </interface>
+    <interface>
+      <name>updatePreferredDestination (new)</name>
+      <kind>async function</kind>
+      <signature>async function updatePreferredDestination(userId: string, destination: 'individual' | 'group', groupJid?: string): Promise&lt;void&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/message-router.ts</path>
+    </interface>
+    <interface>
+      <name>SWITCH_TO_GROUP_PATTERNS</name>
+      <kind>regex patterns</kind>
+      <signature>
+const SWITCH_TO_GROUP_PATTERNS = [
+  /mudar\s+para\s+(o\s+)?grupo/i,
+  /trocar\s+para\s+(o\s+)?grupo/i,
+  /mensagens?\s+(no|em)\s+grupo/i,
+  /switch\s+to\s+group/i,
+  /messages?\s+in\s+group/i
+]
+      </signature>
+      <path>whatsapp-bot/src/handlers/core/intent-executor.ts</path>
+    </interface>
+    <interface>
+      <name>SWITCH_TO_INDIVIDUAL_PATTERNS</name>
+      <kind>regex patterns</kind>
+      <signature>
+const SWITCH_TO_INDIVIDUAL_PATTERNS = [
+  /mudar\s+para\s+(o\s+)?individual/i,
+  /mudar\s+para\s+(o\s+)?privado/i,
+  /trocar\s+para\s+(o\s+)?privado/i,
+  /mensagens?\s+privadas?/i,
+  /switch\s+to\s+(individual|private)/i,
+  /private\s+messages?/i
+]
+      </signature>
+      <path>whatsapp-bot/src/handlers/core/intent-executor.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing uses Jest with mocked Supabase client. Tests follow existing patterns from __tests__/engagement/message-router.test.ts.
+      Mock supabase via jest.mock('../../services/database/supabase-client').
+      Use mockQuerySuccess() and mockQuerySequence() helpers from __mocks__/supabase.ts.
+      Coverage target: 90%+ line coverage for routing logic.
+    </standards>
+    <locations>
+      <location>whatsapp-bot/src/__tests__/services/engagement/message-router.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/engagement/message-router.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/handlers/engagement/*.test.ts</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-4.6.1">Test getDestinationJid() returns individual JID when preferred_destination = 'individual'</idea>
+      <idea ac="AC-4.6.2">Test getDestinationJid() returns group JID when preferred_destination = 'group' and group_jid exists</idea>
+      <idea ac="AC-4.6.7">Test getDestinationJid() falls back to individual when group_jid is null (verify warning logged)</idea>
+      <idea ac="AC-4.6.3">Test switch command handler recognizes all PT-BR variations: "mudar para grupo", "trocar para grupo", "mensagens no grupo"</idea>
+      <idea ac="AC-4.6.4">Test switch command handler recognizes all EN variations: "switch to group", "switch to individual", "private messages"</idea>
+      <idea ac="AC-4.6.5">Test confirmation message sent in user's locale after preference change</idea>
+      <idea ac="AC-4.6.6">Test updatePreferredDestination() updates column correctly</idea>
+      <idea ac="integration">Test end-to-end: queueMessage() → processMessageQueue() → getDestinationJid() → correct JID used</idea>
+      <idea ac="integration">Test user switches preference → next queued message uses new destination</idea>
+    </ideas>
+  </tests>
+</story-context>

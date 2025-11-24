@@ -4,6 +4,7 @@ import { ParsedIntent } from '../../types.js'
 import { messages, getMonthName } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { storeUndoState } from '../core/undo.js'
+import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
 
 export async function handleSetBudget(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {
@@ -60,6 +61,10 @@ export async function handleSetBudget(whatsappNumber: string, intent: ParsedInte
       logger.error('Error setting budget', { whatsappNumber, userId: session.userId }, error)
       return messages.budgetError
     }
+
+    // Story 3.2: Track tier action for set_budget (AC-3.2.5)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    trackTierAction(session.userId, 'set_budget')
 
     const monthName = getMonthName(targetMonth)
     return messages.budgetSet(categoryName, amount, `${monthName}/${targetYear}`)

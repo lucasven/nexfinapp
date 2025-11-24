@@ -311,7 +311,107 @@ Listar itens - "Listar gastos" ou "Listar Transaçoes"
 Gerenciar categorias - "Listar categorias" ou "Adicionar categoria assinaturas"
 Mostrar esta ajuda - "Ajuda"
     `
-  }
+  },
+
+  // Engagement: First Message & Welcome
+  engagementFirstMessage: (contextualResponse: string | null) =>
+    `Oi! Que bom ter você aqui 😊
+${contextualResponse ? `\n${contextualResponse}\n` : ''}
+Experimenta mandar algo tipo "gastei 50 no almoço" e vê a mágica acontecer.`,
+
+  engagementFirstExpenseSuccess: `Você acabou de registrar sua primeira despesa. Fácil, né?`,
+
+  engagementGuideToFirstExpense: `Experimenta mandar algo tipo "gastei 50 no almoço" e eu cuido do resto!`,
+
+  engagementFirstExpenseCelebration: (amount: string, category: string) =>
+    `Pronto! Anotei ${amount} em ${category} pra você. Bem-vindo ao NexFin 😊`,
+
+  // Engagement: Tier Unlock Messages
+  engagementTier1Complete: `Você já dominou o básico!
+Quer ir além? Tenta definir um orçamento: "definir orçamento de 500 para alimentação"`,
+
+  engagementTier2Complete: `Você não está só rastreando—está planejando!
+Quer ver o resultado? Tenta "relatório desse mês" pra ver sua organização.`,
+
+  engagementTier3Complete: `Você é fera! Tem controle total das suas finanças agora.
+Qualquer dúvida, é só chamar.`,
+
+  // Engagement: Contextual Hints
+  engagementHintAddCategory: `Dica: você pode criar categorias personalizadas. Tenta "adicionar categoria assinaturas"`,
+
+  engagementHintSetBudget: `Dica: defina limites para não gastar demais. Tenta "definir orçamento de 300 para transporte"`,
+
+  engagementHintViewReport: `Dica: veja como está indo. Tenta "quanto gastei esse mês?"`,
+
+  engagementHintFirstExpenseCategory: `💡 Quer criar categorias personalizadas? Manda "criar categoria" pra ver como!`,
+
+  engagementHintBudgetSuggestion: (count: number, category: string) =>
+    `💡 Você já tem ${count} gastos em ${category}. Quer criar um orçamento? Manda "orçamento ${category} 500"`,
+
+  // Engagement: Goodbye/Self-Select Messages (Story 4.3)
+  engagementGoodbyeSelfSelect: `Oi! Percebi que faz um tempinho que você não aparece por aqui 🤔
+
+Tudo bem por aí? Me conta:
+1️⃣ Confuso com o app
+2️⃣ Ocupado agora
+3️⃣ Tudo certo, só não preciso mais
+
+Responde com o número que combina mais com você!`,
+
+  // Legacy goodbye message (kept for backward compatibility)
+  engagementGoodbyeMessage: `Oi! Notamos que você está quieto. Sem pressão—finanças são pessoais.
+
+Pergunta rápida antes de ficarmos em silêncio:
+1️⃣ Fiquei confuso—me ajuda?
+2️⃣ Só ocupado—me lembra depois
+3️⃣ Tá tudo certo, eu falo quando precisar
+
+(Ou só ignora, estaremos aqui 💙)`,
+
+  // Story 4.4: Goodbye Response Processing - Updated messages per AC-4.4.6
+  engagementGoodbyeResponse1: `Sem problemas! Vou te ajudar a começar de novo. Vou te mandar algumas dicas nos próximos dias. Que tal começar registrando uma despesa? Ex: 'gastei 50 no almoço'`,
+
+  engagementGoodbyeResponse2: `Entendido! Te vejo daqui a 2 semanas. Enquanto isso, fico aqui se precisar de algo.`,
+
+  engagementGoodbyeResponse3: `Tudo certo! A porta está sempre aberta. Manda uma mensagem quando quiser voltar.`,
+
+  engagementGoodbyeTimeout: `Tudo bem, vamos ficar quietos por enquanto.
+Quando quiser voltar, é só mandar uma mensagem.`,
+
+  engagementRemindLaterConfirm: `Oi de novo! Passaram 2 semanas.
+Quer retomar de onde parou? É só mandar uma despesa.`,
+
+  // Engagement: Help Flow (Response 1)
+  engagementHelpFlowStart: `Sem problemas! Vamos do começo.
+
+O básico é simples: me conta seus gastos como se fosse uma conversa.
+
+Por exemplo:
+• "Gastei 50 no mercado"
+• "Paguei 30 de uber ontem"
+• "Almoço 25 reais"
+
+Tenta mandar uma despesa agora.`,
+
+  // Engagement: Weekly Review
+  engagementWeeklyReviewActive: (summary: { totalTransactions: number; totalAmount: number }) =>
+    `Oi! Você registrou ${summary.totalTransactions} despesa${summary.totalTransactions > 1 ? 's' : ''} essa semana, totalizando R$ ${summary.totalAmount.toFixed(2).replace('.', ',')}.
+Tá mandando bem! Quer ver o relatório completo? Só mandar "relatório".`,
+
+  // Engagement: Opt-Out
+  engagementOptOutConfirm: `Entendido! Não vou mais mandar lembretes.
+Você ainda pode usar todas as funções normalmente, é só chamar.`,
+
+  engagementOptInConfirm: `Ativado! Agora você vai receber lembretes e dicas novamente.`,
+
+  // Engagement: Dormant Reactivation
+  engagementWelcomeBack: `Oi! Que bom te ver de volta. Continua de onde parou!`,
+
+  // Engagement: Destination Switching (Story 4.6)
+  engagementDestinationSwitchedToGroup: 'Pronto! Agora vou enviar mensagens no grupo.',
+  engagementDestinationSwitchedToIndividual: 'Pronto! Agora vou enviar mensagens no privado.',
+  engagementDestinationSwitchFailed: 'Não consegui mudar a preferência. Tenta de novo?',
+  engagementDestinationNeedGroupFirst: 'Para receber mensagens no grupo, envie uma mensagem no grupo primeiro.'
 }
 
 export const formatCurrency = (value: number): string => {

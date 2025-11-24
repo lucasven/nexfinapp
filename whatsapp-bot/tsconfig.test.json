@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "jest"],
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*", "src/**/*.test.ts", "src/__tests__/**/*", "src/__mocks__/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexFinApp - Notification Preferences Mockup</title>
+  <style>
+    :root {
+      /* Light mode colors - matching your Tailwind config */
+      --background: #ffffff;
+      --foreground: #0a0a0a;
+      --card: #ffffff;
+      --card-foreground: #0a0a0a;
+      --primary: #18181b;
+      --primary-foreground: #fafafa;
+      --muted: #f4f4f5;
+      --muted-foreground: #71717a;
+      --border: #e4e4e7;
+      --ring: #18181b;
+      --destructive: #ef4444;
+      --info-bg: #eff6ff;
+      --info-border: #bfdbfe;
+      --info-text: #1e40af;
+    }
+
+    .dark {
+      --background: #0a0a0a;
+      --foreground: #fafafa;
+      --card: #0a0a0a;
+      --card-foreground: #fafafa;
+      --primary: #fafafa;
+      --primary-foreground: #18181b;
+      --muted: #27272a;
+      --muted-foreground: #a1a1aa;
+      --border: #27272a;
+      --ring: #d4d4d8;
+      --destructive: #dc2626;
+      --info-bg: #1e3a5f;
+      --info-border: #1e40af;
+      --info-text: #93c5fd;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--background);
+      color: var(--foreground);
+      line-height: 1.5;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    /* Header */
+    .mockup-header {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .mockup-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .mockup-controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .mockup-btn {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: background 0.2s;
+    }
+
+    .mockup-btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .mockup-btn.active {
+      background: white;
+      color: #6366f1;
+    }
+
+    /* Container */
+    .container {
+      max-width: 896px;
+      margin: 0 auto;
+      padding: 32px 16px;
+    }
+
+    /* Page Header */
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    .page-header h1 {
+      font-size: 1.875rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 4px;
+    }
+
+    .page-header p {
+      color: var(--muted-foreground);
+    }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .card-header {
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .card-description {
+      color: var(--muted-foreground);
+      font-size: 0.875rem;
+    }
+
+    .card-content {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Icon */
+    .icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .icon-bell {
+      color: var(--foreground);
+    }
+
+    .icon-info {
+      color: var(--info-text);
+    }
+
+    /* Preference Row */
+    .preference-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 16px;
+      background: var(--muted);
+      border-radius: 8px;
+    }
+
+    .preference-content {
+      flex: 1;
+    }
+
+    .preference-label {
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .preference-description {
+      font-size: 0.875rem;
+      color: var(--muted-foreground);
+    }
+
+    /* Switch */
+    .switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: var(--muted-foreground);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .switch.checked {
+      background: var(--primary);
+    }
+
+    .switch.loading {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .switch-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .switch.checked .switch-thumb {
+      transform: translateX(20px);
+    }
+
+    .switch:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+    }
+
+    /* Info Note */
+    .info-note {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      background: var(--info-bg);
+      border: 1px solid var(--info-border);
+      border-radius: 8px;
+      font-size: 0.875rem;
+      color: var(--info-text);
+    }
+
+    .info-note p {
+      flex: 1;
+    }
+
+    /* Status indicators */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      margin-left: 8px;
+    }
+
+    .status-on {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status-off {
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+
+    .dark .status-on {
+      background: #166534;
+      color: #dcfce7;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.875rem;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast-success {
+      border-left: 4px solid #22c55e;
+    }
+
+    .toast-error {
+      border-left: 4px solid var(--destructive);
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 32px 0;
+    }
+
+    /* Preview label */
+    .preview-label {
+      text-align: center;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .preference-row {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .switch-wrapper {
+        align-self: flex-start;
+      }
+    }
+
+    /* State showcase */
+    .state-showcase {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .state-card {
+      padding: 16px;
+      background: var(--muted);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .state-card h4 {
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .state-card .switch {
+      margin: 0 auto;
+    }
+
+    /* Accessibility demo */
+    .a11y-demo {
+      padding: 16px;
+      background: var(--muted);
+      border-radius: 8px;
+      margin-top: 16px;
+    }
+
+    .a11y-demo h4 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .a11y-demo ul {
+      font-size: 0.875rem;
+      color: var(--muted-foreground);
+      padding-left: 20px;
+    }
+
+    .a11y-demo li {
+      margin-bottom: 4px;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      background: var(--background);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="mockup-header">
+    <h1>NexFinApp - Notification Preferences Mockup</h1>
+    <div class="mockup-controls">
+      <button class="mockup-btn active" onclick="setTheme('light')">Light Mode</button>
+      <button class="mockup-btn" onclick="setTheme('dark')">Dark Mode</button>
+      <button class="mockup-btn" onclick="setLanguage('en')">English</button>
+      <button class="mockup-btn" onclick="setLanguage('pt')">Portugues</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <p class="preview-label">Live Preview - Account Settings Page</p>
+
+    <div class="page-header">
+      <h1 id="page-title">Account Settings</h1>
+      <p id="page-description">Manage your account preferences and data</p>
+    </div>
+
+    <!-- Existing Card (collapsed representation) -->
+    <div class="card" style="opacity: 0.5;">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+          <span id="account-info-title">Account Information</span>
+        </div>
+        <div class="card-description" id="account-info-desc">Your account details</div>
+      </div>
+      <div class="card-content" style="color: var(--muted-foreground); font-size: 0.875rem;">
+        [Existing content - email, user ID, member since]
+      </div>
+    </div>
+
+    <!-- Existing Card (collapsed representation) -->
+    <div class="card" style="opacity: 0.5;">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span id="your-data-title">Your Data</span>
+        </div>
+        <div class="card-description" id="your-data-desc">Summary of your stored data</div>
+      </div>
+      <div class="card-content" style="color: var(--muted-foreground); font-size: 0.875rem;">
+        [Existing content - transaction count, categories, etc.]
+      </div>
+    </div>
+
+    <!-- NEW: Notification Preferences Card -->
+    <div class="card" style="border: 2px solid #6366f1;">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="icon icon-bell" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+          <span id="notif-title">Notification Preferences</span>
+          <span style="background: #6366f1; color: white; font-size: 0.625rem; padding: 2px 8px; border-radius: 9999px; font-weight: 500;">NEW</span>
+        </div>
+        <div class="card-description" id="notif-desc">Control how we communicate with you via WhatsApp</div>
+      </div>
+      <div class="card-content">
+        <div class="preference-row">
+          <div class="preference-content">
+            <div class="preference-label">
+              <span id="reengagement-label">Re-engagement Messages</span>
+              <span class="status-badge status-on" id="status-badge">ON</span>
+            </div>
+            <div class="preference-description" id="reengagement-desc">
+              Friendly check-ins when you've been quiet for a while. We'll ask how you're doing—never spam or guilt.
+            </div>
+          </div>
+          <div class="switch-wrapper">
+            <div
+              class="switch checked"
+              id="main-switch"
+              role="switch"
+              aria-checked="true"
+              aria-labelledby="reengagement-label"
+              tabindex="0"
+              onclick="toggleSwitch()"
+              onkeydown="handleKeydown(event)"
+            >
+              <div class="switch-thumb"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-note">
+          <svg class="icon icon-info" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px;">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p id="tips-note">
+            Onboarding tips will still be sent to help you discover features. You can stop these via WhatsApp by saying "stop tips".
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Existing Cards (collapsed) -->
+    <div class="card" style="opacity: 0.5; border-color: #bfdbfe;">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="icon" style="color: #2563eb;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <span id="lgpd-title">Your Data Rights (LGPD)</span>
+        </div>
+        <div class="card-description" id="lgpd-desc">Brazilian data protection law guarantees your rights</div>
+      </div>
+    </div>
+
+    <div class="card" style="opacity: 0.5; border-color: var(--destructive);">
+      <div class="card-header">
+        <div class="card-title" style="color: var(--destructive);">
+          <svg class="icon" style="color: var(--destructive);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          <span id="danger-title">Danger Zone</span>
+        </div>
+        <div class="card-description" id="danger-desc">Irreversible actions that affect your account</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Component States Showcase -->
+    <p class="preview-label">Switch Component States</p>
+
+    <div class="state-showcase">
+      <div class="state-card">
+        <h4>Enabled (ON)</h4>
+        <div class="switch checked">
+          <div class="switch-thumb"></div>
+        </div>
+      </div>
+      <div class="state-card">
+        <h4>Disabled (OFF)</h4>
+        <div class="switch">
+          <div class="switch-thumb"></div>
+        </div>
+      </div>
+      <div class="state-card">
+        <h4>Loading</h4>
+        <div class="switch checked loading">
+          <div class="switch-thumb"></div>
+        </div>
+      </div>
+      <div class="state-card">
+        <h4>Focused</h4>
+        <div class="switch checked" style="box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);">
+          <div class="switch-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="a11y-demo">
+      <h4>Accessibility Features</h4>
+      <ul>
+        <li><kbd>Tab</kbd> to focus the switch</li>
+        <li><kbd>Space</kbd> or <kbd>Enter</kbd> to toggle</li>
+        <li>Screen reader announces: "Re-engagement Messages, switch, on/off"</li>
+        <li>Focus indicator visible for keyboard users</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast toast-success" id="toast">
+    <svg width="16" height="16" fill="none" stroke="#22c55e" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    <span id="toast-message">Preferences saved</span>
+  </div>
+
+  <script>
+    // State
+    let isChecked = true;
+    let currentLang = 'en';
+
+    // Translations
+    const translations = {
+      en: {
+        pageTitle: 'Account Settings',
+        pageDesc: 'Manage your account preferences and data',
+        accountInfoTitle: 'Account Information',
+        accountInfoDesc: 'Your account details',
+        yourDataTitle: 'Your Data',
+        yourDataDesc: 'Summary of your stored data',
+        notifTitle: 'Notification Preferences',
+        notifDesc: 'Control how we communicate with you via WhatsApp',
+        reengagementLabel: 'Re-engagement Messages',
+        reengagementDesc: "Friendly check-ins when you've been quiet for a while. We'll ask how you're doing—never spam or guilt.",
+        tipsNote: 'Onboarding tips will still be sent to help you discover features. You can stop these via WhatsApp by saying "stop tips".',
+        lgpdTitle: 'Your Data Rights (LGPD)',
+        lgpdDesc: 'Brazilian data protection law guarantees your rights',
+        dangerTitle: 'Danger Zone',
+        dangerDesc: 'Irreversible actions that affect your account',
+        toastSaved: 'Preferences saved',
+        statusOn: 'ON',
+        statusOff: 'OFF'
+      },
+      pt: {
+        pageTitle: 'Configuracoes da Conta',
+        pageDesc: 'Gerencie suas preferencias e dados da conta',
+        accountInfoTitle: 'Informacoes da Conta',
+        accountInfoDesc: 'Seus detalhes da conta',
+        yourDataTitle: 'Seus Dados',
+        yourDataDesc: 'Resumo dos seus dados armazenados',
+        notifTitle: 'Preferencias de Notificacao',
+        notifDesc: 'Controle como nos comunicamos com voce via WhatsApp',
+        reengagementLabel: 'Mensagens de Reengajamento',
+        reengagementDesc: 'Check-ins amigaveis quando voce esta quieto por um tempo. Vamos perguntar como voce esta—nunca spam ou culpa.',
+        tipsNote: 'Dicas de onboarding ainda serao enviadas para ajudar voce a descobrir recursos. Voce pode parar essas dicas via WhatsApp dizendo "parar dicas".',
+        lgpdTitle: 'Seus Direitos de Dados (LGPD)',
+        lgpdDesc: 'A lei brasileira de protecao de dados garante seus direitos',
+        dangerTitle: 'Zona de Perigo',
+        dangerDesc: 'Acoes irreversiveis que afetam sua conta',
+        toastSaved: 'Preferencias salvas',
+        statusOn: 'LIGADO',
+        statusOff: 'DESLIGADO'
+      }
+    };
+
+    function setTheme(theme) {
+      document.body.classList.toggle('dark', theme === 'dark');
+      document.querySelectorAll('.mockup-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', (theme === 'light' && i === 0) || (theme === 'dark' && i === 1));
+      });
+    }
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      const t = translations[lang];
+
+      document.getElementById('page-title').textContent = t.pageTitle;
+      document.getElementById('page-description').textContent = t.pageDesc;
+      document.getElementById('account-info-title').textContent = t.accountInfoTitle;
+      document.getElementById('account-info-desc').textContent = t.accountInfoDesc;
+      document.getElementById('your-data-title').textContent = t.yourDataTitle;
+      document.getElementById('your-data-desc').textContent = t.yourDataDesc;
+      document.getElementById('notif-title').textContent = t.notifTitle;
+      document.getElementById('notif-desc').textContent = t.notifDesc;
+      document.getElementById('reengagement-label').textContent = t.reengagementLabel;
+      document.getElementById('reengagement-desc').textContent = t.reengagementDesc;
+      document.getElementById('tips-note').textContent = t.tipsNote;
+      document.getElementById('lgpd-title').textContent = t.lgpdTitle;
+      document.getElementById('lgpd-desc').textContent = t.lgpdDesc;
+      document.getElementById('danger-title').textContent = t.dangerTitle;
+      document.getElementById('danger-desc').textContent = t.dangerDesc;
+      document.getElementById('toast-message').textContent = t.toastSaved;
+
+      updateStatusBadge();
+
+      document.querySelectorAll('.mockup-btn').forEach((btn, i) => {
+        if (i === 2 || i === 3) {
+          btn.classList.toggle('active', (lang === 'en' && i === 2) || (lang === 'pt' && i === 3));
+        }
+      });
+    }
+
+    function updateStatusBadge() {
+      const badge = document.getElementById('status-badge');
+      const t = translations[currentLang];
+
+      if (isChecked) {
+        badge.textContent = t.statusOn;
+        badge.className = 'status-badge status-on';
+      } else {
+        badge.textContent = t.statusOff;
+        badge.className = 'status-badge status-off';
+      }
+    }
+
+    function toggleSwitch() {
+      const switchEl = document.getElementById('main-switch');
+
+      // Optimistic update
+      isChecked = !isChecked;
+      switchEl.classList.toggle('checked', isChecked);
+      switchEl.setAttribute('aria-checked', isChecked);
+      updateStatusBadge();
+
+      // Simulate API call
+      switchEl.classList.add('loading');
+
+      setTimeout(() => {
+        switchEl.classList.remove('loading');
+        showToast();
+      }, 500);
+    }
+
+    function handleKeydown(event) {
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        toggleSwitch();
+      }
+    }
+
+    function showToast() {
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
