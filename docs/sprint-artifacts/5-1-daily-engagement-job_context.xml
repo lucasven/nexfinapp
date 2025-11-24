@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story-id>5-1-daily-engagement-job</story-id>
+  <epic>Epic 5: Scheduled Jobs & Weekly Reviews</epic>
+  <generated-at>2025-11-24T06:00:00Z</generated-at>
+
+  <summary>
+    Daily scheduled job (6 AM UTC) that evaluates user engagement states and transitions inactive users automatically:
+    - 14-day inactive users → goodbye_sent (with message)
+    - Expired goodbye (48h) → dormant (silent)
+    - Due remind_later → dormant (silent)
+    Respects opt-out preferences and provides failure isolation per user.
+  </summary>
+
+  <acceptance-criteria>
+    <criterion id="AC-5.1.1">
+      Given the daily job runs at 6 AM UTC, when evaluating active users, then users with last_activity_at > 14 days ago AND reengagement_opt_out = false are transitioned to goodbye_sent and a goodbye message is queued.
+    </criterion>
+    <criterion id="AC-5.1.2">
+      Given the daily job runs, when evaluating goodbye_sent users, then users with goodbye_expires_at &lt; now() are transitioned to dormant with NO message sent.
+    </criterion>
+    <criterion id="AC-5.1.3">
+      Given the daily job runs, when evaluating remind_later users, then users with remind_at &lt; now() are transitioned to dormant with NO message sent.
+    </criterion>
+    <criterion id="AC-5.1.4">
+      Given a user has reengagement_opt_out = true, when the daily job evaluates them, then they are skipped (no transition, no message).
+    </criterion>
+  </acceptance-criteria>
+
+  <dependencies>
+    <epic-dependency>
+      <epic>Epic 4: Engagement State Machine</epic>
+      <reason>Uses state-machine.ts transitionState() for all state changes</reason>
+      <files>
+        <file>whatsapp-bot/src/services/engagement/state-machine.ts</file>
+      </files>
+    </epic-dependency>
+
+    <story-dependency>
+      <story>4.1 State Machine Service Core</story>
+      <reason>Requires transitionState() function with triggers: inactivity_14d, goodbye_timeout, reminder_due</reason>
+    </story-dependency>
+
+    <story-dependency>
+      <story>4.3 Self-Select Goodbye Message</story>
+      <reason>Goodbye message queuing happens automatically when transitioning to goodbye_sent state</reason>
+    </story-dependency>
+
+    <story-dependency>
+      <story>4.6 Message Routing Service</story>
+      <reason>Message routing to preferred destination handled by state machine side effects</reason>
+    </story-dependency>
+  </dependencies>
+
+  <technical-context>
+    <architecture>
+      <pattern name="Thin Orchestration Layer">
+        The daily job queries eligible users and calls transitionState() for each. The state machine handles all side effects (timestamps, message queuing, analytics). The job is purely orchestration with failure isolation.
+      </pattern>
+
+      <pattern name="Three Sequential Checks">
+        Job runs three independent checks in sequence:
+        1. Inactivity check (active → goodbye_sent with message)
+        2. Timeout check (goodbye_sent → dormant silent)
+        3. Remind-later check (remind_later → dormant silent)
+      </pattern>
+
+      <pattern name="Failure Isolation">
+        Each user is wrapped in try-catch. If one user fails, job continues processing others. Final result includes failed count and errors array.
+      </pattern>
+    </architecture>
+
+    <database>
+      <table name="user_engagement_states">
+        <schema>
+          <column name="user_id" type="UUID" indexed="true" unique="true"/>
+          <column name="state" type="TEXT" indexed="true" values="active|goodbye_sent|help_flow|remind_later|dormant"/>
+          <column name="last_activity_at" type="TIMESTAMPTZ" indexed="true" note="Check for 14-day threshold"/>
+          <column name="goodbye_expires_at" type="TIMESTAMPTZ" indexed="true" note="Check for 48h timeout"/>
+          <column name="remind_at" type="TIMESTAMPTZ" indexed="true" note="Check for due reminders"/>
+        </schema>
+
+        <indexes>
+          <index name="idx_engagement_state" columns="state"/>
+          <index name="idx_engagement_last_activity" columns="last_activity_at"/>
+          <index name="idx_engagement_goodbye_expires" columns="goodbye_expires_at" partial="WHERE goodbye_expires_at IS NOT NULL"/>
+          <index name="idx_engagement_remind_at" columns="remind_at" partial="WHERE remind_at IS NOT NULL"/>
+        </indexes>
+
+        <query-pattern name="Inactivity Check (AC-5.1.1)">
+          <sql>
+            SELECT user_id, last_activity_at
+            FROM user_engagement_states ues
+            INNER JOIN user_profiles up ON ues.user_id = up.user_id
+            WHERE ues.state = 'active'
+              AND ues.last_activity_at &lt; NOW() - INTERVAL '14 days'
+              AND up.reengagement_opt_out = false
+          </sql>
+          <performance-note>Uses idx_engagement_state + idx_engagement_last_activity. Opt-out check in JOIN to avoid N+1.</performance-note>
+        </query-pattern>
+
+        <query-pattern name="Timeout Check (AC-5.1.2)">
+          <sql>
+            SELECT user_id, goodbye_expires_at
+            FROM user_engagement_states
+            WHERE state = 'goodbye_sent'
+              AND goodbye_expires_at &lt; NOW()
+          </sql>
+          <performance-note>Uses idx_engagement_state + idx_engagement_goodbye_expires (partial index).</performance-note>
+        </query-pattern>
+
+        <query-pattern name="Remind-Later Check (AC-5.1.3)">
+          <sql>
+            SELECT user_id, remind_at
+            FROM user_engagement_states
+            WHERE state = 'remind_later'
+              AND remind_at &lt; NOW()
+          </sql>
+          <performance-note>Uses idx_engagement_state + idx_engagement_remind_at (partial index).</performance-note>
+        </query-pattern>
+      </table>
+
+      <table name="user_profiles">
+        <schema>
+          <column name="reengagement_opt_out" type="BOOLEAN" default="false" note="AC-5.1.4: Skip opted-out users"/>
+          <column name="preferred_destination" type="TEXT" default="individual" values="individual|group" note="Message routing (Story 4.6)"/>
+        </schema>
+      </table>
+    </database>
+
+    <state-machine>
+      <service-path>whatsapp-bot/src/services/engagement/state-machine.ts</service-path>
+
+      <function name="transitionState">
+        <signature>
+          async function transitionState(
+            userId: string,
+            trigger: TransitionTrigger,
+            metadata?: Record&lt;string, unknown&gt;
+          ): Promise&lt;TransitionResult&gt;
+        </signature>
+
+        <return-type>
+          interface TransitionResult {
+            success: boolean
+            previousState: EngagementState
+            newState: EngagementState
+            transitionId?: string
+            error?: string
+            sideEffects: string[]  // e.g., ["message_queued", "timestamp_updated"]
+          }
+        </return-type>
+
+        <triggers-for-story>
+          <trigger name="inactivity_14d" from="active" to="goodbye_sent" message="yes" note="AC-5.1.1"/>
+          <trigger name="goodbye_timeout" from="goodbye_sent" to="dormant" message="no" note="AC-5.1.2"/>
+          <trigger name="reminder_due" from="remind_later" to="dormant" message="no" note="AC-5.1.3"/>
+        </triggers-for-story>
+      </function>
+    </state-machine>
+
+    <constants>
+      <file-path>whatsapp-bot/src/services/engagement/constants.ts</file-path>
+      <constant name="INACTIVITY_THRESHOLD_DAYS" value="14" note="AC-5.1.1: Trigger goodbye after 14 days"/>
+      <constant name="GOODBYE_TIMEOUT_HOURS" value="48" note="AC-5.1.2: Timeout after 48 hours"/>
+      <constant name="REMIND_LATER_DAYS" value="14" note="AC-5.1.3: Reminder delay"/>
+    </constants>
+
+    <logging>
+      <service-path>whatsapp-bot/src/services/monitoring/logger.ts</service-path>
+
+      <pattern name="Structured Logging">
+        <example type="job-start">
+          logger.info('Daily engagement job started', {
+            job_id: uuidv4(),
+            started_at: new Date().toISOString()
+          })
+        </example>
+
+        <example type="user-processing">
+          logger.debug('Processing user engagement check', {
+            userId: user.user_id,
+            check_type: 'inactivity_14d',
+            last_activity: user.last_activity_at
+          })
+        </example>
+
+        <example type="user-error">
+          logger.error('Failed to process user engagement', {
+            userId: user.user_id,
+            check_type: 'inactivity_14d',
+            error: error.message
+          })
+        </example>
+
+        <example type="job-completion">
+          logger.info('Daily engagement job completed', {
+            job_id,
+            duration_ms: Date.now() - startTime,
+            processed: result.processed,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            skipped: result.skipped
+          })
+        </example>
+      </pattern>
+    </logging>
+
+    <supabase-client>
+      <service-path>whatsapp-bot/src/services/database/supabase-client.ts</service-path>
+
+      <usage-pattern>
+        import { getSupabaseClient } from '../database/supabase-client.js'
+
+        const supabase = getSupabaseClient()  // Singleton with SUPABASE_SERVICE_KEY
+
+        const { data, error } = await supabase
+          .from('user_engagement_states')
+          .select('user_id, last_activity_at')
+          .eq('state', 'active')
+      </usage-pattern>
+    </supabase-client>
+
+    <cron-configuration>
+      <file-path>whatsapp-bot/railway.cron.yml</file-path>
+
+      <existing-jobs>
+        <job name="cleanup-parsers" schedule="0 3 * * *" command="npm run cleanup-parsers"/>
+        <job name="send-payment-reminders" schedule="0 8 * * *" command="npm run cron:send-reminders"/>
+      </existing-jobs>
+
+      <new-job-for-story>
+        <name>engagement-daily</name>
+        <schedule>0 6 * * *</schedule>
+        <command>tsx src/cron/run-engagement-daily.ts</command>
+        <description>Daily engagement job: 14-day inactivity, 48h timeout, remind-later expiration</description>
+      </new-job-for-story>
+    </cron-configuration>
+  </technical-context>
+
+  <implementation-patterns>
+    <pattern name="Error Handling - Failure Isolation">
+      <description>
+        Each user is processed in a try-catch block. If one user fails, the job continues processing others.
+        Final result includes failed count and errors array for debugging.
+      </description>
+
+      <code-example>
+        for (const user of users) {
+          result.processed++
+          try {
+            await transitionState(user.user_id, 'inactivity_14d')
+            result.succeeded++
+            logger.debug('Processed user', { userId: user.user_id })
+          } catch (error) {
+            result.failed++
+            result.errors.push({ userId: user.user_id, error: error.message })
+            logger.error('Failed to process user', { userId: user.user_id, error })
+            // Continue to next user - don't fail entire batch
+          }
+        }
+      </code-example>
+    </pattern>
+
+    <pattern name="Idempotency">
+      <description>
+        Message queuing uses idempotency keys to prevent duplicate messages on re-runs.
+        State transitions are idempotent (transitioning to current state is no-op).
+      </description>
+
+      <idempotency-key-format>
+        {userId}:{eventType}:{YYYY-MM-DD}
+
+        Examples:
+        - abc123:goodbye_sent:2025-11-24
+        - def456:reminder_due:2025-11-24
+      </idempotency-key-format>
+
+      <note>
+        Idempotency key generation is handled automatically by state machine when queuing messages.
+        Daily job can safely re-run multiple times per day without side effects.
+      </note>
+    </pattern>
+
+    <pattern name="Performance Optimization">
+      <description>
+        All queries use indexed columns. Target: &lt; 60 seconds for 10,000 users.
+      </description>
+
+      <optimization-techniques>
+        <technique>Use indexed WHERE clauses (state, last_activity_at, goodbye_expires_at, remind_at)</technique>
+        <technique>Opt-out check in JOIN to avoid N+1 queries</technique>
+        <technique>Single pass per check type (3 queries total)</technique>
+        <technique>No sub-queries or complex joins</technique>
+      </optimization-techniques>
+    </pattern>
+
+    <pattern name="Cron Entry Point">
+      <description>
+        Cron script imports and calls job function, logs result, exits with proper code.
+      </description>
+
+      <code-example>
+        #!/usr/bin/env tsx
+        import { runDailyEngagementJob } from '../services/scheduler/daily-engagement-job.js'
+        import { logger } from '../services/monitoring/logger.js'
+
+        async function main() {
+          try {
+            const result = await runDailyEngagementJob()
+
+            logger.info('Daily engagement job completed successfully', result)
+
+            if (result.failed > 0) {
+              logger.warn('Some users failed to process', {
+                failed_count: result.failed,
+                errors: result.errors
+              })
+            }
+
+            process.exit(0)  // Success
+          } catch (error) {
+            logger.error('Daily engagement job failed', { error })
+            process.exit(1)  // Failure
+          }
+        }
+
+        main()
+      </code-example>
+    </pattern>
+  </implementation-patterns>
+
+  <job-result-interface>
+    <typescript>
+      interface JobResult {
+        processed: number      // Total users evaluated across all checks
+        succeeded: number      // Successful state transitions
+        failed: number         // Failed state transitions (errors)
+        skipped: number        // Users skipped due to opt-out (AC-5.1.4)
+        errors: Array&lt;{ userId: string; error: string }&gt;  // Failed user details
+        durationMs: number     // Job execution time in milliseconds
+      }
+    </typescript>
+
+    <tracking-notes>
+      <note>processed: Incremented before processing each user</note>
+      <note>succeeded: Incremented after successful transitionState() call</note>
+      <note>failed: Incremented on catch, error details added to errors array</note>
+      <note>skipped: Incremented when user has reengagement_opt_out = true (if checked outside query)</note>
+      <note>durationMs: Calculated as Date.now() - startTime in finally block</note>
+    </tracking-notes>
+  </job-result-interface>
+
+  <testing-requirements>
+    <test-file>whatsapp-bot/src/__tests__/scheduler/daily-engagement-job.test.ts</test-file>
+
+    <test-cases>
+      <test id="1" ac="AC-5.1.1">
+        <name>14-day inactive user transitions to goodbye_sent</name>
+        <setup>User with state=active, last_activity_at = 15 days ago, reengagement_opt_out=false</setup>
+        <expect>transitionState called with trigger='inactivity_14d', result.succeeded++</expect>
+      </test>
+
+      <test id="2" ac="AC-5.1.4">
+        <name>Opted-out user is skipped</name>
+        <setup>User with state=active, last_activity_at = 15 days ago, reengagement_opt_out=true</setup>
+        <expect>User not included in query results, not processed</expect>
+      </test>
+
+      <test id="3" ac="AC-5.1.2">
+        <name>Expired goodbye transitions to dormant</name>
+        <setup>User with state=goodbye_sent, goodbye_expires_at = 1 hour ago</setup>
+        <expect>transitionState called with trigger='goodbye_timeout', result.succeeded++</expect>
+      </test>
+
+      <test id="4" ac="AC-5.1.3">
+        <name>Due remind_later transitions to dormant</name>
+        <setup>User with state=remind_later, remind_at = 1 hour ago</setup>
+        <expect>transitionState called with trigger='reminder_due', result.succeeded++</expect>
+      </test>
+
+      <test id="5">
+        <name>User at 13 days inactive is not processed</name>
+        <setup>User with state=active, last_activity_at = 13 days ago</setup>
+        <expect>User not included in query results, not processed</expect>
+      </test>
+
+      <test id="6">
+        <name>Job continues processing after one user fails</name>
+        <setup>User1 fails transitionState, User2 succeeds</setup>
+        <expect>result.failed=1, result.succeeded=1, result.errors.length=1</expect>
+      </test>
+
+      <test id="7">
+        <name>Job result counts are accurate</name>
+        <setup>Process 5 users: 3 succeed, 2 fail</setup>
+        <expect>result.processed=5, result.succeeded=3, result.failed=2, result.errors.length=2</expect>
+      </test>
+
+      <test id="8">
+        <name>Job completion within 60 seconds for 100 users (performance)</name>
+        <setup>Mock 100 users across all check types</setup>
+        <expect>result.durationMs &lt; 60000</expect>
+      </test>
+    </test-cases>
+
+    <mocking-strategy>
+      <mock target="getSupabaseClient">Return mock client with mock query results</mock>
+      <mock target="transitionState">Return mock TransitionResult, track calls</mock>
+      <mock target="logger">Spy on log calls, don't output to console</mock>
+    </mocking-strategy>
+  </testing-requirements>
+
+  <files-to-create>
+    <file path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts">
+      <description>Main job service with runDailyEngagementJob() function and three helper functions for each check type</description>
+      <exports>
+        <export name="runDailyEngagementJob" type="function" returns="Promise&lt;JobResult&gt;"/>
+        <export name="JobResult" type="interface"/>
+      </exports>
+    </file>
+
+    <file path="whatsapp-bot/src/cron/run-engagement-daily.ts">
+      <description>Cron entry point script that imports and calls runDailyEngagementJob()</description>
+      <shebang>#!/usr/bin/env tsx</shebang>
+      <exit-codes>
+        <code value="0">Success (job completed, even if some users failed)</code>
+        <code value="1">Failure (job crashed or database unavailable)</code>
+      </exit-codes>
+    </file>
+
+    <file path="whatsapp-bot/src/__tests__/scheduler/daily-engagement-job.test.ts">
+      <description>Unit tests for daily engagement job</description>
+      <framework>Jest</framework>
+      <coverage-target>70% (branches, functions, lines, statements)</coverage-target>
+    </file>
+  </files-to-create>
+
+  <files-to-modify>
+    <file path="whatsapp-bot/railway.cron.yml">
+      <modification>Add new cron job entry for engagement-daily at 6 AM UTC</modification>
+      <format>YAML</format>
+      <validation>Test cron command runs successfully locally with: tsx src/cron/run-engagement-daily.ts</validation>
+    </file>
+  </files-to-modify>
+
+  <critical-requirements>
+    <requirement id="1" priority="critical">
+      Use transitionState() for ALL state changes. Never update database directly.
+    </requirement>
+
+    <requirement id="2" priority="critical">
+      Wrap each user processing in try-catch. Job must continue if one user fails.
+    </requirement>
+
+    <requirement id="3" priority="critical">
+      AC-5.1.2 and AC-5.1.3 explicitly state NO message is sent (silence by design).
+    </requirement>
+
+    <requirement id="4" priority="critical">
+      Opt-out check (AC-5.1.4) must be in query JOIN, not per-user lookup (performance).
+    </requirement>
+
+    <requirement id="5" priority="high">
+      Job must complete in &lt; 60 seconds for 10,000 users. Use indexed queries.
+    </requirement>
+
+    <requirement id="6" priority="high">
+      Job is idempotent. Safe to re-run multiple times per day without side effects.
+    </requirement>
+
+    <requirement id="7" priority="medium">
+      Return JobResult with accurate counts and errors array for debugging.
+    </requirement>
+
+    <requirement id="8" priority="medium">
+      Use structured logging with context (job_id, duration_ms, counts).
+    </requirement>
+  </critical-requirements>
+
+  <references>
+    <epic-tech-spec>docs/sprint-artifacts/tech-spec-epic-5.md</epic-tech-spec>
+    <architecture-doc>docs/architecture.md (ADR-002: Database-Driven Scheduler, ADR-005: Single Daily Job)</architecture-doc>
+    <state-machine-spec>docs/sprint-artifacts/tech-spec-epic-4.md (State Machine Service)</state-machine-spec>
+    <database-migration>fe/scripts/034_engagement_system.sql</database-migration>
+  </references>
+
+  <notes>
+    <note type="design-decision">
+      Silence on timeout/remind_later is intentional design. Users explicitly chose "not now" or didn't respond.
+      Re-engaging after silence respects their choice to step away.
+    </note>
+
+    <note type="integration">
+      This story completes the automated engagement loop started in Epic 4.
+      Message delivery happens in Story 5.4 (Message Queue Processor).
+    </note>
+
+    <note type="performance">
+      Partial indexes on goodbye_expires_at and remind_at (WHERE NOT NULL) optimize timeout/remind checks.
+      These columns are NULL for most users, so partial indexes significantly improve performance.
+    </note>
+  </notes>
+</story-context>

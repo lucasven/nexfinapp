@@ -383,6 +383,7 @@ async function executeGoodbyeSideEffects(userId: string): Promise<string[]> {
       messageParams: { locale },
       destination: destination.destination,
       destinationJid: destination.destinationJid,
+      idempotencyKey,
     })
 
     if (queued) {

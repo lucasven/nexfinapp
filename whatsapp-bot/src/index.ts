@@ -890,3 +890,12 @@ process.on('SIGTERM', async () => {
   process.exit(0)
 })
 
+/**
+ * Get the Baileys socket instance
+ * Used by message queue processor (Story 5.4)
+ * @returns The Baileys socket instance or null if not connected
+ */
+export function getSocket(): WASocket | null {
+  return sock
+}
+

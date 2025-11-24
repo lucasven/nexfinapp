@@ -24,15 +24,17 @@ export {
 // Daily engagement job (Epic 5)
 export {
   runDailyEngagementJob,
-  hasRunToday,
   type JobResult,
 } from './daily-engagement-job.js'
 
 // Weekly review job (Epic 5)
 export {
   runWeeklyReviewJob,
-  generateWeeklySummary,
-  shouldRunToday,
-  type WeeklyReviewResult,
-  type UserWeeklySummary,
 } from './weekly-review-job.js'
+
+// Activity detector (Epic 5)
+export {
+  getActiveUsersLastWeek,
+  getUserActivityCount,
+  type ActiveUser,
+} from './activity-detector.js'

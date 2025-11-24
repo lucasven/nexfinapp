@@ -2,30 +2,35 @@
  * Daily Engagement Job
  *
  * Scheduled job that runs once daily to:
- * - Detect inactive users (14+ days)
- * - Send goodbye messages
- * - Process goodbye timeouts (48h)
- * - Handle remind-later expirations
+ * - Detect inactive users (14+ days) and transition to goodbye_sent
+ * - Process goodbye timeouts (48h) and transition to dormant
+ * - Handle remind-later expirations and transition to dormant
  *
- * Epic: 1 - Foundation & Message Infrastructure
- * Story: 1.3 - Engagement Service Directory Structure
- * Story: 4.5 - 48h Timeout to Dormant (timeout processing)
- * Implementation: Epic 5 - Scheduled Jobs & Weekly Reviews
+ * Epic: 5 - Scheduled Jobs & Weekly Reviews
+ * Story: 5.1 - Daily Engagement Job
+ *
+ * AC-5.1.1: 14-day inactive users with reengagement_opt_out=false → goodbye_sent (with message)
+ * AC-5.1.2: goodbye_sent users with goodbye_expires_at < now → dormant (silent)
+ * AC-5.1.3: remind_later users with remind_at < now → dormant (silent)
+ * AC-5.1.4: Users with reengagement_opt_out=true are skipped
  */
 
 import { logger } from '../monitoring/logger.js'
+import { getSupabaseClient } from '../database/supabase-client.js'
+import { processMessageQueue } from './message-sender.js'
 import {
-  getExpiredGoodbyes,
   transitionState,
+  getExpiredGoodbyes,
+  getDueReminders,
 } from '../engagement/state-machine.js'
+import { INACTIVITY_THRESHOLD_DAYS } from '../engagement/constants.js'
 
 export interface JobResult {
-  success: boolean
-  usersProcessed: number
-  goodbyesSent: number
-  timeoutsProcessed: number
-  remindersProcessed: number
-  errors: string[]
+  processed: number
+  succeeded: number
+  failed: number
+  skipped: number
+  errors: Array<{ userId: string; error: string }>
   durationMs: number
 }
 
@@ -35,106 +40,239 @@ export interface JobResult {
  * This job is idempotent - running multiple times per day
  * will not send duplicate messages or cause duplicate transitions.
  *
- * AC-4.5.5: Multiple daily job runs don't cause duplicate transitions
- * - Users already in 'dormant' state won't appear in getExpiredGoodbyes()
- * - Each user can only transition once per query
- *
  * @returns Job execution results
  */
 export async function runDailyEngagementJob(): Promise<JobResult> {
   const startTime = Date.now()
-  const errors: string[] = []
-  let usersProcessed = 0
-  let goodbyesSent = 0
-  let timeoutsProcessed = 0
-  let remindersProcessed = 0
+  const result: JobResult = {
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    errors: [],
+    durationMs: 0,
+  }
 
-  logger.info('Daily engagement job started')
+  logger.info('Daily engagement job started', {
+    started_at: new Date().toISOString(),
+  })
 
   try {
-    // Step 1: Check 14-day inactivity (TODO: Epic 5, Story 5.1)
-    // This will queue goodbye messages for inactive users
-    // goodbyesSent = await processInactiveUsers()
+    // Step 1: Process 14-day inactive users (AC-5.1.1, AC-5.1.4)
+    await processInactiveUsers(result)
 
-    // Step 2: Process expired goodbye timeouts (Story 4.5)
-    // AC-4.5.1: Query users where state='goodbye_sent' AND goodbye_expires_at < now
-    const expiredGoodbyes = await getExpiredGoodbyes()
-    logger.info('Found expired goodbyes to process', { count: expiredGoodbyes.length })
+    // Step 2: Process expired goodbye timeouts (AC-5.1.2)
+    await processGoodbyeTimeouts(result)
 
-    // AC-4.5.2, AC-4.5.5: Process each expired goodbye with per-user error handling
-    for (const user of expiredGoodbyes) {
-      try {
-        // AC-4.5.2: Trigger is 'goodbye_timeout' (distinct from 'goodbye_response_3')
-        const result = await transitionState(user.userId, 'goodbye_timeout', {
-          response_type: 'timeout',
-          job_triggered: true,
-        })
+    // Step 3: Process due remind_later states (AC-5.1.3)
+    await processRemindLaterDue(result)
 
-        if (result.success) {
-          timeoutsProcessed++
-          usersProcessed++
-          logger.debug('Goodbye timeout processed', {
-            userId: user.userId,
-            sideEffects: result.sideEffects,
-          })
-        } else {
-          // AC-4.5.5: Defensive check - skip if user already transitioned (race condition)
-          if (result.error?.includes('Invalid transition')) {
-            logger.warn('User already transitioned (idempotent skip)', {
-              userId: user.userId,
-              error: result.error,
-            })
-          } else {
-            errors.push(`User ${user.userId}: ${result.error}`)
-            logger.error('Failed to process goodbye timeout', {
-              userId: user.userId,
-              error: result.error,
-            })
-          }
-        }
-      } catch (error) {
-        // AC-4.5.5: Per-user try/catch prevents single failure from blocking batch
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        errors.push(`User ${user.userId}: ${errorMessage}`)
-        logger.error('Exception processing goodbye timeout', { userId: user.userId }, error as Error)
-      }
+    // Step 4: Process queued messages (Story 5.4)
+    try {
+      const queueResult = await processMessageQueue()
+      logger.info('Queue processing completed', {
+        processed: queueResult.processed,
+        succeeded: queueResult.succeeded,
+        failed: queueResult.failed,
+        errors_count: queueResult.errors.length
+      })
+    } catch (error) {
+      // Log but don't fail entire job
+      logger.error('Queue processing failed', {}, error as Error)
     }
 
-    // Step 3: Check due reminders (TODO: Epic 5)
-    // This will transition remind_later users to dormant
-    // remindersProcessed = await processDueReminders()
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    errors.push(`Job error: ${errorMessage}`)
     logger.error('Daily engagement job failed', {}, error as Error)
+    throw error
+  } finally {
+    result.durationMs = Date.now() - startTime
+    logger.info('Daily engagement job completed', {
+      duration_ms: result.durationMs,
+      processed: result.processed,
+      succeeded: result.succeeded,
+      failed: result.failed,
+      skipped: result.skipped,
+    })
   }
-
-  const result: JobResult = {
-    success: errors.length === 0,
-    usersProcessed,
-    goodbyesSent,
-    timeoutsProcessed,
-    remindersProcessed,
-    errors,
-    durationMs: Date.now() - startTime,
-  }
-
-  logger.info('Daily engagement job completed', result)
 
   return result
 }
 
 /**
- * Check if the daily job has already run today
+ * Process inactive users (14+ days without activity)
  *
- * @returns True if job has run today
+ * AC-5.1.1: Transition active users with last_activity_at > 14 days ago to goodbye_sent
+ * AC-5.1.4: Skip users with reengagement_opt_out = true
  *
- * TODO: Implement in Epic 5 (Story 5.6)
+ * @param result - Job result object to update
  */
-export async function hasRunToday(): Promise<boolean> {
-  logger.debug('Checking if daily job has run (stub)')
+async function processInactiveUsers(result: JobResult): Promise<void> {
+  const supabase = getSupabaseClient()
+  const inactivityDate = new Date()
+  inactivityDate.setDate(inactivityDate.getDate() - INACTIVITY_THRESHOLD_DAYS)
 
-  // Stub implementation - will be completed in Epic 5
-  return false
+  // Step 1: Get inactive users
+  const { data: inactiveUsers, error: usersError } = await supabase
+    .from('user_engagement_states')
+    .select('user_id, last_activity_at')
+    .eq('state', 'active')
+    .lt('last_activity_at', inactivityDate.toISOString())
+
+  if (usersError) {
+    logger.error('Failed to query inactive users', {}, usersError)
+    throw usersError
+  }
+
+  if (!inactiveUsers || inactiveUsers.length === 0) {
+    logger.info('No inactive users found')
+    return
+  }
+
+  // Step 2: Get opt-out status for these users (AC-5.1.4)
+  const userIds = inactiveUsers.map((u) => u.user_id)
+  const { data: profiles, error: profilesError } = await supabase
+    .from('user_profiles')
+    .select('id, reengagement_opt_out')
+    .in('id', userIds)
+
+  if (profilesError) {
+    logger.error('Failed to query user profiles', {}, profilesError)
+    throw profilesError
+  }
+
+  // Build a map of opt-out status
+  const optOutMap = new Map<string, boolean>()
+  for (const profile of profiles || []) {
+    optOutMap.set(profile.id, profile.reengagement_opt_out || false)
+  }
+
+  logger.info('Found inactive users to process', {
+    total: inactiveUsers.length,
+    withOptOutInfo: optOutMap.size,
+  })
+
+  // Step 3: Process each inactive user, respecting opt-out preference
+  for (const user of inactiveUsers) {
+    // AC-5.1.4: Skip opted-out users
+    const isOptedOut = optOutMap.get(user.user_id)
+    if (isOptedOut === true) {
+      result.skipped++
+      logger.debug('Skipped opted-out user', { userId: user.user_id })
+      continue
+    }
+
+    result.processed++
+    try {
+      const transitionResult = await transitionState(user.user_id, 'inactivity_14d')
+
+      if (transitionResult.success) {
+        result.succeeded++
+        logger.debug('Processed inactive user', { userId: user.user_id })
+      } else {
+        result.failed++
+        result.errors.push({
+          userId: user.user_id,
+          error: transitionResult.error || 'Unknown error',
+        })
+        logger.error('Failed to transition inactive user', {
+          userId: user.user_id,
+          error: transitionResult.error,
+        })
+      }
+    } catch (error) {
+      result.failed++
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      result.errors.push({
+        userId: user.user_id,
+        error: errorMessage,
+      })
+      logger.error('Exception processing inactive user', { userId: user.user_id }, error as Error)
+    }
+  }
+}
+
+/**
+ * Process expired goodbye messages (48h timeout)
+ *
+ * AC-5.1.2: Transition goodbye_sent users with goodbye_expires_at < now to dormant
+ * No message is sent (silence by design)
+ *
+ * @param result - Job result object to update
+ */
+async function processGoodbyeTimeouts(result: JobResult): Promise<void> {
+  const expiredGoodbyes = await getExpiredGoodbyes()
+  logger.info('Found expired goodbyes to process', { count: expiredGoodbyes.length })
+
+  for (const user of expiredGoodbyes) {
+    result.processed++
+    try {
+      const transitionResult = await transitionState(user.userId, 'goodbye_timeout')
+
+      if (transitionResult.success) {
+        result.succeeded++
+        logger.debug('Processed goodbye timeout', { userId: user.userId })
+      } else {
+        result.failed++
+        result.errors.push({
+          userId: user.userId,
+          error: transitionResult.error || 'Unknown error',
+        })
+        logger.error('Failed to process goodbye timeout', {
+          userId: user.userId,
+          error: transitionResult.error,
+        })
+      }
+    } catch (error) {
+      result.failed++
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      result.errors.push({
+        userId: user.userId,
+        error: errorMessage,
+      })
+      logger.error('Exception processing goodbye timeout', { userId: user.userId }, error as Error)
+    }
+  }
+}
+
+/**
+ * Process due remind_later states
+ *
+ * AC-5.1.3: Transition remind_later users with remind_at < now to dormant
+ * No message is sent (silence by design)
+ *
+ * @param result - Job result object to update
+ */
+async function processRemindLaterDue(result: JobResult): Promise<void> {
+  const dueReminders = await getDueReminders()
+  logger.info('Found due reminders to process', { count: dueReminders.length })
+
+  for (const user of dueReminders) {
+    result.processed++
+    try {
+      const transitionResult = await transitionState(user.userId, 'reminder_due')
+
+      if (transitionResult.success) {
+        result.succeeded++
+        logger.debug('Processed remind_later due', { userId: user.userId })
+      } else {
+        result.failed++
+        result.errors.push({
+          userId: user.userId,
+          error: transitionResult.error || 'Unknown error',
+        })
+        logger.error('Failed to process remind_later due', {
+          userId: user.userId,
+          error: transitionResult.error,
+        })
+      }
+    } catch (error) {
+      result.failed++
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      result.errors.push({
+        userId: user.userId,
+        error: errorMessage,
+      })
+      logger.error('Exception processing remind_later due', { userId: user.userId }, error as Error)
+    }
+  }
 }

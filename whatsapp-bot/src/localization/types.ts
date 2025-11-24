@@ -185,6 +185,7 @@ export interface Messages {
 
   // Engagement: Weekly Review
   engagementWeeklyReviewActive: (summary: { totalTransactions: number; totalAmount: number }) => string
+  engagementWeeklyReviewCelebration: (count: number) => string
 
   // Engagement: Opt-Out
   engagementOptOutConfirm: string

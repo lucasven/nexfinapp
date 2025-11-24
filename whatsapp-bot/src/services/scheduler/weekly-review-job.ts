@@ -1,92 +1,163 @@
 /**
  * Weekly Review Job
  *
- * Scheduled job that runs weekly (Sunday evening) to send
- * activity summaries to engaged users.
+ * Scheduled job that runs once weekly (Monday 9 AM UTC) to:
+ * - Detect active users (7 days with transactions OR bot activity)
+ * - Send celebratory messages acknowledging their financial tracking
  *
- * Epic: 1 - Foundation & Message Infrastructure
- * Story: 1.3 - Engagement Service Directory Structure
- * Implementation: Epic 5 - Scheduled Jobs & Weekly Reviews
+ * Epic: 5 - Scheduled Jobs & Weekly Reviews
+ * Story: 5.3 - Weekly Review Job & Message
+ *
+ * AC-5.3.1: Active users receive weekly_review message to preferred destination
+ * AC-5.3.2: Users with no activity receive NO message
+ * AC-5.3.3: Idempotency via {userId}:weekly_review:{YYYY-Www} key
  */
 
 import { logger } from '../monitoring/logger.js'
+import { getActiveUsersLastWeek } from './activity-detector.js'
+import { queueMessage, processMessageQueue } from './message-sender.js'
+import { getISOWeek, getISOWeekYear } from 'date-fns'
+import { getPostHog } from '../../analytics/posthog-client.js'
 
-export interface WeeklyReviewResult {
-  success: boolean
-  usersProcessed: number
-  reviewsSent: number
-  usersSkipped: number
-  errors: string[]
+export interface JobResult {
+  processed: number
+  succeeded: number
+  failed: number
+  skipped: number
+  errors: Array<{ userId: string; error: string }>
   durationMs: number
-}
-
-export interface UserWeeklySummary {
-  userId: string
-  totalTransactions: number
-  totalAmount: number
-  topCategories: Array<{ name: string; amount: number }>
-  budgetStatus: Array<{ category: string; percent: number }>
-  comparisonToLastWeek: number // percentage change
 }
 
 /**
  * Run the weekly review job
  *
- * This job sends personalized activity summaries to users
- * who have been active in the past week.
+ * This job is idempotent - running multiple times per week
+ * will not send duplicate messages due to ISO week-based idempotency keys.
  *
  * @returns Job execution results
- *
- * TODO: Implement in Epic 5 (Story 5.3)
- * - Query users in 'active' state with transactions in past 7 days
- * - Skip users who have opted out (reengagement_opt_out = true)
- * - For each, generate weekly summary
- * - Queue weekly review message
  */
-export async function runWeeklyReviewJob(): Promise<WeeklyReviewResult> {
+export async function runWeeklyReviewJob(): Promise<JobResult> {
   const startTime = Date.now()
-
-  logger.info('Weekly review job started (stub)')
-
-  // Stub implementation - will be completed in Epic 5
-  const result: WeeklyReviewResult = {
-    success: false,
-    usersProcessed: 0,
-    reviewsSent: 0,
-    usersSkipped: 0,
-    errors: ['Not implemented - see Epic 5, Story 5.3'],
-    durationMs: Date.now() - startTime,
+  const result: JobResult = {
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    errors: [],
+    durationMs: 0,
   }
 
-  logger.info('Weekly review job completed (stub)', result)
+  logger.info('Weekly review job started', {
+    started_at: new Date().toISOString(),
+  })
+
+  try {
+    // Step 1: Get active users from last week (AC-5.3.1, AC-5.3.2)
+    const activeUsers = await getActiveUsersLastWeek()
+
+    logger.info('Active users detected for weekly review', {
+      count: activeUsers.length,
+    })
+
+    // Step 2: Process each active user
+    for (const user of activeUsers) {
+      result.processed++
+
+      try {
+        // Generate idempotency key using ISO week (AC-5.3.3)
+        const now = new Date()
+        const weekYear = getISOWeekYear(now)
+        const weekNumber = getISOWeek(now)
+        const idempotencyKey = `${user.userId}:weekly_review:${weekYear}-W${weekNumber.toString().padStart(2, '0')}`
+
+        // Queue weekly review message
+        const queued = await queueMessage({
+          userId: user.userId,
+          messageType: 'weekly_review',
+          messageKey: 'engagementWeeklyReviewCelebration',
+          messageParams: {
+            count: user.transactionCount,
+          },
+          destination: user.preferredDestination,
+          destinationJid: user.destinationJid,
+          scheduledFor: now,
+          idempotencyKey,
+        })
+
+        if (queued) {
+          result.succeeded++
+
+          // Fire PostHog analytics event
+          const posthog = getPostHog()
+          if (posthog) {
+            posthog.capture({
+              distinctId: user.userId,
+              event: 'engagement_weekly_review_sent',
+              properties: {
+                transaction_count: user.transactionCount,
+                destination: user.preferredDestination,
+                locale: user.locale,
+              },
+            })
+          }
+
+          logger.debug('Queued weekly review for user', {
+            userId: user.userId,
+            transactionCount: user.transactionCount,
+            destination: user.preferredDestination,
+          })
+        } else {
+          // queueMessage returns false on error (but doesn't throw)
+          result.failed++
+          result.errors.push({
+            userId: user.userId,
+            error: 'Failed to queue message (returned false)',
+          })
+        }
+      } catch (error) {
+        // Catch any unexpected errors (queueMessage shouldn't throw, but defensive coding)
+        result.failed++
+        result.errors.push({
+          userId: user.userId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        logger.error(
+          'Exception queueing weekly review',
+          {
+            userId: user.userId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
+      }
+    }
+
+    // Step 3: Process queued messages (Story 5.4)
+    try {
+      const queueResult = await processMessageQueue()
+      logger.info('Queue processing completed', {
+        processed: queueResult.processed,
+        succeeded: queueResult.succeeded,
+        failed: queueResult.failed,
+        errors_count: queueResult.errors.length
+      })
+    } catch (error) {
+      // Log but don't fail entire job
+      logger.error('Queue processing failed', {}, error as Error)
+    }
+
+  } catch (error) {
+    logger.error('Weekly review job failed', {}, error as Error)
+    throw error
+  } finally {
+    result.durationMs = Date.now() - startTime
+    logger.info('Weekly review job completed', {
+      duration_ms: result.durationMs,
+      processed: result.processed,
+      succeeded: result.succeeded,
+      failed: result.failed,
+      skipped: result.skipped,
+    })
+  }
 
   return result
-}
-
-/**
- * Generate weekly summary for a user
- *
- * @param userId - The user's ID
- * @returns Weekly summary data or null if not enough data
- *
- * TODO: Implement in Epic 5 (Story 5.3)
- */
-export async function generateWeeklySummary(
-  userId: string
-): Promise<UserWeeklySummary | null> {
-  logger.debug('Generating weekly summary (stub)', { userId })
-
-  // Stub implementation - will be completed in Epic 5
-  return null
-}
-
-/**
- * Check if the weekly job should run today
- * Only runs on Sundays
- *
- * @returns True if today is Sunday
- */
-export function shouldRunToday(): boolean {
-  const today = new Date()
-  return today.getDay() === 0 // Sunday
 }

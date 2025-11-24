@@ -1,0 +1,689 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story-id>5-5-railway-cron-integration</story-id>
+  <epic>Epic 5: Scheduled Jobs & Weekly Reviews</epic>
+  <generated-at>2025-11-24T12:00:00Z</generated-at>
+
+  <summary>
+    Configure Railway cron jobs to automatically trigger daily and weekly engagement jobs. Creates thin cron entry point scripts that handle environment validation, socket connection checks, error handling, and structured logging. The cron jobs trigger at 6 AM UTC daily and 9 AM UTC Monday weekly, calling the job services implemented in Stories 5.1 and 5.3.
+  </summary>
+
+  <acceptance-criteria>
+    <criterion id="AC-5.5.1">
+      Given Railway deployment, when the cron configuration is applied, then `engagement-daily` runs at `0 6 * * *` (6 AM UTC daily).
+    </criterion>
+    <criterion id="AC-5.5.2">
+      Given Railway deployment, when the cron configuration is applied, then `engagement-weekly` runs at `0 9 * * 1` (9 AM UTC Monday).
+    </criterion>
+    <criterion id="AC-5.5.3">
+      Given a job completes successfully, when finished, then it exits with code 0 and logs structured completion message.
+    </criterion>
+    <criterion id="AC-5.5.4">
+      Given a job fails, when finished, then it exits with non-zero code and logs error details.
+    </criterion>
+  </acceptance-criteria>
+
+  <dependencies>
+    <story-dependency>
+      <story>5.1 Daily Engagement Job</story>
+      <reason>Calls runDailyEngagementJob() from services/scheduler/daily-engagement-job.ts</reason>
+      <files>
+        <file>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</file>
+      </files>
+    </story-dependency>
+
+    <story-dependency>
+      <story>5.3 Weekly Review Job & Message</story>
+      <reason>Calls runWeeklyReviewJob() from services/scheduler/weekly-review-job.ts</reason>
+      <files>
+        <file>whatsapp-bot/src/services/scheduler/weekly-review-job.ts</file>
+      </files>
+    </story-dependency>
+
+    <story-dependency>
+      <story>5.4 Message Queue Processor</story>
+      <reason>Job services call processMessageQueue() to send queued messages</reason>
+      <files>
+        <file>whatsapp-bot/src/services/scheduler/message-sender.ts</file>
+      </files>
+    </story-dependency>
+  </dependencies>
+
+  <technical-context>
+    <architecture>
+      <pattern name="Thin Cron Entry Points">
+        Cron scripts are thin wrappers around job services. They handle:
+        - Environment variable validation
+        - Socket connection checks (warnings only)
+        - Error handling and exit codes
+        - Structured logging
+        All business logic remains in service layer (Stories 5.1-5.4).
+      </pattern>
+
+      <pattern name="Exit Code Strategy">
+        Success (Exit 0):
+        - Job completes without throwing errors
+        - Individual user failures do NOT fail the job (failure isolation)
+        - Message send failures do NOT fail the job (retry logic handles)
+
+        Failure (Exit 1):
+        - Missing environment variables
+        - Database connection failure
+        - Unhandled exceptions in job logic
+      </pattern>
+
+      <pattern name="Socket Connection Handling">
+        Socket connection check is a WARNING, not a failure.
+        - Daily/weekly jobs queue messages in the database
+        - processMessageQueue() checks socket before sending
+        - If socket is down, messages remain pending
+        - Next job run processes pending messages when socket is up
+      </pattern>
+    </architecture>
+
+    <existing-implementation>
+      <note>
+        IMPORTANT: The cron entry points and Railway configuration are ALREADY IMPLEMENTED!
+        - whatsapp-bot/src/cron/run-engagement-daily.ts EXISTS (51 lines)
+        - whatsapp-bot/src/cron/run-engagement-weekly.ts EXISTS (50 lines)
+        - whatsapp-bot/railway.cron.yml ALREADY CONTAINS both jobs (lines 20-28)
+
+        This story is primarily about VALIDATING the existing implementation against the acceptance criteria.
+        The implementation is simpler than the dev notes suggested:
+        - No explicit environment variable validation (relies on service layer)
+        - No explicit socket connection checks in cron scripts
+        - Simple try-catch wrapper around job service calls
+      </note>
+
+      <file path="whatsapp-bot/src/cron/run-engagement-daily.ts">
+        <status>EXISTS - 51 lines</status>
+        <description>Cron entry point for daily engagement job</description>
+        <implementation>
+          - Imports runDailyEngagementJob() from services/scheduler/daily-engagement-job.ts
+          - Calls job function in try-catch
+          - Logs completion with structured data (processed, succeeded, failed, skipped, duration_ms)
+          - Warns if some users failed (failed > 0)
+          - Exits with code 0 on success (even if some users failed)
+          - Exits with code 1 on error
+        </implementation>
+      </file>
+
+      <file path="whatsapp-bot/src/cron/run-engagement-weekly.ts">
+        <status>EXISTS - 50 lines</status>
+        <description>Cron entry point for weekly review job</description>
+        <implementation>
+          - Imports runWeeklyReviewJob() from services/scheduler/weekly-review-job.ts
+          - Calls job function in try-catch
+          - Logs completion with structured data (processed, succeeded, failed, skipped, duration_ms)
+          - Warns if some users failed (failed > 0)
+          - Exits with code 0 on success (even if some users failed)
+          - Exits with code 1 on error
+        </implementation>
+      </file>
+
+      <file path="whatsapp-bot/railway.cron.yml">
+        <status>EXISTS - Contains both jobs</status>
+        <jobs>
+          <job name="engagement-daily" schedule="0 6 * * *" command="tsx src/cron/run-engagement-daily.ts" line="20-23"/>
+          <job name="engagement-weekly" schedule="0 9 * * 1" command="tsx src/cron/run-engagement-weekly.ts" line="25-28"/>
+        </jobs>
+      </file>
+    </existing-implementation>
+
+    <railway-environment>
+      <context>
+        Cron jobs run in the same container as the main bot process.
+        - Share environment variables with the bot
+        - Have access to the running Baileys socket instance
+        - Use the same database connection pool
+        - Write to the same log streams
+      </context>
+
+      <environment-variables>
+        <variable name="SUPABASE_URL" required="true" usage="Database access"/>
+        <variable name="SUPABASE_SERVICE_KEY" required="true" usage="Database service role key"/>
+        <variable name="OPENAI_API_KEY" required="true" usage="NLP for engagement messages"/>
+        <variable name="WHATSAPP_PHONE_NUMBER" required="true" usage="WhatsApp bot identification"/>
+      </environment-variables>
+
+      <validation-note>
+        Environment variables are validated by the service layer (Supabase client, OpenAI client).
+        Cron scripts do NOT explicitly validate environment variables upfront.
+        If variables are missing, the job will fail with exit code 1 when the service layer throws.
+      </validation-note>
+    </railway-environment>
+
+    <logging>
+      <service-path>whatsapp-bot/src/services/monitoring/logger.ts</service-path>
+
+      <pattern name="Structured Logging">
+        <example type="job-start">
+          logger.info('Starting daily engagement job cron')
+        </example>
+
+        <example type="job-completion">
+          logger.info('Daily engagement job completed successfully', {
+            processed: result.processed,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            skipped: result.skipped,
+            duration_ms: result.durationMs
+          })
+        </example>
+
+        <example type="partial-failures">
+          logger.warn('Some users failed to process', {
+            failed_count: result.failed,
+            error_count: result.errors.length,
+            errors: result.errors
+          })
+        </example>
+
+        <example type="job-failure">
+          logger.error('Daily engagement job failed', {}, error as Error)
+        </example>
+      </pattern>
+    </logging>
+
+    <job-services>
+      <service name="runDailyEngagementJob">
+        <path>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</path>
+        <signature>async function runDailyEngagementJob(): Promise&lt;JobResult&gt;</signature>
+        <description>
+          Runs three sequential checks:
+          1. Inactivity check (active → goodbye_sent with message)
+          2. Timeout check (goodbye_sent → dormant silent)
+          3. Remind-later check (remind_later → dormant silent)
+          4. Calls processMessageQueue() to send queued messages
+        </description>
+      </service>
+
+      <service name="runWeeklyReviewJob">
+        <path>whatsapp-bot/src/services/scheduler/weekly-review-job.ts</path>
+        <signature>async function runWeeklyReviewJob(): Promise&lt;JobResult&gt;</signature>
+        <description>
+          1. Detects active users (7 days with transactions OR bot activity)
+          2. Queues weekly_review messages
+          3. Calls processMessageQueue() to send queued messages
+        </description>
+      </service>
+
+      <interface name="JobResult">
+        <typescript>
+          interface JobResult {
+            processed: number      // Total users evaluated
+            succeeded: number      // Successful state transitions
+            failed: number         // Failed state transitions (errors)
+            skipped: number        // Users skipped due to opt-out
+            errors: Array&lt;{ userId: string; error: string }&gt;  // Failed user details
+            durationMs: number     // Job execution time in milliseconds
+          }
+        </typescript>
+      </interface>
+    </job-services>
+
+    <socket-availability>
+      <function name="getSocket">
+        <path>whatsapp-bot/src/index.ts:898</path>
+        <signature>export function getSocket(): WASocket | null</signature>
+        <description>
+          Returns the current Baileys WhatsApp socket instance or null if not connected.
+          Used by processMessageQueue() to check socket availability before sending messages.
+        </description>
+      </function>
+
+      <note>
+        Cron scripts do NOT explicitly check socket connection.
+        Socket checks are handled by processMessageQueue() in the service layer.
+        If socket is down, messages remain queued and will be processed on next run.
+      </note>
+    </socket-availability>
+
+    <railway-cron-format>
+      <syntax>
+        jobs:
+          - name: job-name
+            schedule: "cron-expression"  # Standard cron: minute hour day month weekday
+            command: command-to-execute
+            description: "Human-readable description"
+      </syntax>
+
+      <schedule-examples>
+        <example expression="0 6 * * *" description="Every day at 6:00 AM UTC"/>
+        <example expression="0 9 * * 1" description="Every Monday at 9:00 AM UTC"/>
+        <example expression="*/30 * * * *" description="Every 30 minutes"/>
+        <example expression="0 0 1 * *" description="Monthly on the 1st at midnight"/>
+      </schedule-examples>
+
+      <command-format>
+        <note>
+          Commands use tsx for TypeScript execution: tsx src/cron/script-name.ts
+          tsx is a TypeScript execution engine that directly runs .ts files without compilation.
+        </note>
+      </command-format>
+    </railway-cron-format>
+
+    <performance-expectations>
+      <target>Job completes in &lt; 60 seconds for 10,000 users</target>
+      <implementation>
+        - Daily job: Single-pass queries with indexed columns
+        - Weekly job: Aggregated query with GROUP BY
+        - Message queue: Batch processing with 100 message limit
+      </implementation>
+      <monitoring>Log duration_ms for every job run</monitoring>
+    </performance-expectations>
+  </technical-context>
+
+  <validation-checklist>
+    <validation-step id="1" ac="AC-5.5.1, AC-5.5.2">
+      <description>Verify Railway cron configuration syntax</description>
+      <action>Read railway.cron.yml and validate YAML syntax</action>
+      <expected>
+        - engagement-daily: schedule "0 6 * * *", command "tsx src/cron/run-engagement-daily.ts"
+        - engagement-weekly: schedule "0 9 * * 1", command "tsx src/cron/run-engagement-weekly.ts"
+      </expected>
+    </validation-step>
+
+    <validation-step id="2" ac="AC-5.5.3">
+      <description>Verify cron entry points exit with code 0 on success</description>
+      <action>Review run-engagement-daily.ts and run-engagement-weekly.ts</action>
+      <expected>
+        - process.exit(0) in try block after successful job completion
+        - process.exit(0) even if result.failed > 0 (individual user failures)
+      </expected>
+    </validation-step>
+
+    <validation-step id="3" ac="AC-5.5.4">
+      <description>Verify cron entry points exit with code 1 on error</description>
+      <action>Review error handling in cron entry points</action>
+      <expected>
+        - process.exit(1) in catch block
+        - Structured error logging before exit
+      </expected>
+    </validation-step>
+
+    <validation-step id="4" ac="AC-5.5.3">
+      <description>Verify structured completion logging</description>
+      <action>Review logger.info calls in cron entry points</action>
+      <expected>
+        - Log job start: "Starting daily engagement job cron"
+        - Log job completion with: processed, succeeded, failed, skipped, duration_ms
+        - Log warnings if failed > 0
+      </expected>
+    </validation-step>
+
+    <validation-step id="5">
+      <description>Verify cron scripts are executable with tsx</description>
+      <action>Check shebang and file structure</action>
+      <expected>
+        - Shebang: #!/usr/bin/env tsx
+        - ES modules imports (*.js extensions)
+        - main() function with try-catch
+      </expected>
+    </validation-step>
+
+    <validation-step id="6">
+      <description>Verify job services are correctly imported</description>
+      <action>Check imports in cron scripts</action>
+      <expected>
+        - import { runDailyEngagementJob } from '../services/scheduler/daily-engagement-job.js'
+        - import { runWeeklyReviewJob } from '../services/scheduler/weekly-review-job.js'
+        - import { logger } from '../services/monitoring/logger.js'
+      </expected>
+    </validation-step>
+  </validation-checklist>
+
+  <testing-strategy>
+    <local-testing>
+      <test id="1" description="Run daily cron script locally">
+        <command>cd whatsapp-bot && tsx src/cron/run-engagement-daily.ts</command>
+        <expected-output>
+          - Log: "Starting daily engagement job cron"
+          - Log: "Daily engagement job completed successfully"
+          - Exit code: 0
+        </expected-output>
+      </test>
+
+      <test id="2" description="Run weekly cron script locally">
+        <command>cd whatsapp-bot && tsx src/cron/run-engagement-weekly.ts</command>
+        <expected-output>
+          - Log: "Starting weekly review job cron"
+          - Log: "Weekly review job completed successfully"
+          - Exit code: 0
+        </expected-output>
+      </test>
+
+      <test id="3" description="Test failure scenario (missing env var)">
+        <command>unset SUPABASE_URL && tsx src/cron/run-engagement-daily.ts</command>
+        <expected-output>
+          - Log: "Daily engagement job failed"
+          - Error about missing SUPABASE_URL
+          - Exit code: 1
+        </expected-output>
+      </test>
+    </local-testing>
+
+    <railway-testing>
+      <test id="1" description="Verify cron jobs appear in Railway dashboard">
+        <action>Deploy to Railway and check "Cron Jobs" tab</action>
+        <expected>engagement-daily and engagement-weekly listed with correct schedules</expected>
+      </test>
+
+      <test id="2" description="Manual trigger test">
+        <action>Manually trigger job in Railway dashboard</action>
+        <expected>Job executes, logs appear in Railway logs, exit code 0</expected>
+      </test>
+
+      <test id="3" description="Monitor scheduled execution">
+        <action>Wait for scheduled time (6 AM UTC or 9 AM Monday UTC)</action>
+        <expected>
+          - Job executes automatically
+          - Logs show completion message
+          - Messages delivered to WhatsApp
+          - State transitions recorded in database
+        </expected>
+      </test>
+    </railway-testing>
+
+    <end-to-end-testing>
+      <test id="1" description="Full daily job flow">
+        <setup>
+          - Create test user with state=active, last_activity_at = 15 days ago
+          - Ensure test user has reengagement_opt_out=false
+        </setup>
+        <action>Run daily cron job</action>
+        <expected>
+          - User transitions to goodbye_sent
+          - Goodbye message queued
+          - Message delivered to WhatsApp
+          - Exit code 0
+        </expected>
+      </test>
+
+      <test id="2" description="Full weekly job flow">
+        <setup>
+          - Create test user with transactions in last 7 days
+          - Ensure test user has state=active
+        </setup>
+        <action>Run weekly cron job</action>
+        <expected>
+          - User detected as active
+          - Weekly review message queued
+          - Message delivered to WhatsApp
+          - Exit code 0
+        </expected>
+      </test>
+    </end-to-end-testing>
+  </testing-strategy>
+
+  <deployment-process>
+    <step id="1">
+      <description>Verify code implementation</description>
+      <action>Review cron entry points and Railway config</action>
+      <validation>All files exist and match acceptance criteria</validation>
+    </step>
+
+    <step id="2">
+      <description>Test locally</description>
+      <action>Run both cron scripts with tsx</action>
+      <validation>Exit code 0, structured logs, no errors</validation>
+    </step>
+
+    <step id="3">
+      <description>Merge to main branch</description>
+      <action>Create PR and merge after review</action>
+      <validation>CI/CD passes, code review approved</validation>
+    </step>
+
+    <step id="4">
+      <description>Deploy to Railway</description>
+      <action>Railway auto-deploys on git push to main</action>
+      <validation>Deployment succeeds, bot starts successfully</validation>
+    </step>
+
+    <step id="5">
+      <description>Verify cron configuration</description>
+      <action>Check Railway dashboard → Cron Jobs tab</action>
+      <validation>engagement-daily and engagement-weekly listed with correct schedules</validation>
+    </step>
+
+    <step id="6">
+      <description>Manual trigger test</description>
+      <action>Manually trigger both jobs in Railway dashboard</action>
+      <validation>Jobs execute successfully, logs show completion, exit code 0</validation>
+    </step>
+
+    <step id="7">
+      <description>Monitor scheduled execution</description>
+      <action>Wait for next scheduled time or adjust schedule for testing</action>
+      <validation>Jobs run automatically at scheduled times</validation>
+    </step>
+  </deployment-process>
+
+  <troubleshooting-guide>
+    <issue id="1">
+      <problem>Cron job not appearing in Railway dashboard</problem>
+      <possible-causes>
+        <cause>railway.cron.yml has YAML syntax error</cause>
+        <cause>railway.cron.yml not in project root</cause>
+        <cause>Railway needs redeployment to pick up config changes</cause>
+      </possible-causes>
+      <resolution>
+        <step>Validate YAML syntax (use online YAML validator)</step>
+        <step>Verify file location: whatsapp-bot/railway.cron.yml</step>
+        <step>Redeploy project in Railway dashboard</step>
+      </resolution>
+    </issue>
+
+    <issue id="2">
+      <problem>Cron job fails with exit code 1</problem>
+      <possible-causes>
+        <cause>Missing environment variables</cause>
+        <cause>Database connection failure</cause>
+        <cause>Job service throws unhandled exception</cause>
+      </possible-causes>
+      <resolution>
+        <step>Check Railway logs for error message</step>
+        <step>Verify all environment variables are set in Railway</step>
+        <step>Test database connection from Railway container</step>
+        <step>Review job service logs for specific error</step>
+      </resolution>
+    </issue>
+
+    <issue id="3">
+      <problem>Messages not being sent</problem>
+      <possible-causes>
+        <cause>Baileys socket not connected</cause>
+        <cause>processMessageQueue() not being called</cause>
+        <cause>Messages stuck in queue due to errors</cause>
+      </possible-causes>
+      <resolution>
+        <step>Check Railway logs for socket warnings</step>
+        <step>Verify processMessageQueue() is called in job service</step>
+        <step>Query engagement_message_queue table for pending messages</step>
+        <step>Check message retry counts and error messages</step>
+      </resolution>
+    </issue>
+
+    <issue id="4">
+      <problem>Job runs but no users processed</problem>
+      <possible-causes>
+        <cause>No users meet criteria (14-day threshold, 7-day window)</cause>
+        <cause>All users have reengagement_opt_out=true</cause>
+        <cause>Query filters too restrictive</cause>
+      </possible-causes>
+      <resolution>
+        <step>Check user_engagement_states table for eligible users</step>
+        <step>Verify last_activity_at timestamps</step>
+        <step>Check reengagement_opt_out flags</step>
+        <step>Review job service query logic</step>
+      </resolution>
+    </issue>
+
+    <issue id="5">
+      <problem>Duplicate messages sent</problem>
+      <possible-causes>
+        <cause>Idempotency keys not generated correctly</cause>
+        <cause>Multiple cron job executions</cause>
+        <cause>UNIQUE constraint on idempotency_key not enforced</cause>
+      </possible-causes>
+      <resolution>
+        <step>Verify idempotency key format in message queue</step>
+        <step>Check Railway cron execution logs for duplicates</step>
+        <step>Verify database UNIQUE constraint on idempotency_key column</step>
+      </resolution>
+    </issue>
+  </troubleshooting-guide>
+
+  <observability>
+    <metrics-to-track>
+      <metric name="Job Execution Count" description="Daily/weekly job execution count"/>
+      <metric name="Job Success Rate" description="Percentage of jobs with exit code 0"/>
+      <metric name="Average Job Duration" description="Mean duration_ms across executions"/>
+      <metric name="User Processing Counts" description="processed, succeeded, failed, skipped per job"/>
+      <metric name="Message Queue Processing" description="Messages sent, failed, retried"/>
+    </metrics-to-track>
+
+    <log-aggregation>
+      <pattern>All logs go to Railway log stream</pattern>
+      <filter id="1" description="Filter by job start">query: "Starting daily engagement job cron"</filter>
+      <filter id="2" description="Filter by completion">query: "completed successfully"</filter>
+      <filter id="3" description="Filter by errors">query: level='error'</filter>
+      <filter id="4" description="Filter by job failures">query: "job failed"</filter>
+    </log-aggregation>
+
+    <alerting-recommendations>
+      <alert id="1" condition="Job exit code = 1" severity="critical" description="Job failure"/>
+      <alert id="2" condition="duration_ms > 60000" severity="warning" description="Performance issue"/>
+      <alert id="3" condition="failed count > 10% of processed" severity="warning" description="Quality issue"/>
+      <alert id="4" condition="No job execution in 25 hours (daily)" severity="critical" description="Cron not running"/>
+      <alert id="5" condition="No job execution in 8 days (weekly)" severity="critical" description="Cron not running"/>
+    </alerting-recommendations>
+  </observability>
+
+  <files-involved>
+    <file-status path="whatsapp-bot/src/cron/run-engagement-daily.ts" status="EXISTS" lines="51">
+      Cron entry point for daily engagement job. Handles error handling, logging, and exit codes.
+    </file-status>
+
+    <file-status path="whatsapp-bot/src/cron/run-engagement-weekly.ts" status="EXISTS" lines="50">
+      Cron entry point for weekly review job. Handles error handling, logging, and exit codes.
+    </file-status>
+
+    <file-status path="whatsapp-bot/railway.cron.yml" status="EXISTS" modification="Already contains both jobs">
+      Railway cron configuration. Lines 20-28 contain engagement-daily and engagement-weekly jobs.
+    </file-status>
+
+    <file-status path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts" status="EXISTS" usage="Called by cron">
+      Service layer implementation of daily engagement job. Exported: runDailyEngagementJob()
+    </file-status>
+
+    <file-status path="whatsapp-bot/src/services/scheduler/weekly-review-job.ts" status="EXISTS" usage="Called by cron">
+      Service layer implementation of weekly review job. Exported: runWeeklyReviewJob()
+    </file-status>
+
+    <file-status path="whatsapp-bot/src/index.ts" status="EXISTS" usage="Exports getSocket()">
+      Main bot entry point. Exports getSocket() for socket availability checks (line 898).
+    </file-status>
+  </files-involved>
+
+  <critical-requirements>
+    <requirement id="1" priority="critical" ac="AC-5.5.1, AC-5.5.2">
+      Railway cron configuration must have correct schedules:
+      - engagement-daily: "0 6 * * *" (6 AM UTC daily)
+      - engagement-weekly: "0 9 * * 1" (9 AM Monday UTC)
+    </requirement>
+
+    <requirement id="2" priority="critical" ac="AC-5.5.3">
+      Cron scripts must exit with code 0 on success:
+      - process.exit(0) in try block after job completion
+      - Exit 0 even if result.failed > 0 (failure isolation)
+    </requirement>
+
+    <requirement id="3" priority="critical" ac="AC-5.5.4">
+      Cron scripts must exit with code 1 on error:
+      - process.exit(1) in catch block
+      - Structured error logging before exit
+    </requirement>
+
+    <requirement id="4" priority="critical" ac="AC-5.5.3">
+      Structured logging must include:
+      - Job start message
+      - Job completion with counts (processed, succeeded, failed, skipped, duration_ms)
+      - Warning if failed > 0
+    </requirement>
+
+    <requirement id="5" priority="high">
+      Cron entry points are thin wrappers:
+      - No business logic in cron scripts
+      - All logic in service layer (Stories 5.1, 5.3, 5.4)
+      - Cron scripts only handle: logging, error handling, exit codes
+    </requirement>
+
+    <requirement id="6" priority="high">
+      Socket connection handling:
+      - Socket checks are handled by service layer (processMessageQueue)
+      - Cron scripts do NOT explicitly check socket
+      - Messages remain queued if socket is down
+    </requirement>
+
+    <requirement id="7" priority="medium">
+      Environment validation:
+      - Handled by service layer (Supabase client, OpenAI client)
+      - Cron scripts do NOT explicitly validate environment
+      - Job will fail with exit 1 if variables are missing
+    </requirement>
+  </critical-requirements>
+
+  <references>
+    <epic-tech-spec>docs/sprint-artifacts/tech-spec-epic-5.md</epic-tech-spec>
+    <architecture-doc>docs/architecture.md (ADR-002: Database-Driven Scheduler)</architecture-doc>
+    <story-file>docs/sprint-artifacts/5-5-railway-cron-integration.md</story-file>
+    <related-story>docs/sprint-artifacts/5-1-daily-engagement-job.md</related-story>
+    <related-story>docs/sprint-artifacts/5-3-weekly-review-job-message.md</related-story>
+    <related-story>docs/sprint-artifacts/5-4-message-queue-processor.md</related-story>
+  </references>
+
+  <notes>
+    <note type="implementation-status">
+      The implementation for this story is ALREADY COMPLETE. Both cron entry points exist,
+      Railway configuration is in place, and both jobs are already listed in railway.cron.yml.
+
+      This story is primarily about VALIDATION:
+      - Verify the existing implementation meets all acceptance criteria
+      - Test local execution with tsx
+      - Validate Railway deployment
+      - Monitor scheduled execution
+      - Document troubleshooting procedures
+    </note>
+
+    <note type="design-simplicity">
+      The actual implementation is simpler than the dev notes suggested:
+      - No explicit environment variable validation upfront (handled by services)
+      - No explicit socket checks in cron scripts (handled by processMessageQueue)
+      - Simple try-catch wrapper around job service calls
+      - Minimal code duplication between daily and weekly scripts
+
+      This simplicity is a GOOD thing - it follows the "thin wrapper" pattern correctly.
+    </note>
+
+    <note type="railway-context">
+      Railway cron jobs run in the same container as the bot process. This means:
+      - Cron jobs can import and call getSocket() from index.ts
+      - Environment variables are shared with the bot
+      - Database connections are shared
+      - Logs go to the same stream
+
+      This context is important for understanding why the implementation is so simple.
+    </note>
+
+    <note type="testing-approach">
+      Testing this story focuses on:
+      1. Local execution: tsx src/cron/run-engagement-daily.ts (exit code 0)
+      2. Railway config: Verify jobs appear in dashboard
+      3. Manual trigger: Test in Railway UI
+      4. Scheduled execution: Wait for next scheduled time
+      5. End-to-end: Verify messages delivered and state transitions
+    </note>
+  </notes>
+</story-context>

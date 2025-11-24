@@ -395,6 +395,9 @@ Try sending an expense now.`,
     `Hey! You logged ${summary.totalTransactions} expense${summary.totalTransactions > 1 ? 's' : ''} this week, totaling $${summary.totalAmount.toFixed(2)}.
 You're doing great! Want to see the full report? Just send "report".`,
 
+  engagementWeeklyReviewCelebration: (count: number) =>
+    `Congratulations! 🎉 You recorded ${count} transaction${count === 1 ? '' : 's'} this week. Keep it up!`,
+
   // Engagement: Opt-Out
   engagementOptOutConfirm: `Got it! I won't send reminders anymore.
 You can still use all features normally, just reach out anytime.`,
