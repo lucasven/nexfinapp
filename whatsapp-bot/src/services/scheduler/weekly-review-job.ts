@@ -53,10 +53,15 @@ export async function runWeeklyReviewJob(): Promise<JobResult> {
 
   try {
     // Step 1: Get active users from last week (AC-5.3.1, AC-5.3.2)
+    // AC-6.4.2: getActiveUsersLastWeek() excludes opted-out users via SQL function
     const activeUsers = await getActiveUsersLastWeek()
 
+    // AC-6.5.3: Log opt-out metrics for scheduler analytics
+    // Story 6.5: Enhanced analytics logging for opt-out metrics
     logger.info('Active users detected for weekly review', {
-      count: activeUsers.length,
+      job: 'weekly-review-job',
+      total_eligible_users: activeUsers.length,
+      note: 'Opted-out users excluded by get_active_users_last_week SQL function',
     })
 
     // Step 2: Process each active user
@@ -150,12 +155,19 @@ export async function runWeeklyReviewJob(): Promise<JobResult> {
     throw error
   } finally {
     result.durationMs = Date.now() - startTime
+
+    // AC-6.5.3: Log opt-out metrics for scheduler analytics
+    // Story 6.5: Enhanced analytics logging for opt-out metrics
     logger.info('Weekly review job completed', {
+      job: 'weekly-review-job',
+      total_eligible_users: result.processed,
+      messages_queued: result.succeeded,
       duration_ms: result.durationMs,
       processed: result.processed,
       succeeded: result.succeeded,
       failed: result.failed,
       skipped: result.skipped,
+      note: 'Opt-out filtering applied at SQL level (get_active_users_last_week)',
     })
   }
 

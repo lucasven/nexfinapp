@@ -407,6 +407,21 @@ Você ainda pode usar todas as funções normalmente, é só chamar.`,
 
   engagementOptInConfirm: `Ativado! Agora você vai receber lembretes e dicas novamente.`,
 
+  // Engagement: Re-engagement Opt-Out (Story 6.1)
+  engagementOptOutConfirmed: `Lembretes pausados ✓
+
+Você não receberá mais mensagens de reengajamento. Você ainda pode usar o app normalmente.
+
+Para reativar, envie: *ativar lembretes*`,
+
+  engagementOptInConfirmed: `Lembretes reativados ✓
+
+Você voltará a receber mensagens de reengajamento quando apropriado.
+
+Para pausar novamente, envie: *parar lembretes*`,
+
+  engagementOptOutError: `Erro ao atualizar preferências. Por favor, tente novamente.`,
+
   // Engagement: Dormant Reactivation
   engagementWelcomeBack: `Oi! Que bom te ver de volta. Continua de onde parou!`,
 

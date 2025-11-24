@@ -191,6 +191,11 @@ export interface Messages {
   engagementOptOutConfirm: string
   engagementOptInConfirm: string
 
+  // Engagement: Re-engagement Opt-Out (Story 6.1)
+  engagementOptOutConfirmed: string
+  engagementOptInConfirmed: string
+  engagementOptOutError: string
+
   // Engagement: Dormant Reactivation
   engagementWelcomeBack: string
 

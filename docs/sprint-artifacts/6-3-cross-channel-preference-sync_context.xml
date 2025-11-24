@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>6-3-cross-channel-preference-sync</story-id>
+    <story-title>Cross-Channel Preference Sync</story-title>
+    <epic-id>epic-6</epic-id>
+    <epic-title>User Preferences & Web Integration</epic-title>
+    <generated-date>2025-11-24</generated-date>
+    <generated-by>SM Agent (Claude Sonnet 4.5)</generated-by>
+    <status>ready-for-dev</status>
+  </metadata>
+
+  <objective>
+    Validate that the single source of truth architecture (shared `user_profiles.reengagement_opt_out` column) provides &lt;5 second cross-channel synchronization between WhatsApp and web channels without requiring additional sync infrastructure. This story focuses on integration testing to prove the design works as intended.
+  </objective>
+
+  <acceptance-criteria>
+    <criterion id="AC-6.3.1">
+      <description>Given a user opts out via WhatsApp, when they check the web settings within 5 seconds, then the web toggle shows "opted out" state (Switch unchecked), reflecting `reengagement_opt_out = true` from the database.</description>
+      <test-type>Integration Test</test-type>
+      <priority>MUST</priority>
+    </criterion>
+
+    <criterion id="AC-6.3.2">
+      <description>Given a user opts out via web toggle, when the daily or weekly scheduler runs within 5 seconds, then the scheduler query excludes that user from goodbye and weekly review messages via the `WHERE reengagement_opt_out = false` filter.</description>
+      <test-type>Integration Test</test-type>
+      <priority>MUST</priority>
+    </criterion>
+
+    <criterion id="AC-6.3.3">
+      <description>Given a user makes multiple rapid toggles from the same or different channels (e.g., WhatsApp opt-out, immediate web opt-in, immediate WhatsApp opt-out), then the final state in the database reflects the most recent command, and no race conditions cause inconsistent state.</description>
+      <test-type>Integration Test</test-type>
+      <priority>MUST</priority>
+    </criterion>
+
+    <criterion id="AC-6.3.4">
+      <description>Given the sync mechanism relies on direct database reads with no caching layer, when any channel updates `user_profiles.reengagement_opt_out`, then the change is immediately visible to all other channels (&lt;100ms database read latency typical).</description>
+      <test-type>Integration Test</test-type>
+      <priority>MUST</priority>
+    </criterion>
+
+    <criterion id="AC-6.3.5">
+      <description>Given a user opts out after a goodbye message is already queued but before it's sent, then that queued message sends (acceptable race condition per tech spec), but all future scheduler runs exclude the user from message queues.</description>
+      <test-type>Integration Test</test-type>
+      <priority>SHOULD</priority>
+    </criterion>
+  </acceptance-criteria>
+
+  <architecture-context>
+    <sync-pattern>
+      <title>Single Source of Truth - No Additional Sync Mechanism</title>
+      <description>
+        The architecture uses a shared database column (`user_profiles.reengagement_opt_out`) as the single source of truth.
+        All channels (WhatsApp handler, web server action, scheduler) read and write directly to this column with no caching layer.
+        This design ensures instant synchronization with no additional complexity.
+      </description>
+
+      <components>
+        <component name="WhatsApp Opt-Out Handler">
+          <file>whatsapp-bot/src/handlers/engagement/opt-out-handler.ts</file>
+          <responsibility>Parse opt-out/opt-in commands, update database, send confirmation</responsibility>
+          <function>handleOptOutCommand(context: OptOutContext): Promise&lt;OptOutResult&gt;</function>
+          <writes-to>user_profiles.reengagement_opt_out</writes-to>
+          <latency>~50-100ms database write</latency>
+        </component>
+
+        <component name="Web Server Action">
+          <file>fe/lib/actions/engagement.ts</file>
+          <responsibility>Update preference via toggle, revalidate path</responsibility>
+          <function>updateNotificationPreferences(reengagementOptOut: boolean)</function>
+          <writes-to>user_profiles.reengagement_opt_out</writes-to>
+          <latency>~50-100ms database write</latency>
+        </component>
+
+        <component name="Web Settings Page">
+          <file>fe/components/settings/notification-preferences.tsx</file>
+          <responsibility>Display current preference, optimistic UI, handle errors</responsibility>
+          <reads-from>user_profiles.reengagement_opt_out</reads-from>
+          <latency>~50-100ms database read on page load</latency>
+        </component>
+
+        <component name="Daily Scheduler">
+          <file>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</file>
+          <responsibility>Filter opted-out users before queuing goodbye messages</responsibility>
+          <function>processInactiveUsers(result: JobResult)</function>
+          <reads-from>user_profiles.reengagement_opt_out</reads-from>
+          <filter>WHERE reengagement_opt_out = false</filter>
+          <latency>~100-200ms query with JOIN</latency>
+        </component>
+
+        <component name="Weekly Review Scheduler">
+          <file>whatsapp-bot/src/services/scheduler/weekly-review-job.ts</file>
+          <responsibility>Filter opted-out users before queuing weekly review messages</responsibility>
+          <reads-from>user_profiles.reengagement_opt_out</reads-from>
+          <filter>WHERE reengagement_opt_out = false</filter>
+        </component>
+      </components>
+
+      <sync-characteristics>
+        <no-caching>All reads are direct from database - no cache layer to invalidate</no-caching>
+        <no-pubsub>No event bus or message queue for propagating changes</no-pubsub>
+        <no-eventual-consistency>Immediate consistency via direct DB reads</no-eventual-consistency>
+        <typical-latency>~100-200ms end-to-end</typical-latency>
+        <nfr-target>&lt;5 seconds cross-channel sync (NFR10)</nfr-target>
+        <actual-performance>50x better than requirement (typically &lt;200ms)</actual-performance>
+      </sync-characteristics>
+    </sync-pattern>
+
+    <race-condition-analysis>
+      <scenario name="Concurrent updates from different channels">
+        <description>WhatsApp opt-out at t=0ms, Web opt-in at t=50ms</description>
+        <result>Database serializes writes → last write wins → Final state: opted in (web was last)</result>
+        <acceptable>Yes - user's most recent intent is honored</acceptable>
+      </scenario>
+
+      <scenario name="Update during scheduler read">
+        <description>Scheduler starts query at t=0ms (reads opt_out=false), User opts out at t=50ms, Scheduler finishes at t=100ms</description>
+        <result>User receives one goodbye message, but next scheduler run excludes them</result>
+        <acceptable>Yes - one-time race, documented in tech spec as expected behavior</acceptable>
+      </scenario>
+
+      <scenario name="Multiple rapid toggles">
+        <description>Toggle opt-out → opt-in → opt-out within 200ms</description>
+        <result>Database serializes all writes → Final state: opted out (last command wins)</result>
+        <acceptable>Yes - no lost updates, correct-by-design</acceptable>
+      </scenario>
+    </race-condition-analysis>
+  </architecture-context>
+
+  <existing-code>
+    <file path="whatsapp-bot/src/handlers/engagement/opt-out-handler.ts">
+      <status>Implemented in Stories 6.1 and 3.5</status>
+      <key-functions>
+        <function name="handleOptOutCommand">
+          <signature>async function handleOptOutCommand(context: OptOutContext): Promise&lt;OptOutResult&gt;</signature>
+          <description>Processes opt-out/opt-in commands for re-engagement messages. Updates `user_profiles.reengagement_opt_out` and tracks PostHog events.</description>
+          <ac-coverage>AC-6.3.1 (write side), AC-6.3.3 (race conditions)</ac-coverage>
+        </function>
+
+        <function name="parseOptOutCommand">
+          <signature>function parseOptOutCommand(messageText: string, locale: 'pt-BR' | 'en'): 'opt_out' | 'opt_in' | null</signature>
+          <description>Parses user message to detect opt-out or opt-in intent. Supports pt-BR and English variations.</description>
+        </function>
+
+        <function name="handleTipOptOut">
+          <signature>async function handleTipOptOut(userId: string, messageText: string, locale: 'pt-BR' | 'en'): Promise&lt;string | null&gt;</signature>
+          <description>Handles onboarding tips opt-out (separate from re-engagement opt-out). Updates `user_profiles.onboarding_tips_enabled`.</description>
+          <note>This is a DIFFERENT preference from re-engagement opt-out</note>
+        </function>
+      </key-functions>
+
+      <patterns>
+        <pattern name="Direct Database Update">
+          <code-snippet>
+            const { error } = await supabase
+              .from('user_profiles')
+              .update({ reengagement_opt_out: optOut })
+              .eq('user_id', userId)
+          </code-snippet>
+          <note>No caching layer - direct write to database</note>
+        </pattern>
+
+        <pattern name="PostHog Event Tracking">
+          <code-snippet>
+            trackEvent(
+              WhatsAppAnalyticsEvent.ENGAGEMENT_PREFERENCE_CHANGED,
+              userId,
+              {
+                user_id: userId,
+                preference: optOut ? 'opted_out' : 'opted_in',
+                source: 'whatsapp',
+                timestamp: new Date().toISOString()
+              }
+            )
+          </code-snippet>
+          <note>Non-critical tracking - failure doesn't fail the operation</note>
+        </pattern>
+      </patterns>
+    </file>
+
+    <file path="fe/lib/actions/engagement.ts">
+      <status>Implemented in Story 6.2</status>
+      <key-functions>
+        <function name="updateNotificationPreferences">
+          <signature>async function updateNotificationPreferences(reengagementOptOut: boolean): Promise&lt;{ success: boolean; message?: string }&gt;</signature>
+          <description>Server action that updates user's re-engagement preference. Validates auth, updates database, revalidates path.</description>
+          <ac-coverage>AC-6.3.2 (write side), AC-6.3.3 (race conditions)</ac-coverage>
+        </function>
+      </key-functions>
+
+      <patterns>
+        <pattern name="Auth Validation">
+          <code-snippet>
+            const { data: { user }, error: authError } = await supabase.auth.getUser()
+            if (authError || !user) {
+              return { success: false, message: "Unauthorized" }
+            }
+          </code-snippet>
+          <note>RLS ensures users can only update their own preference</note>
+        </pattern>
+
+        <pattern name="Path Revalidation">
+          <code-snippet>
+            revalidatePath("/[locale]/settings/account")
+          </code-snippet>
+          <note>Ensures fresh data on next page load (no stale cache)</note>
+        </pattern>
+      </patterns>
+    </file>
+
+    <file path="fe/components/settings/notification-preferences.tsx">
+      <status>Implemented in Story 6.2</status>
+      <key-patterns>
+        <pattern name="Optimistic UI">
+          <description>Switch updates immediately on click, then server action confirms or reverts</description>
+          <ac-coverage>AC-6.3.1 (read side - web displays current state)</ac-coverage>
+        </pattern>
+
+        <pattern name="Error Rollback">
+          <description>If server action fails, Switch reverts to previous state and shows error toast</description>
+        </pattern>
+
+        <pattern name="PostHog Client-Side Tracking">
+          <description>Tracks ENGAGEMENT_PREFERENCE_CHANGED event with source: 'web' after successful update</description>
+        </pattern>
+      </key-patterns>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts">
+      <status>Implemented in Story 5.1, opt-out filter added in Story 6.1</status>
+      <key-functions>
+        <function name="processInactiveUsers">
+          <signature>async function processInactiveUsers(result: JobResult): Promise&lt;void&gt;</signature>
+          <description>Queries inactive users (14+ days), filters out opted-out users, transitions to goodbye_sent</description>
+          <ac-coverage>AC-6.3.2 (scheduler respects opt-out)</ac-coverage>
+        </function>
+      </key-functions>
+
+      <patterns>
+        <pattern name="Opt-Out Filter">
+          <code-snippet>
+            const { data: profiles } = await supabase
+              .from('user_profiles')
+              .select('id, reengagement_opt_out')
+              .in('id', userIds)
+
+            // Build opt-out map and skip opted-out users
+            for (const user of inactiveUsers) {
+              const isOptedOut = optOutMap.get(user.user_id)
+              if (isOptedOut === true) {
+                result.skipped++
+                continue
+              }
+              // ... process user
+            }
+          </code-snippet>
+          <note>Direct database read - no cache layer</note>
+        </pattern>
+      </patterns>
+    </file>
+  </existing-code>
+
+  <database-schema>
+    <table name="user_profiles">
+      <column name="user_id" type="UUID" constraint="PRIMARY KEY" />
+      <column name="reengagement_opt_out" type="BOOLEAN" default="false" description="User opted out of re-engagement messages (goodbye, weekly review)" />
+      <column name="onboarding_tips_enabled" type="BOOLEAN" default="true" description="User opted in to onboarding tips (separate preference)" />
+      <rls-policy>Users can update their own profile via RLS (auth.uid() = user_id)</rls-policy>
+      <rls-policy>WhatsApp bot uses service role for full access</rls-policy>
+    </table>
+
+    <note>No new columns required for Story 6.3 - uses existing schema from Story 1.1</note>
+    <optional-enhancement>
+      <column name="reengagement_opt_out_updated_at" type="TIMESTAMPTZ" description="Timestamp of last preference change for sync latency measurement" />
+      <rationale>Would enable precise sync latency tracking, but not required for AC compliance</rationale>
+    </optional-enhancement>
+  </database-schema>
+
+  <testing-strategy>
+    <test-file path="whatsapp-bot/src/__tests__/integration/cross-channel-sync.test.ts" status="TO_BE_CREATED">
+      <description>Main integration test suite for cross-channel synchronization</description>
+      <tests>
+        <test name="WhatsApp opt-out reflects on web within 5s">
+          <ac>AC-6.3.1</ac>
+          <scenario>
+            1. User sends "parar lembretes" via WhatsApp (call handleOptOutCommand)
+            2. Wait up to 5 seconds
+            3. Query database (simulating web page load)
+            4. Assert: reengagement_opt_out = true
+            5. Measure sync latency (should be &lt;5000ms, typically &lt;100ms)
+          </scenario>
+        </test>
+
+        <test name="Web opt-out excludes user from scheduler">
+          <ac>AC-6.3.2</ac>
+          <scenario>
+            1. User toggles off via web (call updateNotificationPreferences)
+            2. Wait up to 5 seconds
+            3. Run daily scheduler query to get eligible users
+            4. Assert: User NOT in results (excluded by reengagement_opt_out=false filter)
+          </scenario>
+        </test>
+
+        <test name="Rapid toggles result in consistent final state">
+          <ac>AC-6.3.3</ac>
+          <scenario>
+            1. WhatsApp opt-out
+            2. Web opt-in (immediate)
+            3. WhatsApp opt-out (immediate)
+            4. Wait for all writes to complete (500ms)
+            5. Query final state
+            6. Assert: reengagement_opt_out = true (last command wins)
+          </scenario>
+        </test>
+
+        <test name="Queued message sends, future messages blocked">
+          <ac>AC-6.3.5</ac>
+          <scenario>
+            1. Queue goodbye message for user
+            2. User opts out AFTER queueing but BEFORE sending
+            3. Process message queue
+            4. Assert: Queued message sent (acceptable race)
+            5. Run scheduler again
+            6. Assert: User excluded from new queue
+          </scenario>
+        </test>
+
+        <test name="E2E cross-channel journey">
+          <ac>AC-6.3.1, AC-6.3.2, AC-6.3.3</ac>
+          <scenario>
+            1. Opt-out via WhatsApp
+            2. Verify web shows opted out
+            3. Verify scheduler skips user
+            4. Opt back in via web
+            5. Verify WhatsApp reads opted in
+            6. Verify scheduler includes user if eligible
+          </scenario>
+        </test>
+      </tests>
+    </test-file>
+
+    <test-coverage-goals>
+      <integration-tests>5 tests covering all ACs</integration-tests>
+      <sync-latency>Measure and assert &lt;5s (expect &lt;200ms)</sync-latency>
+      <race-conditions>Test rapid toggles (concurrent writes)</race-conditions>
+      <scheduler-integration>Test scheduler respects opt-out filter</scheduler-integration>
+    </test-coverage-goals>
+  </testing-strategy>
+
+  <dependencies>
+    <story id="6.1" title="WhatsApp Opt-Out Commands" status="done">
+      <provides>WhatsApp channel write capability (handleOptOutCommand)</provides>
+      <provides>Opt-out command parsing (parseOptOutCommand)</provides>
+    </story>
+
+    <story id="6.2" title="Web Settings Opt-Out Toggle" status="done">
+      <provides>Web channel write capability (updateNotificationPreferences)</provides>
+      <provides>Web channel read capability (NotificationPreferences component)</provides>
+    </story>
+
+    <story id="5.1" title="Daily Scheduler" status="done">
+      <provides>Scheduler read capability with opt-out filter</provides>
+    </story>
+
+    <story id="5.3" title="Weekly Review Scheduler" status="done">
+      <provides>Weekly scheduler read capability with opt-out filter</provides>
+    </story>
+
+    <story id="5.4" title="Message Queue Processor" status="done">
+      <provides>Message sending capability (for race condition test)</provides>
+    </story>
+
+    <story id="1.1" title="Database Schema Migration" status="done">
+      <provides>user_profiles.reengagement_opt_out column</provides>
+    </story>
+  </dependencies>
+
+  <observability>
+    <logging>
+      <log-point component="opt-out-handler" level="info">
+        <message>Processing re-engagement opt-out/opt-in command</message>
+        <fields>userId, command, locale, reengagement_opt_out</fields>
+      </log-point>
+
+      <log-point component="opt-out-handler" level="info">
+        <message>Successfully updated reengagement_opt_out</message>
+        <fields>userId, previousState, newState</fields>
+      </log-point>
+
+      <log-point component="server-action" level="info">
+        <message>Successfully updated notification preferences</message>
+        <fields>userId, reengagement_opt_out</fields>
+      </log-point>
+
+      <log-point component="daily-scheduler" level="debug">
+        <message>Skipped opted-out user</message>
+        <fields>userId</fields>
+      </log-point>
+
+      <log-point component="daily-scheduler" level="info">
+        <message>Found inactive users to process</message>
+        <fields>total, withOptOutInfo</fields>
+      </log-point>
+    </logging>
+
+    <metrics>
+      <metric name="sync_latency" type="distribution">
+        <description>Time from preference update to read by other channel</description>
+        <target>p95 &lt; 500ms, p99 &lt; 1000ms</target>
+        <implementation>Optional: Add reengagement_opt_out_updated_at timestamp column</implementation>
+      </metric>
+
+      <metric name="opt_out_rate" type="percentage">
+        <description>% of users who opt out within 30 days</description>
+        <target>&lt;10% if messaging is respectful</target>
+        <alert>Alert if &gt;20% in 24 hours (indicates messaging issue)</alert>
+      </metric>
+
+      <metric name="scheduler_skip_count" type="counter">
+        <description>Daily count of users skipped due to opt-out</description>
+        <implementation>Tracked in processInactiveUsers() via result.skipped</implementation>
+      </metric>
+    </metrics>
+
+    <posthog-events>
+      <event name="ENGAGEMENT_PREFERENCE_CHANGED">
+        <properties>
+          <property name="user_id" type="string" />
+          <property name="preference" type="'opted_in' | 'opted_out'" />
+          <property name="source" type="'whatsapp' | 'web'" />
+          <property name="timestamp" type="ISO string" />
+        </properties>
+        <fired-by>opt-out-handler.ts (WhatsApp), notification-preferences.tsx (Web)</fired-by>
+      </event>
+    </posthog-events>
+  </observability>
+
+  <localization>
+    <keys-required>
+      <key name="settings.notifications.title">Notification Preferences</key>
+      <key name="settings.notifications.reengagement_description">Manage your re-engagement message preferences</key>
+      <key name="settings.notifications.reengagement_label">Re-engagement Messages</key>
+      <key name="settings.notifications.success_toast">Preferences saved</key>
+      <key name="settings.notifications.error_toast">Failed to save preferences. Please try again.</key>
+      <key name="settings.notifications.info_note">This setting controls goodbye and weekly review messages. Onboarding tips are controlled separately.</key>
+    </keys-required>
+
+    <status>All keys already implemented in Stories 6.1 and 6.2</status>
+  </localization>
+
+  <performance-requirements>
+    <requirement id="NFR10" source="PRD">
+      <description>Cross-channel sync latency &lt;5 seconds</description>
+      <implementation>Shared database column with direct reads - no additional sync mechanism</implementation>
+      <expected-performance>~100-200ms typical, ~500ms max</expected-performance>
+      <performance-margin>50x better than requirement</performance-margin>
+    </requirement>
+
+    <requirement id="Scheduler Performance">
+      <description>Opt-out filter adds negligible overhead to scheduler queries</description>
+      <implementation>Boolean column filter in WHERE clause</implementation>
+      <optimization>Add index on reengagement_opt_out if &gt;10k users</optimization>
+    </requirement>
+  </performance-requirements>
+
+  <dev-notes>
+    <note priority="CRITICAL">
+      This story is primarily about TESTING and VALIDATION. The sync mechanism already exists (Stories 6.1 and 6.2 implemented the write/read sides). Focus on comprehensive integration tests to prove the architecture works as designed.
+    </note>
+
+    <note priority="HIGH">
+      No new production code is required unless you discover gaps during testing. The main deliverable is the integration test suite in `whatsapp-bot/src/__tests__/integration/cross-channel-sync.test.ts`.
+    </note>
+
+    <note priority="MEDIUM">
+      The "acceptable race condition" (AC-6.3.5) is documented in the tech spec as expected behavior. If a user opts out while a message is already queued, that one message will send, but future messages are blocked. This is by design and should be tested.
+    </note>
+
+    <note priority="MEDIUM">
+      Optional enhancement: Add `reengagement_opt_out_updated_at` timestamp column to measure precise sync latency. This is NOT required for story completion but would enable better observability.
+    </note>
+
+    <note priority="LOW">
+      The existing code already logs extensively. Review logs during test execution to verify observability is sufficient. Add additional log points only if gaps are discovered.
+    </note>
+  </dev-notes>
+
+  <references>
+    <document path="docs/sprint-artifacts/tech-spec-epic-6.md" section="AC-6.3">
+      <title>Cross-Channel Sync Acceptance Criteria</title>
+    </document>
+
+    <document path="docs/sprint-artifacts/tech-spec-epic-6.md" section="Sequence-3">
+      <title>Cross-Channel Sync Verification Sequence Diagram</title>
+    </document>
+
+    <document path="docs/sprint-artifacts/tech-spec-epic-6.md" section="NFR-Cross-Channel-Sync-Latency">
+      <title>NFR10: &lt;5 seconds cross-channel sync requirement</title>
+    </document>
+
+    <document path="docs/sprint-artifacts/6-1-whatsapp-opt-out-opt-in-commands.md">
+      <title>Story 6.1: WhatsApp Opt-Out Commands (Dependency)</title>
+    </document>
+
+    <document path="docs/sprint-artifacts/6-2-web-settings-opt-out-toggle.md">
+      <title>Story 6.2: Web Settings Toggle (Dependency)</title>
+    </document>
+
+    <document path="CLAUDE.md" section="Database-Access">
+      <title>Database access patterns and RLS policies</title>
+    </document>
+
+    <document path="CLAUDE.md" section="Testing-Strategy">
+      <title>Project testing strategy and conventions</title>
+    </document>
+  </references>
+
+  <traceability>
+    <prd-requirement id="FR30">
+      <title>Sync opt-out between WhatsApp and web</title>
+      <ac>AC-6.3.1, AC-6.3.2, AC-6.3.3, AC-6.3.4</ac>
+    </prd-requirement>
+
+    <prd-requirement id="NFR10">
+      <title>&lt;5 second cross-channel sync latency</title>
+      <ac>AC-6.3.1, AC-6.3.2, AC-6.3.4</ac>
+    </prd-requirement>
+  </traceability>
+</story-context>

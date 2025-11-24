@@ -72,6 +72,7 @@ export enum WhatsAppAnalyticsEvent {
   ENGAGEMENT_STATE_CHANGED = 'engagement_state_changed',
   ENGAGEMENT_GOODBYE_RESPONSE = 'engagement_goodbye_response',
   ENGAGEMENT_UNPROMPTED_RETURN = 'engagement_unprompted_return',
+  ENGAGEMENT_PREFERENCE_CHANGED = 'engagement_preference_changed', // Story 6.1
 }
 
 /**

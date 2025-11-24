@@ -395,6 +395,14 @@ export const messages: Messages = {
       deletionFailed: 'Failed to delete account. Please try again.',
       confirmationRequired: 'Please type DELETE MY ACCOUNT to confirm',
     },
+    notifications: {
+      title: 'Notification Preferences',
+      reengagement_label: 'Re-engagement Messages',
+      reengagement_description: 'Receive reminders when inactive (goodbye message and weekly review)',
+      info_note: 'Note: This preference does not affect onboarding tips you receive when completing tiers.',
+      success_toast: 'Preferences saved',
+      error_toast: 'Failed to save preferences. Please try again.',
+    },
   },
 
   months: {

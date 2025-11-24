@@ -169,10 +169,20 @@ export function handleTierCompletionAsync(
  *
  * AC-3.5.3: Uses onboarding_tips_enabled (NOT reengagement_opt_out)
  * AC-3.5.4: These are separate settings
+ * AC-6.4.3: Tier completion tips are INDEPENDENT of reengagement_opt_out
+ *
+ * IMPORTANT DISTINCTION (Story 6.4):
+ * - onboarding_tips_enabled: Controls tier completion tips (THIS function)
+ * - reengagement_opt_out: Controls goodbye/weekly review messages (scheduler jobs)
+ *
+ * Users who opt out of re-engagement messages STILL receive tier completion tips.
+ * This is intentional - onboarding tips are contextual help after user actions,
+ * while re-engagement messages are push notifications to inactive users.
  */
 async function getUserCelebrationData(userId: string): Promise<UserCelebrationData> {
   const supabase = getSupabaseClient()
 
+  // Note: We deliberately do NOT check reengagement_opt_out here (AC-6.4.3)
   const { data: profile, error } = await supabase
     .from('user_profiles')
     .select('onboarding_tips_enabled, preferred_destination, whatsapp_jid, locale')

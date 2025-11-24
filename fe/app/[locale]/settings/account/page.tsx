@@ -21,12 +21,14 @@ import { useTranslations } from "next-intl"
 import { AlertTriangle, Trash2, Loader2, Shield } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { NotificationPreferences } from "@/components/settings/notification-preferences"
 
 export default function AccountSettingsPage() {
   const t = useTranslations()
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [dataSummary, setDataSummary] = useState<any>(null)
+  const [userProfile, setUserProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
@@ -43,6 +45,16 @@ export default function AccountSettingsPage() {
         data: { user: currentUser },
       } = await supabase.auth.getUser()
       setUser(currentUser)
+
+      // Load user profile (for reengagement_opt_out)
+      if (currentUser) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("reengagement_opt_out")
+          .eq("user_id", currentUser.id)
+          .single()
+        setUserProfile(profile)
+      }
 
       // Load data summary
       const summary = await getMyDataSummary()
@@ -212,6 +224,14 @@ export default function AccountSettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Notification Preferences */}
+      {user && userProfile !== null && (
+        <NotificationPreferences
+          initialOptOut={userProfile?.reengagement_opt_out ?? false}
+          userId={user.id}
+        />
+      )}
 
       {/* LGPD / Data Rights */}
       <Card className="border-blue-200 dark:border-blue-900">

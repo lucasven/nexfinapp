@@ -85,19 +85,19 @@ development_status:
   5-4-message-queue-processor: done
   5-5-railway-cron-integration: done
   5-6-scheduler-idempotency-guarantees: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: completed
 
   # Epic 6: User Preferences & Web Integration
-  epic-6: backlog
-  6-1-whatsapp-opt-out-opt-in-commands: backlog
-  6-2-web-settings-opt-out-toggle: backlog
-  6-3-cross-channel-preference-sync: backlog
-  6-4-opt-out-respect-in-engagement-system: backlog
-  6-5-analytics-dashboard-access: backlog
-  epic-6-retrospective: optional
+  epic-6: contexted
+  6-1-whatsapp-opt-out-opt-in-commands: done
+  6-2-web-settings-opt-out-toggle: done
+  6-3-cross-channel-preference-sync: done
+  6-4-opt-out-respect-in-engagement-system: done
+  6-5-analytics-dashboard-access: done
+  epic-6-retrospective: completed
 
   # Epic 7: Testing & Quality Assurance
-  epic-7: backlog
+  epic-7: contexted
   7-1-e2e-testing-framework-setup: backlog
   7-2-state-machine-unit-tests: backlog
   7-3-scheduler-unit-tests: backlog

@@ -1,0 +1,508 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>6-1-whatsapp-opt-out-opt-in-commands</story-id>
+    <story-title>WhatsApp Opt-Out/Opt-In Commands</story-title>
+    <epic>Epic 6: User Preferences &amp; Web Integration</epic>
+    <status>ready-for-dev</status>
+    <generated-at>2025-11-24</generated-at>
+  </metadata>
+
+  <story-summary>
+    <description>
+      Implement WhatsApp commands for users to opt out of or back into re-engagement messages
+      using natural language ("parar lembretes", "stop reminders"). This story creates the
+      WhatsApp channel for preference control, enabling users to control re-engagement messages
+      (goodbye, weekly review) while maintaining onboarding tips.
+    </description>
+
+    <critical-patterns>
+      <pattern>Opt-out/opt-in commands are HIGHEST PRIORITY in intent parsing</pattern>
+      <pattern>Check for these intents BEFORE semantic cache or OpenAI NLP</pattern>
+      <pattern>Target response time: &lt; 2 seconds (no LLM overhead)</pattern>
+      <pattern>Re-engagement opt-out is SEPARATE from onboarding tips opt-out</pattern>
+    </critical-patterns>
+
+    <key-requirements>
+      <requirement>Parse natural language opt-out/opt-in commands (generous pattern matching)</requirement>
+      <requirement>Update user_profiles.reengagement_opt_out column (boolean)</requirement>
+      <requirement>Send localized confirmation messages (pt-BR/en)</requirement>
+      <requirement>Track PostHog event: engagement_preference_changed</requirement>
+      <requirement>Ensure idempotency (multiple "stop" commands = same result)</requirement>
+      <requirement>Handle errors gracefully with user-friendly messages</requirement>
+    </key-requirements>
+  </story-summary>
+
+  <acceptance-criteria>
+    <criterion id="AC-6.1.1">
+      <description>
+        Given a user sends "parar lembretes" (pt-BR) or "stop reminders" (en),
+        when the opt-out handler processes the command,
+        then user_profiles.reengagement_opt_out is set to true,
+        a confirmation message is sent in the user's locale,
+        and PostHog event engagement_preference_changed is tracked with source: 'whatsapp' and preference: 'opted_out'.
+      </description>
+      <verification>
+        - Test: Send "parar lembretes" → DB column = true
+        - Test: Confirmation message in pt-BR
+        - Test: PostHog event tracked with correct properties
+      </verification>
+    </criterion>
+
+    <criterion id="AC-6.1.2">
+      <description>
+        Given a user sends "ativar lembretes" (pt-BR) or "start reminders" (en),
+        when the opt-in handler processes the command,
+        then user_profiles.reengagement_opt_out is set to false,
+        a confirmation message is sent in the user's locale,
+        and PostHog event engagement_preference_changed is tracked with source: 'whatsapp' and preference: 'opted_in'.
+      </description>
+      <verification>
+        - Test: Send "start reminders" → DB column = false
+        - Test: Confirmation message in English
+        - Test: PostHog event tracked
+      </verification>
+    </criterion>
+
+    <criterion id="AC-6.1.3">
+      <description>
+        Given a user sends variations in phrasing ("cancelar notificações", "disable notifications", "opt out", "unsubscribe", etc.),
+        when the intent parser processes the message,
+        then the correct intent (opt_out or opt_in) is recognized via pattern matching.
+      </description>
+      <verification>
+        - Test: "cancelar notificações" → opt_out intent
+        - Test: "opt out" → opt_out intent
+        - Test: "unsubscribe" → opt_out intent
+        - Test: "quero notificações" → opt_in intent
+      </verification>
+    </criterion>
+
+    <criterion id="AC-6.1.4">
+      <description>
+        Given a user is already opted out,
+        when they send another "stop reminders" command,
+        then the database update is idempotent (no error),
+        the confirmation message is sent,
+        and no duplicate PostHog events are created.
+      </description>
+      <verification>
+        - Test: Multiple "stop reminders" → same result, no errors
+        - Test: Confirmation message sent each time
+        - Test: PostHog event deduplicated by timestamp
+      </verification>
+    </criterion>
+
+    <criterion id="AC-6.1.5">
+      <description>
+        Given the database update fails during opt-out/opt-in,
+        when the handler catches the error,
+        then the user receives an error message ("Failed to update preferences. Please try again."),
+        the preference remains unchanged,
+        and the error is logged with user context.
+      </description>
+      <verification>
+        - Test: Mock DB error → error message returned
+        - Test: User receives localized error message
+        - Test: Error logged with user ID and context
+      </verification>
+    </criterion>
+  </acceptance-criteria>
+
+  <existing-code-context>
+    <file path="whatsapp-bot/src/handlers/engagement/opt-out-handler.ts" status="exists-stub">
+      <purpose>
+        Existing file handles onboarding tips opt-out (Story 3.5) using handleTipOptOut().
+        Contains STUB functions for re-engagement opt-out: handleOptOutCommand(), parseOptOutCommand(), isOptedOut().
+        Story 6.1 will IMPLEMENT these stub functions.
+      </purpose>
+      <key-exports>
+        - handleTipOptOut(userId, messageText, locale): Promise&lt;string | null&gt; [EXISTING - DO NOT MODIFY]
+        - handleOptOutCommand(context: OptOutContext): Promise&lt;OptOutResult&gt; [STUB - IMPLEMENT]
+        - parseOptOutCommand(messageText, locale): 'opt_out' | 'opt_in' | null [STUB - IMPLEMENT]
+        - isOptedOut(userId): Promise&lt;boolean&gt; [STUB - IMPLEMENT for Story 6.4]
+      </key-exports>
+      <critical-distinction>
+        TWO SEPARATE OPT-OUT SYSTEMS:
+        1. handleTipOptOut() → controls onboarding_tips_enabled (Story 3.5)
+        2. handleOptOutCommand() → controls reengagement_opt_out (Story 6.1)
+        DO NOT CONFUSE THESE!
+      </critical-distinction>
+    </file>
+
+    <file path="whatsapp-bot/src/localization/pt-br.ts" status="modify">
+      <purpose>Portuguese localization messages</purpose>
+      <add-keys>
+        - engagementOptOutConfirmed: "Lembretes pausados ✓\n\nVocê não receberá mais mensagens de reengajamento..."
+        - engagementOptInConfirmed: "Lembretes reativados ✓\n\nVocê voltará a receber mensagens..."
+        - engagementOptOutError: "Erro ao atualizar preferências. Por favor, tente novamente."
+      </add-keys>
+      <existing-keys>
+        - engagementOptOutConfirm: "Entendido! Não vou mais mandar lembretes..." [LEGACY - for backward compatibility]
+        - engagementOptInConfirm: "Ativado! Agora você vai receber lembretes e dicas novamente." [LEGACY]
+      </existing-keys>
+      <note>
+        Story 6.1 adds NEW keys (engagementOptOutConfirmed/engagementOptInConfirmed) to distinguish
+        from legacy keys and provide more detailed confirmation messages per spec.
+      </note>
+    </file>
+
+    <file path="whatsapp-bot/src/localization/en.ts" status="modify">
+      <purpose>English localization messages</purpose>
+      <add-keys>
+        - engagementOptOutConfirmed: "Reminders paused ✓\n\nYou won't receive re-engagement messages..."
+        - engagementOptInConfirmed: "Reminders reactivated ✓\n\nYou'll receive re-engagement messages..."
+        - engagementOptOutError: "Failed to update preferences. Please try again."
+      </add-keys>
+    </file>
+
+    <file path="whatsapp-bot/src/handlers/core/message-handler.ts" status="modify">
+      <purpose>Main message handler entry point</purpose>
+      <integration-point>
+        Add opt-out/opt-in check at HIGHEST PRIORITY (before NLP layers).
+        Flow: handleMessage() → delegates to handleTextMessage() → [ADD CHECK HERE]
+        Check parseOptOutCommand() BEFORE explicit commands, semantic cache, OpenAI NLP.
+      </integration-point>
+      <current-structure>
+        - handleMessage(context: MessageContext) → main entry point
+        - Delegates to handleTextMessage() for text messages
+        - handleImageMessage() for images
+        - Currently has group authorization check, analytics tracking
+      </current-structure>
+    </file>
+
+    <database-schema>
+      <table name="user_profiles">
+        <column name="reengagement_opt_out" type="BOOLEAN" default="false">
+          Comment: "If true, user has opted out of re-engagement messages (goodbye, weekly review). Onboarding tips still allowed."
+          Added in: Migration 034_engagement_system.sql (Epic 1, Story 1.1)
+        </column>
+        <column name="onboarding_tips_enabled" type="BOOLEAN" default="true">
+          Comment: "If true (default), user receives onboarding tips: tier completion celebrations, contextual hints. Independent from reengagement_opt_out."
+          Added in: Migration 035_onboarding_tips_enabled.sql (Epic 3, Story 3.5)
+        </column>
+        <rls-policy>
+          Users can update their own profile (RLS policy from 005_user_profiles_and_permissions.sql)
+          Service role (WhatsApp bot) has full access via SUPABASE_SERVICE_KEY
+        </rls-policy>
+      </table>
+    </database-schema>
+
+    <analytics-integration>
+      <posthog-client path="whatsapp-bot/src/analytics/index.ts">
+        - Export: trackEvent(eventName, distinctId, properties)
+        - Export: hashSensitiveData(data) → for user privacy
+      </posthog-client>
+      <event-name>engagement_preference_changed</event-name>
+      <event-properties>
+        - user_id: string (database user ID)
+        - preference: 'opted_out' | 'opted_in'
+        - source: 'whatsapp' (vs 'web' in Story 6.2)
+        - timestamp: ISO string
+      </event-properties>
+      <note>
+        Event is NOT in WhatsAppAnalyticsEvent enum yet.
+        Story 6.1 will add: ENGAGEMENT_PREFERENCE_CHANGED = 'engagement_preference_changed'
+      </note>
+    </analytics-integration>
+
+    <supabase-client path="whatsapp-bot/src/services/database/supabase-client.ts">
+      <function>getSupabaseClient(): SupabaseClient</function>
+      <usage>
+        const supabase = getSupabaseClient()
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ reengagement_opt_out: true })
+          .eq('user_id', userId)
+      </usage>
+      <note>
+        Uses SUPABASE_SERVICE_KEY → bypasses RLS, can update any user.
+        Perfect for WhatsApp bot operations.
+      </note>
+    </supabase-client>
+
+    <logger path="whatsapp-bot/src/services/monitoring/logger.js">
+      <usage>
+        import { logger } from '../../services/monitoring/logger.js'
+        logger.info('Opt-out command processed', { userId, intent, newValue })
+        logger.error('Failed to update preference', { userId, error })
+      </usage>
+    </logger>
+  </existing-code-context>
+
+  <implementation-guidance>
+    <architecture-flow>
+      <step>1. User sends "parar lembretes" via WhatsApp</step>
+      <step>2. Message arrives at handlers/core/message-handler.ts</step>
+      <step>3. handleTextMessage() called → check parseOptOutCommand() FIRST (before NLP)</step>
+      <step>4. If opt-out intent detected → call handleOptOutCommand()</step>
+      <step>5. handleOptOutCommand() updates DB (user_profiles.reengagement_opt_out = true)</step>
+      <step>6. Track PostHog event (engagement_preference_changed)</step>
+      <step>7. Return localized confirmation message</step>
+      <step>8. Message sent back to user</step>
+    </architecture-flow>
+
+    <intent-parsing-strategy>
+      <approach>Generous pattern matching using includes() method</approach>
+      <rationale>
+        Users may phrase commands naturally:
+        - "quero parar os lembretes" → matches "parar lembretes"
+        - "stop these annoying reminders" → matches "stop reminders"
+        - "I want to opt out" → matches "opt out"
+      </rationale>
+      <cross-language-support>
+        Support both pt-BR and English patterns regardless of user locale.
+        Example: pt-BR user sending "stop reminders" → recognized
+      </cross-language-support>
+      <opt-out-patterns>
+        pt-BR: "parar lembretes", "parar reengajamento", "cancelar notificações", "desativar lembretes", "opt out", "unsubscribe", "sair"
+        English: "stop reminders", "disable notifications", "turn off reminders", "cancel notifications", "opt out", "unsubscribe"
+      </opt-out-patterns>
+      <opt-in-patterns>
+        pt-BR: "ativar lembretes", "ativar reengajamento", "quero notificações", "enable notifications", "opt in", "subscribe", "entrar", "voltar lembretes"
+        English: "start reminders", "enable notifications", "turn on reminders", "resume notifications", "opt in", "subscribe"
+      </opt-in-patterns>
+      <priority-order>Check opt-out patterns first (more common than opt-in)</priority-order>
+    </intent-parsing-strategy>
+
+    <database-update-pattern>
+      <idempotency>
+        Use Supabase update() which is idempotent:
+        .update({ reengagement_opt_out: true })
+        .eq('user_id', userId)
+        Multiple updates to same value succeed without error.
+      </idempotency>
+      <single-source-of-truth>
+        user_profiles.reengagement_opt_out is the authoritative source.
+        No caching layer. Direct DB reads ensure &lt; 5s sync (NFR10).
+      </single-source-of-truth>
+    </database-update-pattern>
+
+    <error-handling-strategy>
+      <scenario name="database-unavailable">
+        Return localized error message (engagementOptOutError)
+        Log error with user context
+        User can retry command
+      </scenario>
+      <scenario name="posthog-tracking-fails">
+        Log warning but DON'T fail opt-out
+        Preference update is critical, tracking is nice-to-have
+      </scenario>
+      <scenario name="invalid-user-id">
+        Supabase returns no rows
+        Treat as error, notify user
+      </scenario>
+      <scenario name="null-intent">
+        Should never reach handler (checked in message handler)
+        Handle defensively with error message
+      </scenario>
+    </error-handling-strategy>
+
+    <performance-requirements>
+      <target-response-time>&lt; 2 seconds (from command to confirmation)</target-response-time>
+      <breakdown>
+        - Pattern matching: &lt; 100ms (no LLM calls)
+        - Database update: &lt; 500ms (single UPDATE query)
+        - PostHog tracking: async, non-blocking
+        - Total: ~600ms typical, well under 2s target
+      </breakdown>
+    </performance-requirements>
+
+    <localization-messages>
+      <portuguese>
+        engagementOptOutConfirmed: "Lembretes pausados ✓\n\nVocê não receberá mais mensagens de reengajamento. Você ainda pode usar o app normalmente.\n\nPara reativar, envie: *ativar lembretes*"
+
+        engagementOptInConfirmed: "Lembretes reativados ✓\n\nVocê voltará a receber mensagens de reengajamento quando apropriado.\n\nPara pausar novamente, envie: *parar lembretes*"
+
+        engagementOptOutError: "Erro ao atualizar preferências. Por favor, tente novamente."
+      </portuguese>
+
+      <english>
+        engagementOptOutConfirmed: "Reminders paused ✓\n\nYou won't receive re-engagement messages anymore. You can still use the app normally.\n\nTo reactivate, send: *start reminders*"
+
+        engagementOptInConfirmed: "Reminders reactivated ✓\n\nYou'll receive re-engagement messages when appropriate.\n\nTo pause again, send: *stop reminders*"
+
+        engagementOptOutError: "Failed to update preferences. Please try again."
+      </english>
+    </localization-messages>
+  </implementation-guidance>
+
+  <testing-strategy>
+    <unit-tests file="whatsapp-bot/src/__tests__/handlers/opt-out-handler.test.ts">
+      <test>parseOptOutCommand("parar lembretes", "pt-BR") → 'opt_out'</test>
+      <test>parseOptOutCommand("stop reminders", "en") → 'opt_out'</test>
+      <test>parseOptOutCommand("ativar lembretes", "pt-BR") → 'opt_in'</test>
+      <test>parseOptOutCommand("start reminders", "en") → 'opt_in'</test>
+      <test>Variations recognized: "cancelar notificações" → 'opt_out'</test>
+      <test>Confirmation message matches user locale</test>
+      <test>PostHog event tracked with correct properties</test>
+      <test>Multiple "stop reminders" → idempotent (no error)</test>
+      <test>Database failure → error message returned, user notified</test>
+      <test>Unrelated message "add expense" → null intent</test>
+    </unit-tests>
+
+    <integration-tests file="whatsapp-bot/src/__tests__/integration/opt-out-flow.test.ts">
+      <test>End-to-end opt-out flow (message → handler → DB → confirmation)</test>
+      <test>End-to-end opt-in flow (message → handler → DB → confirmation)</test>
+      <test>Opt-out then opt-in (verify DB updates correctly)</test>
+      <test>Opt-out with DB unavailable → error message, user notified</test>
+    </integration-tests>
+
+    <manual-qa-checklist>
+      <item>Send "parar lembretes" in pt-BR → verify confirmation message</item>
+      <item>Send "stop reminders" in English → verify confirmation message</item>
+      <item>Check database: reengagement_opt_out = true</item>
+      <item>Check PostHog: event engagement_preference_changed with correct properties</item>
+      <item>Send "ativar lembretes" → verify opt-in confirmation</item>
+      <item>Send multiple "stop reminders" → verify idempotent (no error)</item>
+    </manual-qa-checklist>
+  </testing-strategy>
+
+  <dependencies>
+    <dependency type="migration">
+      Migration 034_engagement_system.sql MUST be applied (adds reengagement_opt_out column)
+      Status: COMPLETED in Epic 1, Story 1.1
+    </dependency>
+
+    <dependency type="epic">
+      Epic 1 (Foundation) MUST be complete (localization system, database schema)
+      Status: COMPLETED
+    </dependency>
+
+    <dependency type="story">
+      Story 3.5 (Skip Onboarding Command) MUST be complete (handleTipOptOut exists)
+      Status: COMPLETED
+    </dependency>
+
+    <dependency type="integration">
+      Story 6.4 will test scheduler respects opt-out (isOptedOut() function)
+      Story 6.2 will add web UI for same preference (cross-channel sync)
+    </dependency>
+  </dependencies>
+
+  <learnings-from-previous-stories>
+    <from-story id="4.6">
+      Use simple pattern matching for explicit commands (no LLM overhead)
+      Highest priority intents should short-circuit normal flow
+      Return confirmation messages immediately (&lt; 2s target)
+    </from-story>
+
+    <from-story id="1.4-1.5">
+      All user-facing messages must support pt-BR and en
+      Use getLocalizedMessage(key, locale) utility → CORRECTION: Use messages object from localization files
+      Test confirmation messages in both languages
+    </from-story>
+
+    <from-story id="5.1">
+      Scheduler already filters opted-out users via database query
+      This story creates the opt-out mechanism; Story 6.4 tests scheduler integration
+    </from-story>
+
+    <from-story id="3.5">
+      Opt-out handler file already exists for onboarding tips
+      CRITICAL: Do NOT confuse tips opt-out with re-engagement opt-out
+      Different columns, different functions, different use cases
+    </from-story>
+  </learnings-from-previous-stories>
+
+  <edge-cases-and-gotchas>
+    <case name="race-condition">
+      User opts out during message send: Message already queued before opt-out, future messages blocked.
+      This is ACCEPTABLE per tech spec. Document as expected behavior.
+    </case>
+
+    <case name="distinction-from-tips">
+      Users who opt out of re-engagement will:
+      ✅ Still receive onboarding tips after tier completions (Story 3.5)
+      ❌ No longer receive goodbye messages (14-day inactivity)
+      ❌ No longer receive weekly review messages
+      Story 6.2 will add UI to distinguish these preferences clearly.
+    </case>
+
+    <case name="cross-language-matching">
+      User may mix pt-BR and English phrases:
+      - pt-BR user sending "stop reminders" → recognized
+      - English user sending "parar lembretes" → recognized
+      Support both language patterns regardless of user locale.
+    </case>
+
+    <case name="integration-with-scheduler">
+      Scheduler from Epic 5 will respect this preference:
+      const { data: users } = await supabase
+        .from('user_engagement_states')
+        .select('user_id, user_profiles(reengagement_opt_out)')
+        .eq('state', 'active')
+        .lt('last_activity_at', inactivityDate)
+        .eq('user_profiles.reengagement_opt_out', false)  ← Filter applied here
+      Story 6.4 will add explicit tests for this.
+    </case>
+  </edge-cases-and-gotchas>
+
+  <file-modifications-checklist>
+    <file path="whatsapp-bot/src/handlers/engagement/opt-out-handler.ts">
+      <action>Implement parseOptOutCommand(messageText, locale) function</action>
+      <action>Implement handleOptOutCommand(context) function</action>
+      <action>Add opt-out/opt-in pattern arrays</action>
+      <action>Update exports (remove stub TODOs)</action>
+    </file>
+
+    <file path="whatsapp-bot/src/localization/pt-br.ts">
+      <action>Add engagementOptOutConfirmed key with full message</action>
+      <action>Add engagementOptInConfirmed key with full message</action>
+      <action>Add engagementOptOutError key</action>
+    </file>
+
+    <file path="whatsapp-bot/src/localization/en.ts">
+      <action>Add engagementOptOutConfirmed key with full message</action>
+      <action>Add engagementOptInConfirmed key with full message</action>
+      <action>Add engagementOptOutError key</action>
+    </file>
+
+    <file path="whatsapp-bot/src/handlers/core/message-handler.ts">
+      <action>Import parseOptOutCommand, handleOptOutCommand from opt-out-handler</action>
+      <action>Add opt-out/opt-in check at HIGHEST PRIORITY in handleTextMessage()</action>
+      <action>Short-circuit normal flow if opt-out/opt-in intent detected</action>
+    </file>
+
+    <file path="whatsapp-bot/src/analytics/events.ts">
+      <action>Add ENGAGEMENT_PREFERENCE_CHANGED to WhatsAppAnalyticsEvent enum</action>
+    </file>
+
+    <file path="whatsapp-bot/src/__tests__/handlers/opt-out-handler.test.ts">
+      <action>Create new test file</action>
+      <action>Write 10 unit tests (see testing-strategy)</action>
+    </file>
+
+    <file path="docs/sprint-artifacts/sprint-status.yaml">
+      <action>Update 6-1-whatsapp-opt-out-opt-in-commands: drafted → ready-for-dev</action>
+    </file>
+
+    <file path="docs/sprint-artifacts/6-1-whatsapp-opt-out-opt-in-commands.md">
+      <action>Update Status: drafted → ready-for-dev</action>
+      <action>Add reference to context file in Dev Agent Record</action>
+    </file>
+  </file-modifications-checklist>
+
+  <references>
+    <document>docs/sprint-artifacts/tech-spec-epic-6.md#AC-6.1-WhatsApp-Opt-Out-Command</document>
+    <document>docs/sprint-artifacts/tech-spec-epic-6.md#Detailed-Design-Opt-Out-Handler</document>
+    <document>CLAUDE.md#WhatsApp-Bot-Message-Flow</document>
+    <document>fe/scripts/034_engagement_system.sql (reengagement_opt_out column)</document>
+    <document>whatsapp-bot/src/handlers/engagement/opt-out-handler.ts (existing stub)</document>
+  </references>
+
+  <completion-definition-of-done>
+    <requirement>parseOptOutCommand() function implemented with generous pattern matching</requirement>
+    <requirement>handleOptOutCommand() function implemented with DB update + PostHog tracking</requirement>
+    <requirement>Localization keys added to pt-br.ts and en.ts</requirement>
+    <requirement>Message handler integration (opt-out check at highest priority)</requirement>
+    <requirement>10 unit tests written and passing</requirement>
+    <requirement>3 integration tests written and passing</requirement>
+    <requirement>Manual QA checklist completed</requirement>
+    <requirement>PostHog event engagement_preference_changed tracked correctly</requirement>
+    <requirement>Idempotency verified (multiple commands = same result)</requirement>
+    <requirement>Error handling tested (DB failure, PostHog failure)</requirement>
+    <requirement>Response time &lt; 2 seconds verified</requirement>
+    <requirement>Story marked as ready-for-dev in sprint-status.yaml</requirement>
+  </completion-definition-of-done>
+</story-context>

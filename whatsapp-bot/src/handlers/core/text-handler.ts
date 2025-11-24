@@ -28,7 +28,7 @@ import { handleFirstMessage, shouldTriggerWelcomeFlow, type FirstMessageHandlerC
 import { autoDetectDestination } from '../../services/engagement/message-router.js'
 import { messages as ptBrMessages } from '../../localization/pt-br.js'
 import { messages as enMessages } from '../../localization/en.js'
-import { isTipCommand, handleTipOptOut } from '../engagement/opt-out-handler.js'
+import { isTipCommand, handleTipOptOut, parseOptOutCommand, handleOptOutCommand, type OptOutContext } from '../engagement/opt-out-handler.js'
 import { checkAndHandleGoodbyeResponse } from '../engagement/goodbye-handler.js'
 import { isDestinationSwitchCommand, handleDestinationSwitch, type DestinationSwitchContext } from '../engagement/destination-handler.js'
 
@@ -213,6 +213,73 @@ export async function handleTextMessage(
         })
         return result
       }
+    }
+
+    // LAYER 0.91: Re-engagement Opt-Out Command Check (Story 6.1)
+    // AC-6.1.1, AC-6.1.2: Handle "parar lembretes"/"stop reminders" and "ativar lembretes"/"start reminders"
+    // Must be checked at HIGHEST PRIORITY (before NLP) to ensure fast response (< 2s)
+    const optOutIntent = parseOptOutCommand(message, 'pt-BR') // TODO: Detect user locale properly
+    if (optOutIntent) {
+      // Need authentication for preference update
+      let optOutSession = session
+      if (!optOutSession) {
+        if (groupOwnerId) {
+          optOutSession = await getUserSession(whatsappNumber)
+          if (!optOutSession) {
+            await createUserSession(whatsappNumber, groupOwnerId)
+            optOutSession = await getUserSession(whatsappNumber)
+          }
+        } else {
+          optOutSession = await getOrCreateSession(whatsappNumber)
+        }
+      }
+
+      if (optOutSession) {
+        // TODO: Detect user locale properly (for now default to pt-BR)
+        const locale: 'pt-BR' | 'en' = 'pt-BR'
+        const optOutContext: OptOutContext = {
+          userId: optOutSession.userId,
+          whatsappJid: whatsappNumber,
+          command: optOutIntent,
+          locale
+        }
+
+        const optOutResult = await handleOptOutCommand(optOutContext)
+
+        if (optOutResult.success) {
+          strategy = 'engagement_opt_out' as ParsingStrategy
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: optOutSession.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: true,
+            parseDurationMs: Date.now() - startTime,
+          })
+
+          // Return localized confirmation message
+          const userMessages = locale === 'pt-BR' ? ptBrMessages : enMessages
+          const confirmationKey = optOutIntent === 'opt_out' ? 'engagementOptOutConfirmed' : 'engagementOptInConfirmed'
+          return userMessages[confirmationKey]
+        } else {
+          // Failed to update preference, return error message
+          strategy = 'engagement_opt_out' as ParsingStrategy
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: optOutSession.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: false,
+            errorMessage: optOutResult.error || 'Failed to update preference',
+            parseDurationMs: Date.now() - startTime,
+          })
+          return optOutResult.error || 'Failed to update preference'
+        }
+      }
+      // If no session, continue to normal flow (will prompt for login)
+      session = optOutSession
     }
 
     // LAYER 0.95: Goodbye Response Check (Story 4.4)

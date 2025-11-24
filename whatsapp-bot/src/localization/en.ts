@@ -404,6 +404,21 @@ You can still use all features normally, just reach out anytime.`,
 
   engagementOptInConfirm: `Enabled! You'll now receive reminders and tips again.`,
 
+  // Engagement: Re-engagement Opt-Out (Story 6.1)
+  engagementOptOutConfirmed: `Reminders paused ✓
+
+You won't receive re-engagement messages anymore. You can still use the app normally.
+
+To reactivate, send: *start reminders*`,
+
+  engagementOptInConfirmed: `Reminders reactivated ✓
+
+You'll receive re-engagement messages when appropriate.
+
+To pause again, send: *stop reminders*`,
+
+  engagementOptOutError: `Failed to update preferences. Please try again.`,
+
   // Engagement: Dormant Reactivation
   engagementWelcomeBack: `Hey! Great to see you back. Pick up where you left off!`,
 

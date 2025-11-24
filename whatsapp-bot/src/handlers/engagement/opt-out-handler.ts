@@ -16,6 +16,9 @@
 
 import { logger } from '../../services/monitoring/logger.js'
 import { getSupabaseClient } from '../../services/database/supabase-client.js'
+import { trackEvent, WhatsAppAnalyticsEvent } from '../../analytics/index.js'
+import { messages as ptBrMessages } from '../../localization/pt-br.js'
+import { messages as enMessages } from '../../localization/en.js'
 
 // =============================================================================
 // Tip Command Patterns (Story 3.5)
@@ -151,48 +154,190 @@ export interface OptOutResult {
 /**
  * Process opt-out or opt-in command for RE-ENGAGEMENT (not tips!)
  *
+ * AC-6.1.1: Updates user_profiles.reengagement_opt_out to true for opt-out
+ * AC-6.1.2: Updates user_profiles.reengagement_opt_out to false for opt-in
+ * AC-6.1.4: Idempotent - same value can be set multiple times without error
+ * AC-6.1.5: Graceful error handling with user-friendly messages
+ *
  * @param context - Information about the opt-out request
  * @returns Result indicating success and new preference state
- *
- * TODO: Implement in Epic 6 (Story 6.1)
- * - Update user_profiles.reengagement_opt_out
- * - Send confirmation message
- * - Track in analytics
  */
 export async function handleOptOutCommand(
   context: OptOutContext
 ): Promise<OptOutResult> {
-  logger.info('Opt-out handler called (stub)', {
-    userId: context.userId,
-    command: context.command,
+  const { userId, command, locale } = context
+  const optOut = command === 'opt_out'
+  const messages = locale === 'pt-BR' ? ptBrMessages : enMessages
+
+  logger.info('Processing re-engagement opt-out/opt-in command', {
+    userId,
+    command,
+    locale,
+    reengagement_opt_out: optOut
   })
 
-  // Stub implementation - will be completed in Epic 6
-  return {
-    success: false,
-    previousState: false,
-    newState: false,
-    confirmationSent: false,
-    error: 'Not implemented - see Epic 6, Story 6.1',
+  try {
+    const supabase = getSupabaseClient()
+
+    // Get current state before update
+    const { data: currentProfile, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('reengagement_opt_out')
+      .eq('user_id', userId)
+      .single()
+
+    if (fetchError) {
+      logger.error('Failed to fetch current opt-out state', {
+        userId,
+        command,
+        error: fetchError
+      })
+      return {
+        success: false,
+        previousState: false,
+        newState: false,
+        confirmationSent: false,
+        error: messages.engagementOptOutError
+      }
+    }
+
+    const previousState = currentProfile?.reengagement_opt_out ?? false
+
+    // AC-6.1.4: Update is idempotent - same value can be set multiple times
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({ reengagement_opt_out: optOut })
+      .eq('user_id', userId)
+
+    if (updateError) {
+      logger.error('Failed to update reengagement_opt_out', {
+        userId,
+        command,
+        error: updateError
+      })
+      return {
+        success: false,
+        previousState,
+        newState: previousState,
+        confirmationSent: false,
+        error: messages.engagementOptOutError
+      }
+    }
+
+    logger.info('Successfully updated reengagement_opt_out', {
+      userId,
+      previousState,
+      newState: optOut
+    })
+
+    // AC-6.1.1, AC-6.1.2: Track PostHog event (don't fail if tracking fails)
+    try {
+      trackEvent(
+        WhatsAppAnalyticsEvent.ENGAGEMENT_PREFERENCE_CHANGED,
+        userId,
+        {
+          user_id: userId,
+          preference: optOut ? 'opted_out' : 'opted_in',
+          source: 'whatsapp',
+          timestamp: new Date().toISOString()
+        }
+      )
+    } catch (trackingError) {
+      logger.warn('Failed to track PostHog event (non-critical)', {
+        userId,
+        error: trackingError
+      })
+    }
+
+    // Return success with localized confirmation message
+    return {
+      success: true,
+      previousState,
+      newState: optOut,
+      confirmationSent: true,
+      error: undefined
+    }
+  } catch (error) {
+    logger.error('Unexpected error in handleOptOutCommand', {
+      userId,
+      command,
+      error
+    })
+    return {
+      success: false,
+      previousState: false,
+      newState: false,
+      confirmationSent: false,
+      error: messages.engagementOptOutError
+    }
   }
 }
 
 /**
  * Check if a message is an opt-out or opt-in command for RE-ENGAGEMENT
  *
+ * AC-6.1.3: Generous pattern matching with includes() for natural language variations
+ * Supports both pt-BR and English patterns regardless of user locale
+ *
  * @param messageText - The incoming message text
  * @param locale - User's locale for command matching
  * @returns The command type or null if not a preference command
- *
- * TODO: Implement in Epic 6 (Story 6.1)
  */
 export function parseOptOutCommand(
   messageText: string,
   locale: 'pt-BR' | 'en'
 ): 'opt_out' | 'opt_in' | null {
-  logger.debug('Parsing opt-out command (stub)', { messageText, locale })
+  const lowerText = messageText.toLowerCase().trim()
 
-  // Stub implementation - will be completed in Epic 6
+  // Opt-out patterns (pt-BR and English)
+  // AC-6.1.1: "parar lembretes", "stop reminders"
+  // AC-6.1.3: Variations like "cancelar notificações", "opt out", "unsubscribe"
+  const optOutPatterns = [
+    'parar lembretes',
+    'parar reengajamento',
+    'cancelar notificações',
+    'cancelar notificacoes',
+    'desativar lembretes',
+    'opt out',
+    'unsubscribe',
+    'sair',
+    'stop reminders',
+    'disable notifications',
+    'turn off reminders',
+    'cancel notifications'
+  ]
+
+  // Opt-in patterns (pt-BR and English)
+  // AC-6.1.2: "ativar lembretes", "start reminders"
+  // AC-6.1.3: Variations like "quero notificações", "opt in", "subscribe"
+  const optInPatterns = [
+    'ativar lembretes',
+    'ativar reengajamento',
+    'quero notificações',
+    'quero notificacoes',
+    'enable notifications',
+    'opt in',
+    'subscribe',
+    'entrar',
+    'voltar lembretes',
+    'start reminders',
+    'turn on reminders',
+    'resume notifications'
+  ]
+
+  // Check opt-out patterns first (more common)
+  if (optOutPatterns.some(pattern => lowerText.includes(pattern))) {
+    logger.debug('Opt-out intent detected', { messageText })
+    return 'opt_out'
+  }
+
+  // Check opt-in patterns
+  if (optInPatterns.some(pattern => lowerText.includes(pattern))) {
+    logger.debug('Opt-in intent detected', { messageText })
+    return 'opt_in'
+  }
+
+  // No match - not an opt-out/opt-in command
   return null
 }
 

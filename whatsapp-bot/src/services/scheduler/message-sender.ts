@@ -337,6 +337,14 @@ async function markMessageFailed(
  *
  * Epic 5, Story 5.4: Message Queue Processor
  *
+ * AC-6.4.4: Race Condition Behavior (Story 6.4 - Acceptable)
+ * If a user opts out AFTER a message is queued but BEFORE this processor runs,
+ * the queued message will still be sent. This is acceptable (eventual consistency):
+ * - The scheduler filters opted-out users BEFORE queuing new messages
+ * - This ensures future messages are blocked
+ * - User receives ONE message after opt-out (not a pattern of ignored preferences)
+ * - Alternative (queue cancellation) adds complexity for minimal benefit
+ *
  * @returns Processing results with counts and errors
  */
 export async function processMessageQueue(): Promise<ProcessResult> {

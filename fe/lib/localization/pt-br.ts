@@ -395,6 +395,14 @@ export const messages: Messages = {
       deletionFailed: 'Falha ao excluir conta. Por favor, tente novamente.',
       confirmationRequired: 'Por favor, digite EXCLUIR MINHA CONTA para confirmar',
     },
+    notifications: {
+      title: 'Preferências de Notificações',
+      reengagement_label: 'Mensagens de Reengajamento',
+      reengagement_description: 'Receba lembretes quando estiver inativo (mensagem de despedida e revisão semanal)',
+      info_note: 'Nota: Esta preferência não afeta as dicas de integração que você recebe ao completar níveis.',
+      success_toast: 'Preferências salvas',
+      error_toast: 'Falha ao salvar preferências. Por favor, tente novamente.',
+    },
   },
 
   months: {

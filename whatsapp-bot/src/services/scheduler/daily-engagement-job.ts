@@ -153,7 +153,8 @@ async function processInactiveUsers(result: JobResult): Promise<void> {
 
   // Step 3: Process each inactive user, respecting opt-out preference
   for (const user of inactiveUsers) {
-    // AC-5.1.4: Skip opted-out users
+    // AC-5.1.4 & AC-6.4.1: Skip opted-out users
+    // Story 6.4: Scheduler respects reengagement_opt_out preference
     const isOptedOut = optOutMap.get(user.user_id)
     if (isOptedOut === true) {
       result.skipped++
@@ -189,6 +190,23 @@ async function processInactiveUsers(result: JobResult): Promise<void> {
       logger.error('Exception processing inactive user', { userId: user.user_id }, error as Error)
     }
   }
+
+  // AC-6.4.6 & AC-6.5.3: Log observability metrics for skipped opted-out users
+  // Story 6.5: Enhanced analytics logging for opt-out metrics
+  const optOutFilterRate = inactiveUsers.length > 0
+    ? (result.skipped / inactiveUsers.length) * 100
+    : 0
+
+  logger.info('Inactive users processing completed', {
+    job: 'daily-engagement-job',
+    total_eligible_users: inactiveUsers.length,
+    opted_out_users_skipped: result.skipped,
+    messages_queued: result.succeeded,
+    opt_out_filter_rate: parseFloat(optOutFilterRate.toFixed(2)),
+    processed: result.processed,
+    succeeded: result.succeeded,
+    failed: result.failed,
+  })
 }
 
 /**
