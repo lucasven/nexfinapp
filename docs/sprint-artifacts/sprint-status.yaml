@@ -98,10 +98,10 @@ development_status:
 
   # Epic 7: Testing & Quality Assurance
   epic-7: contexted
-  7-1-e2e-testing-framework-setup: backlog
-  7-2-state-machine-unit-tests: backlog
-  7-3-scheduler-unit-tests: backlog
-  7-4-goodbye-handler-tests: backlog
-  7-5-30-day-journey-integration-test: backlog
-  7-6-idempotency-verification-tests: backlog
+  7-1-e2e-testing-framework-setup: done
+  7-2-state-machine-unit-tests: done
+  7-3-scheduler-unit-tests: done
+  7-4-goodbye-handler-tests: done
+  7-5-30-day-journey-integration-test: done
+  7-6-idempotency-verification-tests: done
   epic-7-retrospective: optional

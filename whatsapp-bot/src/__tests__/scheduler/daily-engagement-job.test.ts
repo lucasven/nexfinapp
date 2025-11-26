@@ -188,7 +188,7 @@ describe('Daily Engagement Job - Story 5.1', () => {
         {
           data: [
             {
-              id: 'user-1',
+              user_id: 'user-1',
               reengagement_opt_out: true, // Opted out
             },
           ],

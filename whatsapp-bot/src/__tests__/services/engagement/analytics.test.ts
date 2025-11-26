@@ -238,10 +238,16 @@ describe('Transition Logging (AC-4.7.1)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'goodbye_sent' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
-      { data: { preferred_language: 'en' }, error: null }, // user profile query
+      // 5. User profile query for locale
+      { data: { preferred_language: 'en' }, error: null },
     ])
 
     const result = await transitionState(userId, 'inactivity_14d')
@@ -258,8 +264,13 @@ describe('Transition Logging (AC-4.7.1)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'help_flow' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
     ])
 
@@ -273,8 +284,13 @@ describe('Transition Logging (AC-4.7.1)', () => {
     const existingState = createMockEngagementState(userId, 'dormant')
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'active' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
     ])
 
@@ -291,10 +307,15 @@ describe('Transition Logging (AC-4.7.1)', () => {
     const existingState = createMockEngagementState(userId, 'active')
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'goodbye_sent' }, error: null },
-      // Log insert fails
+      // 4. Log insert fails
       { data: null, error: { message: 'Insert failed' } },
+      // 5. User profile query for locale
       { data: { preferred_language: 'en' }, error: null },
     ])
 
@@ -344,8 +365,13 @@ describe('PostHog Events (AC-4.7.2, AC-4.7.7)', () => {
     const existingState = createMockEngagementState(userId, 'dormant')
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'active' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
     ])
 
@@ -369,8 +395,13 @@ describe('PostHog Events (AC-4.7.2, AC-4.7.7)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'dormant' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
     ])
 
@@ -398,8 +429,13 @@ describe('PostHog Events (AC-4.7.2, AC-4.7.7)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'active' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
     ])
 

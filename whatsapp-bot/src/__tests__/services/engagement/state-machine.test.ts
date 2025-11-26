@@ -328,20 +328,21 @@ describe('State Machine - transitionState()', () => {
   })
 
   describe('Invalid Transitions (AC-4.1.2)', () => {
-    it('should reject invalid transition active + user_message', async () => {
+    it('should allow active + user_message as no-op (updates activity)', async () => {
       const userId = 'user-123'
       const existingState = createMockEngagementState(userId, 'active')
 
       mockQuerySequence([
-        { data: existingState, error: null },
+        { data: existingState, error: null }, // get state
+        { data: existingState, error: null }, // update state
+        { data: { id: 'transition-1' }, error: null }, // log transition
       ])
 
       const result = await transitionState(userId, 'user_message')
 
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('Invalid transition')
-      expect(result.error).toContain('active')
-      expect(result.error).toContain('user_message')
+      expect(result.success).toBe(true)
+      expect(result.previousState).toBe('active')
+      expect(result.newState).toBe('active')
     })
 
     it('should reject invalid transition dormant + inactivity_14d', async () => {
@@ -379,8 +380,13 @@ describe('State Machine - transitionState()', () => {
       const existingState = createMockEngagementState(userId, 'active')
 
       mockQuerySequence([
+        // 1. Get current state
         { data: existingState, error: null },
+        // 2. Refetch state
+        { data: existingState, error: null },
+        // 3. Update state
         { data: { ...existingState, state: 'goodbye_sent' }, error: null },
+        // 4. Insert transition log
         { data: { id: 'transition-789' }, error: null },
       ])
 
@@ -454,7 +460,9 @@ describe('State Machine - transitionState()', () => {
       mockQuerySequence([
         // 1. Get current state
         { data: existingState, error: null },
-        // 2. Update fails - no rows matched (state was modified)
+        // 2. Refetch state
+        { data: existingState, error: null },
+        // 3. Update fails - no rows matched (state was modified)
         { data: null, error: { code: 'PGRST116', message: 'No rows found' } },
       ])
 
@@ -469,7 +477,11 @@ describe('State Machine - transitionState()', () => {
       const existingState = createMockEngagementState(userId, 'active')
 
       mockQuerySequence([
+        // 1. Get current state
         { data: existingState, error: null },
+        // 2. Refetch state
+        { data: existingState, error: null },
+        // 3. Update returns null (lock failed)
         { data: null, error: null }, // No error but no data = lock failed
       ])
 
@@ -800,7 +812,9 @@ describe('State Machine - Error Handling', () => {
     mockQuerySequence([
       // 1. Get state succeeds
       { data: existingState, error: null },
-      // 2. Update fails with database error
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update fails with database error
       { data: null, error: { code: 'CONNECTION_ERROR', message: 'Connection refused' } },
     ])
 

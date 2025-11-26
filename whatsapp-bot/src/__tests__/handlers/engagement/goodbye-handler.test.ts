@@ -353,6 +353,54 @@ describe('Goodbye Handler - Story 4.4', () => {
         })
       )
     })
+
+    it('should succeed even when message queueing fails (AC-7.4.9)', async () => {
+      mockGetMessageDestination.mockResolvedValue(null)
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+        { data: { id: userId }, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'confused', 'pt-BR')
+
+      expect(result.success).toBe(true)
+      expect(result.newState).toBe('active')
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot queue'),
+        expect.objectContaining({ userId })
+      )
+    })
+
+    it('should handle onboarding reset failure', async () => {
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+        { data: null, error: { message: 'Update failed' } },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'confused', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      // Error is logged 3 times: in resetOnboardingProgress, handleConfusedResponse, and processGoodbyeResponse
+      expect(mockLogger.error).toHaveBeenCalled()
+    })
+
+    it('should handle message queueing errors gracefully', async () => {
+      mockGetMessageDestination.mockRejectedValue(new Error('Network error'))
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+        { data: { id: userId }, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'confused', 'pt-BR')
+
+      expect(result.success).toBe(true)
+      expect(result.newState).toBe('active')
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error queueing help restart message'),
+        expect.any(Object),
+        expect.any(Error)
+      )
+    })
   })
 
   // =========================================================================
@@ -420,6 +468,41 @@ describe('Goodbye Handler - Story 4.4', () => {
         })
       )
     })
+
+    it('should handle error in busy response when transition fails', async () => {
+      mockTransitionState.mockResolvedValue({
+        success: false,
+        error: 'Transition failed',
+      })
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'busy', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Transition failed')
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to transition to remind_later'),
+        expect.any(Object)
+      )
+    })
+
+    it('should handle unexpected error in busy response', async () => {
+      mockTransitionState.mockRejectedValue(new Error('Database error'))
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'busy', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error handling busy response'),
+        expect.any(Object),
+        expect.any(Error)
+      )
+    })
   })
 
   // =========================================================================
@@ -485,6 +568,41 @@ describe('Goodbye Handler - Story 4.4', () => {
         expect.objectContaining({
           response_type: 'all_good',
         })
+      )
+    })
+
+    it('should handle error in all_good response when transition fails', async () => {
+      mockTransitionState.mockResolvedValue({
+        success: false,
+        error: 'Transition failed',
+      })
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'all_good', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Transition failed')
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to transition to dormant'),
+        expect.any(Object)
+      )
+    })
+
+    it('should handle unexpected error in all_good response', async () => {
+      mockTransitionState.mockRejectedValue(new Error('Network error'))
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'all_good', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error handling all good response'),
+        expect.any(Object),
+        expect.any(Error)
       )
     })
   })
@@ -623,6 +741,39 @@ describe('Goodbye Handler - Story 4.4', () => {
   // =========================================================================
 
   describe('Error Handling', () => {
+    it('should return shouldProcessNormally when user not in goodbye_sent state', async () => {
+      mockGetEngagementState.mockResolvedValue('active')
+
+      const result = await processGoodbyeResponse(userId, 'busy', 'pt-BR')
+
+      expect(result.success).toBe(true)
+      expect(result.shouldProcessNormally).toBe(true)
+      expect(result.newState).toBe('active')
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('User not in goodbye_sent state'),
+        expect.any(Object)
+      )
+    })
+
+    it('should handle error when help_flow transition fails in confused response', async () => {
+      mockTransitionState.mockResolvedValue({
+        success: false,
+        error: 'State transition failed',
+      })
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+      ])
+
+      const result = await processGoodbyeResponse(userId, 'confused', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('State transition failed')
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to transition to help_flow'),
+        expect.any(Object)
+      )
+    })
+
     it('should handle transition failure gracefully', async () => {
       mockTransitionState.mockResolvedValue({
         success: false,
@@ -636,6 +787,20 @@ describe('Goodbye Handler - Story 4.4', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toContain('transition')
+    })
+
+    it('should handle unexpected errors in processGoodbyeResponse', async () => {
+      mockGetEngagementState.mockRejectedValue(new Error('Database connection failed'))
+
+      const result = await processGoodbyeResponse(userId, 'busy', 'pt-BR')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Database connection failed')
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error processing goodbye response'),
+        expect.any(Object),
+        expect.any(Error)
+      )
     })
 
     it('should return error message in checkAndHandleGoodbyeResponse', async () => {
@@ -666,6 +831,137 @@ describe('Goodbye Handler - Story 4.4', () => {
       const result = await checkAndHandleGoodbyeResponse(userId, '3', 'en')
 
       expect(result).toContain('Sorry')
+    })
+
+    it('should continue with confused response even if active transition fails (AC-7.4.10)', async () => {
+      mockQuerySequence([
+        { data: defaultEngagementState, error: null },
+        { data: { id: userId }, error: null },
+      ])
+      // First transition (help_flow) succeeds, second (active) fails
+      mockTransitionState
+        .mockResolvedValueOnce({ success: true, newState: 'help_flow' })
+        .mockResolvedValueOnce({ success: false, error: 'Active transition failed' })
+
+      const result = await processGoodbyeResponse(userId, 'confused', 'pt-BR')
+
+      expect(result.success).toBe(true)
+      expect(result.message).toContain('Sem problemas')
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to transition from help_flow to active'),
+        expect.any(Object)
+      )
+    })
+  })
+
+  // =========================================================================
+  // Days Since Goodbye Calculation (AC-7.4.10)
+  // =========================================================================
+
+  describe('Days Since Goodbye Calculation (AC-7.4.10)', () => {
+    it('should calculate days correctly with recent goodbye', async () => {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      mockQuerySequence([
+        { data: { ...defaultEngagementState, goodbye_sent_at: yesterday.toISOString() }, error: null },
+      ])
+      mockTransitionState.mockResolvedValue({ success: true, newState: 'dormant' })
+
+      await processGoodbyeResponse(userId, 'all_good', 'pt-BR')
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'engagement_goodbye_response',
+        userId,
+        expect.objectContaining({
+          days_since_goodbye: 1,
+        })
+      )
+    })
+
+    it('should calculate days correctly with old goodbye', async () => {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      mockQuerySequence([
+        { data: { ...defaultEngagementState, goodbye_sent_at: sevenDaysAgo.toISOString() }, error: null },
+      ])
+      mockTransitionState.mockResolvedValue({ success: true, newState: 'dormant' })
+
+      await processGoodbyeResponse(userId, 'all_good', 'pt-BR')
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'engagement_goodbye_response',
+        userId,
+        expect.objectContaining({
+          days_since_goodbye: 7,
+        })
+      )
+    })
+
+    it('should default to 0 when goodbye_sent_at is missing', async () => {
+      mockQuerySequence([
+        { data: { ...defaultEngagementState, goodbye_sent_at: null }, error: null },
+      ])
+      mockTransitionState.mockResolvedValue({ success: true, newState: 'dormant' })
+
+      await processGoodbyeResponse(userId, 'all_good', 'pt-BR')
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'engagement_goodbye_response',
+        userId,
+        expect.objectContaining({
+          days_since_goodbye: 0,
+        })
+      )
+    })
+
+    it('should default to 0 on database error', async () => {
+      mockQuerySequence([
+        { data: null, error: { message: 'Database error' } },
+      ])
+      mockTransitionState.mockResolvedValue({ success: true, newState: 'dormant' })
+
+      await processGoodbyeResponse(userId, 'all_good', 'pt-BR')
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        'engagement_goodbye_response',
+        userId,
+        expect.objectContaining({
+          days_since_goodbye: 0,
+        })
+      )
+    })
+  })
+
+  // =========================================================================
+  // Non-Goodbye Response from Active State (AC-7.4.7)
+  // =========================================================================
+
+  describe('Goodbye-like text from non-goodbye_sent state (AC-7.4.7)', () => {
+    it('should return null and not transition when user in active state sends "1"', async () => {
+      mockGetEngagementState.mockResolvedValue('active')
+
+      const result = await checkAndHandleGoodbyeResponse(userId, '1', 'pt-BR')
+
+      expect(result).toBeNull()
+      expect(mockTransitionState).not.toHaveBeenCalled()
+    })
+
+    it('should return null and not transition when user in active state sends "confuso"', async () => {
+      mockGetEngagementState.mockResolvedValue('active')
+
+      const result = await checkAndHandleGoodbyeResponse(userId, 'confuso', 'pt-BR')
+
+      expect(result).toBeNull()
+      expect(mockTransitionState).not.toHaveBeenCalled()
+    })
+
+    it('should return null and not transition when user in dormant state sends goodbye pattern', async () => {
+      mockGetEngagementState.mockResolvedValue('dormant')
+
+      const result = await checkAndHandleGoodbyeResponse(userId, '2', 'pt-BR')
+
+      expect(result).toBeNull()
+      expect(mockTransitionState).not.toHaveBeenCalled()
     })
   })
 })

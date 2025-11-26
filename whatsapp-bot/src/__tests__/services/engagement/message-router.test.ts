@@ -78,7 +78,10 @@ describe('Message Router - getMessageDestination()', () => {
       const mockProfile = createMockUserProfile(userId, 'individual')
 
       mockQuerySequence([
-        { data: mockProfile, error: null },
+        // 1. Query user_profiles for preferred_destination
+        { data: { preferred_destination: 'individual' }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid
+        { data: { whatsapp_jid: '5511999999999@s.whatsapp.net' }, error: null },
       ])
 
       const result = await getMessageDestination(userId)
@@ -96,7 +99,10 @@ describe('Message Router - getMessageDestination()', () => {
       })
 
       mockQuerySequence([
-        { data: mockProfile, error: null },
+        // 1. Query user_profiles for preferred_destination (null = defaults to individual)
+        { data: { preferred_destination: null }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid
+        { data: { whatsapp_jid: '5511999999999@s.whatsapp.net' }, error: null },
       ])
 
       const result = await getMessageDestination(userId)
@@ -115,7 +121,12 @@ describe('Message Router - getMessageDestination()', () => {
       })
 
       mockQuerySequence([
-        { data: mockProfile, error: null },
+        // 1. Query user_profiles for preferred_destination
+        { data: { preferred_destination: 'group' }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid (fallback)
+        { data: { whatsapp_jid: '5511999999999@s.whatsapp.net' }, error: null },
+        // 3. Query authorized_groups for group_jid
+        { data: { group_jid: '120363456789@g.us' }, error: null },
       ])
 
       const result = await getMessageDestination(userId)
@@ -135,7 +146,12 @@ describe('Message Router - getMessageDestination()', () => {
       })
 
       mockQuerySequence([
-        { data: mockProfile, error: null },
+        // 1. Query user_profiles for preferred_destination
+        { data: { preferred_destination: 'group' }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid (fallback)
+        { data: { whatsapp_jid: '5511999999999@s.whatsapp.net' }, error: null },
+        // 3. Query authorized_groups for group_jid (not found)
+        { data: null, error: null },
       ])
 
       const result = await getMessageDestination(userId)
@@ -178,7 +194,10 @@ describe('Message Router - getMessageDestination()', () => {
       })
 
       mockQuerySequence([
-        { data: mockProfile, error: null },
+        // 1. Query user_profiles for preferred_destination
+        { data: { preferred_destination: 'individual' }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid (not found)
+        { data: null, error: null },
       ])
 
       const result = await getMessageDestination(userId)

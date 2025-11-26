@@ -159,11 +159,12 @@ describe('Message Router - Story 2.4', () => {
 
   describe('getMessageDestination', () => {
     it('should return individual destination', async () => {
-      mockQuerySuccess({
-        preferred_destination: 'individual',
-        preferred_group_jid: null,
-        whatsapp_jid: '5511999999999@s.whatsapp.net',
-      })
+      mockQuerySequence([
+        // 1. Query user_profiles for preferred_destination
+        { data: { preferred_destination: 'individual' }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid
+        { data: { whatsapp_jid: '5511999999999@s.whatsapp.net' }, error: null },
+      ])
 
       const result = await getMessageDestination('user-123')
 
@@ -175,11 +176,14 @@ describe('Message Router - Story 2.4', () => {
     })
 
     it('should return group destination with group JID', async () => {
-      mockQuerySuccess({
-        preferred_destination: 'group',
-        preferred_group_jid: '120363123456789@g.us',
-        whatsapp_jid: '5511999999999@s.whatsapp.net',
-      })
+      mockQuerySequence([
+        // 1. Query user_profiles for preferred_destination
+        { data: { preferred_destination: 'group' }, error: null },
+        // 2. Query authorized_whatsapp_numbers for whatsapp_jid (fallback)
+        { data: { whatsapp_jid: '5511999999999@s.whatsapp.net' }, error: null },
+        // 3. Query authorized_groups for group_jid
+        { data: { group_jid: '120363123456789@g.us' }, error: null },
+      ])
 
       const result = await getMessageDestination('user-123')
 
@@ -191,6 +195,7 @@ describe('Message Router - Story 2.4', () => {
     })
 
     it('should return null if user not found', async () => {
+      // Query user_profiles returns null (user not found)
       mockQuerySuccess(null)
 
       const result = await getMessageDestination('user-123')

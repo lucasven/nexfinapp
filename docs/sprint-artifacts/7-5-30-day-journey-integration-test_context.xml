@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story-id>7-5-30-day-journey-integration-test</story-id>
+  <story-title>30-Day Journey Integration Test</story-title>
+  <epic-id>epic-7</epic-id>
+  <epic-title>Testing &amp; Quality Assurance</epic-title>
+
+  <objective>
+    Create comprehensive integration tests that simulate complete 30-day user journeys through the Smart Onboarding &amp; Engagement System, validating all engagement paths work correctly end-to-end without manual testing. This story brings together ALL features from Epics 1-6 into 5 critical journey scenarios that verify the entire engagement system functions correctly.
+  </objective>
+
+  <acceptance-criteria>
+    <criterion id="AC-7.5.1">
+      Given a new user starts their journey, when the "Happy Path" test simulates Day 1 welcome → Day 2-14 tier completions → Day 8/15 weekly reviews → Day 30, then the user ends in 'active' state with all expected messages sent (welcome, tier completions, weekly reviews) and no duplicate messages.
+    </criterion>
+    <criterion id="AC-7.5.2">
+      Given a user receives a goodbye message on Day 15, when the "Goodbye → Help" test simulates response "1" (help) on Day 16, then the user transitions back to 'active' state, tier progress resets to Tier 1, and engagement continues normally.
+    </criterion>
+    <criterion id="AC-7.5.3">
+      Given a user receives a goodbye message on Day 15, when the "Goodbye → Remind Later" test simulates response "2" (remind later) on Day 16, then the user enters 'remind_later' state with remindAt set to +14 days, and when Day 30 arrives (remind expires), the user transitions to 'dormant' state.
+    </criterion>
+    <criterion id="AC-7.5.4">
+      Given a user receives a goodbye message on Day 15, when the "Goodbye → Timeout" test simulates no response for 48 hours (Day 17), then the user automatically transitions to 'dormant' state due to timeout.
+    </criterion>
+    <criterion id="AC-7.5.5">
+      Given a user opts out on Day 2, when the "Opted Out" test simulates Day 15 inactivity, then no goodbye message is sent (respects opt-out preference), scheduler skips the user, and user remains in 'active' state with opted_out flag.
+    </criterion>
+    <criterion id="AC-7.5.6">
+      Given all 5 journey tests execute, when test suite completes, then all assertions pass, test execution time is &lt; 10 seconds, database cleanup removes all test data, and no test pollution occurs between scenarios.
+    </criterion>
+    <criterion id="AC-7.5.7">
+      Given any journey test fails, when reviewing failure output, then structured logs show user ID, current state, expected vs actual transitions, message queue contents, and timestamps for debugging.
+    </criterion>
+  </acceptance-criteria>
+
+  <technical-context>
+    <test-infrastructure>
+      <utilities>
+        <utility name="time-helpers.ts" location="whatsapp-bot/src/__tests__/utils/time-helpers.ts">
+          <function name="setupMockTime(startDate: Date)" description="Set up fake timers and mock current time to specific date" />
+          <function name="advanceTime(days: number)" description="Advance time by specified days, updating both timers and system time" />
+          <function name="resetClock()" description="Reset Jest timers back to real time (use in afterEach)" />
+        </utility>
+
+        <utility name="idempotency-helpers.ts" location="whatsapp-bot/src/__tests__/utils/idempotency-helpers.ts">
+          <function name="seedEngagementState(state: UserEngagementState)" description="Insert engagement state into test database with required FK dependencies" />
+          <function name="cleanupEngagementStates(userIds: string[])" description="Clean up all test data in correct order (respects FK constraints)" />
+          <function name="getEngagementState(userId: string)" description="Query engagement state for assertions" />
+          <function name="getMessagesForUser(userId: string)" description="Query message queue for user to verify messages sent" />
+          <function name="getMessageQueueCount()" description="Get total message count in queue" />
+          <function name="runSchedulerTwice(schedulerFn)" description="Run scheduler twice to verify idempotency" />
+        </utility>
+
+        <utility name="engagement-fixtures.ts" location="whatsapp-bot/src/__tests__/engagement/fixtures/engagement-fixtures.ts">
+          <function name="createMockEngagementState(options)" description="Factory for UserEngagementState with sensible defaults" />
+          <function name="createMockMessageQueue(options)" description="Factory for QueuedMessage with sensible defaults" />
+          <function name="createMockTierProgress(tier, completedActions)" description="Factory for TierProgress objects" />
+          <function name="createCompleteTierProgress(userId)" description="Create TierProgress with all 3 tiers completed" />
+        </utility>
+      </utilities>
+
+      <test-database>
+        <note>Tests use production schema from Epic 1 Story 1.1</note>
+        <tables>
+          <table name="user_engagement_states" description="User state, lastActivityAt, goodbye timestamps" />
+          <table name="engagement_state_transitions" description="Audit log of all state transitions" />
+          <table name="engagement_message_queue" description="Queued proactive messages with idempotency keys" />
+          <table name="user_profiles" description="User preferences including opt-out flag" />
+          <table name="authorized_whatsapp_numbers" description="Required for message routing (whatsapp_jid)" />
+        </tables>
+        <isolation>
+          Each test generates unique user IDs (crypto.randomUUID()). beforeEach() seeds data, afterEach() cleans up. No shared state between tests.
+        </isolation>
+      </test-database>
+    </test-infrastructure>
+
+    <engagement-services>
+      <service name="state-machine.ts" location="whatsapp-bot/src/services/engagement/state-machine.ts">
+        <function name="transitionState(userId, trigger, metadata)" description="Execute state transition with validation and side effects" />
+        <function name="getEngagementState(userId)" description="Query current engagement state" />
+        <note>Implements 10 valid state transitions per TRANSITION_MAP in types.ts</note>
+      </service>
+
+      <service name="daily-engagement-job.ts" location="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts">
+        <function name="runDailyEngagementJob()" description="Daily cron job: checks 14-day inactivity, 48h timeouts, remind_later expirations" />
+        <timing>
+          <threshold name="inactivity" value="14 days" description="Triggers goodbye message" />
+          <threshold name="timeout" value="48 hours" description="goodbye_sent → dormant if no response" />
+          <threshold name="remind_expiry" value="remindAt date" description="remind_later → dormant" />
+        </timing>
+      </service>
+
+      <service name="weekly-review-job.ts" location="whatsapp-bot/src/services/scheduler/weekly-review-job.ts">
+        <function name="runWeeklyReviewJob()" description="Weekly cron job: sends activity summaries to active users with recent activity" />
+        <timing>
+          <threshold name="weekly_interval" value="7 days" description="Reviews sent every 7 days if user active" />
+        </timing>
+      </service>
+
+      <service name="message-router.ts" location="whatsapp-bot/src/services/engagement/message-router.ts">
+        <function name="getMessageDestination(userId)" description="Query user_profiles and authorized_whatsapp_numbers to determine destination JID" />
+        <note>Required for all journey tests - ensures messages routed to correct WhatsApp JID</note>
+      </service>
+    </engagement-services>
+
+    <state-transitions>
+      <valid-transitions>
+        <transition from="active" trigger="inactivity_14d" to="goodbye_sent" />
+        <transition from="goodbye_sent" trigger="user_message" to="active" />
+        <transition from="goodbye_sent" trigger="goodbye_response_1" to="help_flow" />
+        <transition from="goodbye_sent" trigger="goodbye_response_2" to="remind_later" />
+        <transition from="goodbye_sent" trigger="goodbye_response_3" to="dormant" />
+        <transition from="goodbye_sent" trigger="goodbye_timeout" to="dormant" />
+        <transition from="help_flow" trigger="user_message" to="active" />
+        <transition from="remind_later" trigger="user_message" to="active" />
+        <transition from="remind_later" trigger="reminder_due" to="dormant" />
+        <transition from="dormant" trigger="user_message" to="active" />
+      </valid-transitions>
+
+      <constants>
+        <constant name="GOODBYE_TIMEOUT_HOURS" value="48" source="whatsapp-bot/src/services/engagement/constants.ts" />
+        <constant name="REMIND_LATER_DAYS" value="14" source="whatsapp-bot/src/services/engagement/constants.ts" />
+        <constant name="INACTIVITY_THRESHOLD_DAYS" value="14" source="whatsapp-bot/src/services/engagement/constants.ts" />
+      </constants>
+    </state-transitions>
+
+    <message-types>
+      <type name="welcome" description="First-time user greeting (Epic 2)" />
+      <type name="tier_unlock" description="Tier completion celebration (Epic 3)" />
+      <type name="goodbye" description="14-day inactivity self-select message (Epic 4)" />
+      <type name="weekly_review" description="Weekly activity summary (Epic 5)" />
+      <type name="reminder" description="Remind-later follow-up (Epic 4)" />
+      <type name="help_restart" description="Re-engagement after help flow (Epic 4)" />
+    </message-types>
+  </technical-context>
+
+  <journey-scenarios>
+    <scenario name="Happy Path" final-state="active">
+      <description>Complete 30-day active user journey with tier completions and weekly reviews</description>
+      <timeline>
+        <day num="1">Create user, seed engagement state (active), verify welcome message</day>
+        <day num="2-7">Simulate tier 1 completions (3 actions), verify tier completion message</day>
+        <day num="8">Run weekly review job, verify weekly review message sent</day>
+        <day num="8-14">Simulate tier 2 completions (3 actions), verify tier completion message</day>
+        <day num="15">Run weekly review job, verify second weekly review message</day>
+        <day num="15-21">Simulate tier 3 completions (3 actions), verify tier completion message</day>
+        <day num="22-30">Continue activity (random transaction messages)</day>
+        <day num="30">Assert final state 'active', all messages accounted for, no duplicates</day>
+      </timeline>
+      <expected-messages>
+        <message type="welcome" count="1" />
+        <message type="tier_unlock" count="3" note="One per tier" />
+        <message type="weekly_review" count="2" note="Day 8 and 15" />
+      </expected-messages>
+    </scenario>
+
+    <scenario name="Goodbye → Help" final-state="active">
+      <description>User chooses option 1 (help) after receiving goodbye message, restarts journey</description>
+      <timeline>
+        <day num="1-14">Create user, simulate 14 days of inactivity</day>
+        <day num="15">Run daily job, verify goodbye message sent, state → goodbye_sent</day>
+        <day num="16">Simulate user response "1" (help), verify state → active, tier reset to Tier 1</day>
+        <day num="17-30">Continue activity, verify normal engagement flow</day>
+        <day num="30">Assert final state 'active', all expected messages sent</day>
+      </timeline>
+      <expected-messages>
+        <message type="goodbye" count="1" />
+        <message type="help_restart" count="1" note="Re-engagement confirmation" />
+      </expected-messages>
+    </scenario>
+
+    <scenario name="Goodbye → Remind Later" final-state="dormant">
+      <description>User chooses option 2 (remind later), reminder expires after 14 days → dormant</description>
+      <timeline>
+        <day num="1-14">Create user, simulate 14 days of inactivity</day>
+        <day num="15">Run daily job, verify goodbye message sent</day>
+        <day num="16">Simulate user response "2" (remind later), verify state → remind_later, remindAt = +14 days</day>
+        <day num="17-29">Advance time, run daily jobs, verify NO messages sent (waiting for remind)</day>
+        <day num="30">Run daily job, verify remindAt expires, state → dormant</day>
+      </timeline>
+      <expected-messages>
+        <message type="goodbye" count="1" />
+      </expected-messages>
+      <note>No reminder message sent when transitioning to dormant (per design)</note>
+    </scenario>
+
+    <scenario name="Goodbye → Timeout" final-state="dormant">
+      <description>User does not respond to goodbye message for 48 hours → auto-transition to dormant</description>
+      <timeline>
+        <day num="1-14">Create user, simulate 14 days of inactivity</day>
+        <day num="15">Run daily job, verify goodbye sent, goodbyeExpiresAt = +48 hours</day>
+        <day num="15-16 (47h)">Advance 47 hours, verify state still goodbye_sent (no timeout yet)</day>
+        <day num="17 (48h)">Advance 1 more hour (48h total), run daily job, verify state → dormant</day>
+        <day num="17-30">Verify no additional messages sent</day>
+      </timeline>
+      <expected-messages>
+        <message type="goodbye" count="1" />
+      </expected-messages>
+      <critical-timing>Exactly 48 hours (not 47h 59m, not 48h 1m)</critical-timing>
+    </scenario>
+
+    <scenario name="Opted Out" final-state="active">
+      <description>User opts out on Day 2, scheduler respects preference and skips goodbye message</description>
+      <timeline>
+        <day num="1">Create user in 'active' state</day>
+        <day num="2">Simulate opt-out command, set opted_out_of_proactive_messages = true</day>
+        <day num="3-14">Simulate 12 days of inactivity (no messages)</day>
+        <day num="15">Run daily job (14 days inactive), verify NO goodbye sent, state remains 'active'</day>
+        <day num="16-30">Continue advancing time, verify still no messages sent</day>
+      </timeline>
+      <expected-messages>
+        <message note="NO messages sent - scheduler respects opt-out" count="0" />
+      </expected-messages>
+      <assertion>Query message queue for user, assert count = 0</assertion>
+    </scenario>
+  </journey-scenarios>
+
+  <implementation-helpers>
+    <helper name="simulateUserActivity(userId: string, days: number)">
+      <description>Advances time by days, generates 2-5 mock transaction messages per day, updates lastActivityAt</description>
+      <usage>Keep user in 'active' state during journey tests</usage>
+    </helper>
+
+    <helper name="simulateTierCompletion(userId: string, tier: number)">
+      <description>Simulates tier-specific actions (Tier 1: add expense, Tier 2: set budget, Tier 3: view report)</description>
+      <usage>Trigger tier completion detection and verify tier completion message sent</usage>
+    </helper>
+
+    <helper name="assertJourneyState(userId: string, expectedState: EngagementState, expectedMessages: ExpectedMessages)">
+      <description>Queries engagement state, verifies state matches, counts messages by type, checks for duplicates via idempotencyKey</description>
+      <usage>Final assertions at end of journey tests</usage>
+      <interface>
+        ExpectedMessages = {
+          tier_completion?: number
+          weekly_review?: number
+          goodbye?: number
+          re_engagement?: number
+          welcome?: number
+        }
+      </interface>
+    </helper>
+
+    <helper name="cleanupJourneyTest(userIds: string[])">
+      <description>Cleans up engagement_states, message_queue, tier_progress, user_profiles, authorized_whatsapp_numbers</description>
+      <usage>Called in afterEach() to prevent test pollution</usage>
+      <note>Deletes in correct order to respect FK constraints</note>
+    </helper>
+  </implementation-helpers>
+
+  <test-structure>
+    <file-location>whatsapp-bot/src/__tests__/engagement/30-day-journey.test.ts</file-location>
+
+    <pattern>
+      describe('30-Day User Journey Integration Tests', () => {
+        let testUserIds: string[] = []
+
+        beforeEach(() => {
+          setupMockTime(new Date('2025-01-01'))
+          clearMockMessages()
+          testUserIds = []
+        })
+
+        afterEach(async () => {
+          await cleanupJourneyTest(testUserIds)
+          resetClock()
+        })
+
+        it('Happy Path - Complete 30-day active user journey', async () => {
+          // DAY 1: Setup
+          const userId = crypto.randomUUID()
+          testUserIds.push(userId)
+          // ... continue journey simulation
+        })
+      })
+    </pattern>
+
+    <observability>
+      <structured-logging>
+        console.log('[Journey Test] Starting Happy Path scenario')
+        console.log('[Day 1] Creating user, seeding engagement state')
+        console.log('[Day 15] Running daily job, expecting goodbye message')
+      </structured-logging>
+
+      <custom-assertions>
+        expect(state.state).toBe('active') // with custom error message showing full state
+        expect(messages.filter(m => m.messageType === 'goodbye')).toHaveLength(1)
+      </custom-assertions>
+
+      <performance-tracking>
+        Wrap each test with performance.now() measurements
+        Log execution time at end of test
+        Ensure total suite execution &lt; 10 seconds
+      </performance-tracking>
+    </observability>
+  </test-structure>
+
+  <performance-targets>
+    <target name="test-execution-time" value="&lt; 10 seconds" scope="All 5 journey tests combined" />
+    <target name="database-operations" optimization="Batch inserts, skip unnecessary days (jump to critical days)" />
+    <target name="mock-coverage" note="OpenAI calls already mocked (Story 7.1), Baileys mocked, Supabase mocked for unit tests" />
+  </performance-targets>
+
+  <dependencies>
+    <story id="7-1" title="E2E Testing Framework Setup" status="done">
+      Provides: time-helpers, fixtures, idempotency-helpers, Baileys mock
+    </story>
+    <story id="7-2" title="State Machine Unit Tests" status="done">
+      Validates: All 10 state transitions work correctly in isolation
+    </story>
+    <story id="7-3" title="Scheduler Unit Tests" status="done">
+      Validates: Daily/weekly job timing logic works correctly
+    </story>
+    <story id="7-4" title="Goodbye Handler Tests" status="done">
+      Validates: Response parsing ("1", "2", "3") works correctly
+    </story>
+  </dependencies>
+
+  <traceability>
+    <epic-ac id="AC-7.5" description="30-Day Journeys Pass">
+      All 5 journey scenarios validate complete engagement flows from Day 1 to Day 30
+    </epic-ac>
+
+    <prd-coverage>
+      <fr id="FR1-FR10" description="Conversation-first welcome, first expense guide" scenario="Happy Path" />
+      <fr id="FR11-FR18" description="State machine transitions" scenario="All scenarios" />
+      <fr id="FR19" description="Idempotency" scenario="All scenarios (verified via idempotencyKey checks)" />
+      <fr id="FR20-FR22" description="Weekly reviews" scenario="Happy Path" />
+      <fr id="FR23-FR30" description="Progressive tier journey" scenario="Happy Path, Goodbye → Help" />
+      <fr id="FR31" description="Opt-out preference" scenario="Opted Out" />
+      <fr id="FR44-FR48" description="Scheduler jobs" scenario="All scenarios" />
+      <fr id="FR49-FR53" description="Testing infrastructure" scenario="This story validates Epic 7" />
+    </prd-coverage>
+  </traceability>
+
+  <edge-cases>
+    <case name="Exactly 14 days inactive" note="Day 13 (no action) vs Day 14 (goodbye sent)" />
+    <case name="Exactly 48h timeout" note="47h 59m (still goodbye_sent) vs 48h 0m (dormant)" />
+    <case name="Exactly 14 days remind" note="remindAt set to +14 days, expires exactly on Day 30" />
+    <case name="Opt-out before 14 days" note="User opts out on Day 2, 14-day check on Day 15 skips" />
+    <case name="Multiple weekly reviews" note="Day 8, 15, 22, 29 (weekly intervals)" />
+  </edge-cases>
+
+  <references>
+    <doc path="docs/sprint-artifacts/tech-spec-epic-7.md" section="AC-7.5-30-Day-Journeys" />
+    <doc path="docs/sprint-artifacts/tech-spec-epic-7.md" section="Workflows-and-Sequencing" />
+    <doc path="docs/sprint-artifacts/7-1-e2e-testing-framework-setup.md" section="Test-Infrastructure" />
+    <doc path="docs/sprint-artifacts/7-2-state-machine-unit-tests.md" section="State-Transitions" />
+    <doc path="docs/sprint-artifacts/7-3-scheduler-unit-tests.md" section="Scheduler-Timing" />
+    <doc path="docs/sprint-artifacts/7-4-goodbye-handler-tests.md" section="Response-Parsing" />
+    <code path="whatsapp-bot/src/services/engagement/types.ts" description="State machine types, TRANSITION_MAP" />
+    <code path="whatsapp-bot/src/services/engagement/state-machine.ts" description="transitionState() implementation" />
+    <code path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts" description="Daily cron job logic" />
+    <code path="whatsapp-bot/src/services/scheduler/weekly-review-job.ts" description="Weekly review job logic" />
+  </references>
+</story-context>

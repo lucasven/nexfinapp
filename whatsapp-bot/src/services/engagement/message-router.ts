@@ -32,45 +32,74 @@ export async function getMessageDestination(
 ): Promise<RouteResult | null> {
   const supabase = getSupabaseClient()
 
-  const { data, error } = await supabase
+  // Get user profile for preferred_destination
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('preferred_destination, preferred_group_jid, whatsapp_jid')
-    .eq('id', userId)
+    .select('preferred_destination')
+    .eq('user_id', userId)
     .maybeSingle()
 
-  if (error) {
-    logger.error('Error fetching message destination', { userId, error: error.message })
+  if (profileError) {
+    logger.error('Error fetching user profile', { userId, error: profileError.message })
     return null
   }
 
-  if (!data) {
+  if (!profile) {
     logger.warn('User profile not found for message destination', { userId })
     return null
   }
 
-  const destination = (data.preferred_destination as 'individual' | 'group') || 'individual'
+  // Get whatsapp_jid from authorized_whatsapp_numbers (primary number)
+  const { data: whatsappNumber, error: whatsappError } = await supabase
+    .from('authorized_whatsapp_numbers')
+    .select('whatsapp_jid')
+    .eq('user_id', userId)
+    .eq('is_primary', true)
+    .maybeSingle()
+
+  if (whatsappError) {
+    logger.error('Error fetching whatsapp number', { userId, error: whatsappError.message })
+    return null
+  }
+
+  const whatsappJid = whatsappNumber?.whatsapp_jid
+
+  if (!whatsappJid) {
+    logger.warn('No WhatsApp JID found for user', { userId, whatsappJid })
+    return null
+  }
+
+  const destination = (profile.preferred_destination as 'individual' | 'group') || 'individual'
 
   // AC-4.6.1, AC-4.6.2: Route based on preferred_destination
-  // AC-4.6.7: Fallback to individual if group preference but no group_jid
+  // AC-4.6.7: Fallback to individual if group preference but no authorized group
   let destinationJid: string
   let fallbackUsed = false
 
   if (destination === 'group') {
-    if (data.preferred_group_jid) {
-      destinationJid = data.preferred_group_jid
+    // Look up user's authorized group from authorized_groups table
+    const { data: authorizedGroup, error: groupError } = await supabase
+      .from('authorized_groups')
+      .select('group_jid')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (groupError) {
+      logger.error('Error fetching authorized group', { userId, error: groupError.message })
+      // Fallback to individual on error
+      destinationJid = whatsappJid
+      fallbackUsed = true
+    } else if (authorizedGroup?.group_jid) {
+      destinationJid = authorizedGroup.group_jid
     } else {
-      // Fallback: no group JID stored
-      logger.warn('Group preference but no preferred_group_jid, falling back to individual', { userId })
-      destinationJid = data.whatsapp_jid
+      // Fallback: no authorized group found
+      logger.warn('Group preference but no authorized group, falling back to individual', { userId })
+      destinationJid = whatsappJid
       fallbackUsed = true
     }
   } else {
-    destinationJid = data.whatsapp_jid
-  }
-
-  if (!destinationJid) {
-    logger.warn('No JID found for user', { userId, destination })
-    return null
+    destinationJid = whatsappJid
   }
 
   logger.debug('Got message destination', { userId, destination, destinationJid, fallbackUsed })

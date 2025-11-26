@@ -179,8 +179,13 @@ describe('Story 4.5 - goodbye_timeout Trigger', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'dormant' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-456' }, error: null },
     ])
 
@@ -404,8 +409,11 @@ describe('Story 4.5 - Idempotency (AC-4.5.5)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
-      // Another process already updated this user
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update fails - another process already updated this user
       { data: null, error: { code: 'PGRST116', message: 'No rows found' } },
     ])
 
@@ -440,8 +448,13 @@ describe('Story 4.5 - Transition Logging (AC-4.5.6)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update state
       { data: { ...existingState, state: 'dormant' }, error: null },
+      // 4. Insert transition log
       { data: { id: 'transition-789' }, error: null },
     ])
 
@@ -606,7 +619,11 @@ describe('Story 4.5 - Edge Cases (AC-4.5.5)', () => {
     })
 
     mockQuerySequence([
+      // 1. Get current state
       { data: existingState, error: null },
+      // 2. Refetch state
+      { data: existingState, error: null },
+      // 3. Update fails with database error
       { data: null, error: { code: 'ECONNREFUSED', message: 'Connection refused' } },
     ])
 

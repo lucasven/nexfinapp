@@ -1,8 +1,14 @@
+// Array to capture sent messages for test assertions
+let mockMessages: Array<{ jid: string; message: any }> = []
+
 // Mock Baileys WhatsApp client
 export const mockBaileysClient = {
   connect: jest.fn().mockResolvedValue(undefined),
   disconnect: jest.fn().mockResolvedValue(undefined),
-  sendMessage: jest.fn().mockResolvedValue({ key: { id: 'test-message-id' } }),
+  sendMessage: jest.fn().mockImplementation(async (jid: string, message: any) => {
+    mockMessages.push({ jid, message })
+    return { key: { id: `test-message-${mockMessages.length}` } }
+  }),
   getState: jest.fn().mockReturnValue('open'),
   isConnected: jest.fn().mockReturnValue(true),
   ev: {
@@ -36,12 +42,55 @@ export const ConnectionState = {
 export const generateWAMessageFromContent = jest.fn()
 export const prepareWAMessageMedia = jest.fn()
 
+/**
+ * Get all messages sent via mockBaileysClient.sendMessage
+ * Useful for test assertions to verify messages were sent correctly
+ *
+ * @example
+ * ```typescript
+ * import { getMockMessages, clearMockMessages } from '@/__mocks__/baileys'
+ *
+ * beforeEach(() => {
+ *   clearMockMessages()
+ * })
+ *
+ * it('sends goodbye message', async () => {
+ *   await sendGoodbyeMessage(userId)
+ *   const messages = getMockMessages()
+ *   expect(messages).toHaveLength(1)
+ *   expect(messages[0].jid).toBe(userJid)
+ * })
+ * ```
+ */
+export const getMockMessages = () => {
+  return [...mockMessages]
+}
+
+/**
+ * Clear all captured messages
+ * Should be called in beforeEach() to reset state between tests
+ *
+ * @example
+ * ```typescript
+ * beforeEach(() => {
+ *   clearMockMessages()
+ * })
+ * ```
+ */
+export const clearMockMessages = () => {
+  mockMessages = []
+}
+
 // Reset all mocks
 export const resetBaileysMocks = () => {
   jest.clearAllMocks()
+  clearMockMessages()
   mockBaileysClient.connect.mockResolvedValue(undefined)
   mockBaileysClient.disconnect.mockResolvedValue(undefined)
-  mockBaileysClient.sendMessage.mockResolvedValue({ key: { id: 'test-message-id' } })
+  mockBaileysClient.sendMessage.mockImplementation(async (jid: string, message: any) => {
+    mockMessages.push({ jid, message })
+    return { key: { id: `test-message-${mockMessages.length}` } }
+  })
   mockBaileysClient.getState.mockReturnValue('open')
   mockBaileysClient.isConnected.mockReturnValue(true)
 }

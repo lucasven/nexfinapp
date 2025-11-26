@@ -3,6 +3,16 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    // Exclude integration tests - these require integration-setup.ts
+    // Run integration tests separately via: npm run test:integration:isolated
+    '__tests__/engagement/30-day-journey.test.ts',
+    '__tests__/engagement/daily-job.test.ts',
+    '__tests__/engagement/idempotency.test.ts',
+    '__tests__/engagement/weekly-job.test.ts',
+    '__tests__/engagement/state-machine.test.ts',
+  ],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',

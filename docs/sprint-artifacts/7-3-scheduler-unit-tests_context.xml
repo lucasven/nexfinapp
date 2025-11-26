@@ -1,0 +1,642 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story-metadata>
+    <id>7-3-scheduler-unit-tests</id>
+    <title>Scheduler Unit Tests</title>
+    <epic>Epic 7: Testing & Quality Assurance</epic>
+    <status>ready-for-dev</status>
+    <story-file>docs/sprint-artifacts/7-3-scheduler-unit-tests.md</story-file>
+  </story-metadata>
+
+  <objective>
+    Implement comprehensive unit tests for scheduler timing logic (daily and weekly jobs) to ensure scheduler jobs execute correctly at the right times and handle edge cases reliably. This story validates the scheduler services implemented in Epic 5 Stories 5.1-5.3, ensuring timing logic executes correctly at 14-day, 48-hour, and weekly thresholds.
+  </objective>
+
+  <acceptance-criteria>
+    <criterion id="AC-7.3.1">
+      Given the daily engagement job runs, when 13 days of inactivity have passed, then NO goodbye message is queued (threshold not reached), and when 14 days have passed, then exactly ONE goodbye message is queued for the inactive user, and when 15 days have passed and job runs again, then NO duplicate message is queued (idempotency).
+    </criterion>
+    <criterion id="AC-7.3.2">
+      Given a user in goodbye_sent state, when 47 hours have passed since goodbye_sent_at, then NO timeout transition occurs (threshold not reached), and when 48+ hours have passed, then the user transitions to dormant with metadata.response_type='timeout', and NO message is sent (silence by design).
+    </criterion>
+    <criterion id="AC-7.3.3">
+      Given a user in remind_later state, when remind_at is in the future, then NO transition occurs, and when remind_at is in the past (expired), then the user transitions to dormant, and NO message is sent (silence by design).
+    </criterion>
+    <criterion id="AC-7.3.4">
+      Given a user with reengagement_opt_out=true, when the daily job detects 14+ days of inactivity, then the user is skipped (no transition, no message), result.skipped is incremented, and opt-out metrics are logged to observability.
+    </criterion>
+    <criterion id="AC-7.3.5">
+      Given the weekly review job runs, when a user has transaction or bot activity in the last 7 days, then a weekly_review message is queued with correct idempotency key ({userId}:weekly_review:{YYYY-Www}), and when a user has NO activity, then NO message is queued.
+    </criterion>
+    <criterion id="AC-7.3.6">
+      Given the weekly review job runs multiple times in the same ISO week, when messages are already queued for week 2025-W05, then running the job again produces NO duplicate messages (idempotency verified via ISO week key).
+    </criterion>
+    <criterion id="AC-7.3.7">
+      Given the daily job processes multiple users, when some transitions succeed and some fail (e.g., DB error), then result.succeeded and result.failed are tracked correctly, errors array contains userId and error message for failures, and successful transitions are not rolled back.
+    </criterion>
+    <criterion id="AC-7.3.8">
+      Given the daily job runs, when processInactiveUsers, processGoodbyeTimeouts, and processRemindLaterDue all execute, then each sub-function's results are aggregated into the final JobResult, and job completion is logged with processed/succeeded/failed/skipped counts.
+    </criterion>
+    <criterion id="AC-7.3.9">
+      Given the weekly review job runs, when active users are detected, then PostHog analytics event 'engagement_weekly_review_sent' is fired for each user with transaction_count, destination, and locale metadata.
+    </criterion>
+    <criterion id="AC-7.3.10">
+      Given time advances across multiple days, when the daily job runs on Day 1 (13d inactive), Day 2 (14d inactive), Day 3 (15d inactive), then the user receives exactly ONE goodbye message on Day 2, and Days 1 and 3 produce no new messages (timing precision verified).
+    </criterion>
+    <criterion id="AC-7.3.11">
+      Given the message queue processor is called, when the daily/weekly job completes its transition logic, then processMessageQueue() is invoked, queue results are logged, and queue processing errors do NOT fail the entire job.
+    </criterion>
+    <criterion id="AC-7.3.12">
+      Given `npm test -- daily-job.test.ts weekly-job.test.ts` runs, when all tests execute, then coverage for daily-engagement-job.ts and weekly-review-job.ts is ≥ 75% across branches/functions/lines, all tests pass in &lt; 10 seconds, and no database test pollution occurs (cleanup in afterEach).
+    </criterion>
+  </acceptance-criteria>
+
+  <services-under-test>
+    <service>
+      <name>Daily Engagement Job</name>
+      <file>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</file>
+      <description>
+        Scheduled job that runs once daily to detect inactive users (14+ days), process goodbye timeouts (48h), and handle remind-later expirations.
+      </description>
+      <key-functions>
+        <function name="runDailyEngagementJob">
+          Main entry point. Returns JobResult with processed/succeeded/failed/skipped counts.
+          Orchestrates processInactiveUsers, processGoodbyeTimeouts, processRemindLaterDue, and processMessageQueue.
+        </function>
+        <function name="processInactiveUsers">
+          Detects users with last_activity_at > 14 days ago in 'active' state.
+          Respects reengagement_opt_out=true (skips opted-out users).
+          Calls transitionState(userId, 'inactivity_14d') to move to 'goodbye_sent'.
+        </function>
+        <function name="processGoodbyeTimeouts">
+          Calls getExpiredGoodbyes() to find users with goodbye_expires_at &lt; now.
+          Calls transitionState(userId, 'goodbye_timeout') to move to 'dormant'.
+          No message sent (silence by design).
+        </function>
+        <function name="processRemindLaterDue">
+          Calls getDueReminders() to find users with remind_at &lt; now.
+          Calls transitionState(userId, 'reminder_due') to move to 'dormant'.
+          No message sent (silence by design).
+        </function>
+      </key-functions>
+      <constants>
+        <constant name="INACTIVITY_THRESHOLD_DAYS" value="14">
+          Threshold for detecting inactive users.
+        </constant>
+        <constant name="GOODBYE_TIMEOUT_HOURS" value="48">
+          Timeout for goodbye messages (from services/engagement/constants.js).
+        </constant>
+      </constants>
+    </service>
+
+    <service>
+      <name>Weekly Review Job</name>
+      <file>whatsapp-bot/src/services/scheduler/weekly-review-job.ts</file>
+      <description>
+        Scheduled job that runs once weekly (Monday 9 AM UTC) to detect active users (7 days with transactions OR bot activity) and send celebratory messages.
+      </description>
+      <key-functions>
+        <function name="runWeeklyReviewJob">
+          Main entry point. Returns JobResult.
+          Calls getActiveUsersLastWeek() to detect users with 7-day activity.
+          Queues weekly_review messages with ISO week-based idempotency keys.
+          Fires PostHog analytics events.
+        </function>
+      </key-functions>
+      <idempotency>
+        Uses idempotency key format: {userId}:weekly_review:{YYYY-Www}
+        Example: "user123:weekly_review:2025-W05"
+        Prevents duplicate messages when job runs multiple times in same ISO week.
+      </idempotency>
+      <dependencies>
+        <dependency name="getActiveUsersLastWeek" from="services/scheduler/activity-detector.ts">
+          Returns array of active users with transaction counts and preferred destinations.
+          Excludes opted-out users via SQL function.
+        </dependency>
+        <dependency name="queueMessage" from="services/scheduler/message-sender.ts">
+          Queues message with idempotency key. Returns boolean (true if queued).
+        </dependency>
+        <dependency name="getISOWeek, getISOWeekYear" from="date-fns">
+          Calculates ISO week number and year for idempotency keys.
+        </dependency>
+      </dependencies>
+    </service>
+
+    <service>
+      <name>State Machine Service</name>
+      <file>whatsapp-bot/src/services/engagement/state-machine.ts</file>
+      <description>
+        Manages user engagement state transitions. Used by scheduler jobs to transition users between states.
+      </description>
+      <key-functions>
+        <function name="transitionState">
+          Validates and executes state transitions. Returns TransitionResult with success/error.
+          Creates engagement_state_transitions log record.
+          Queues messages for certain transitions (e.g., inactivity_14d → goodbye message).
+        </function>
+        <function name="getExpiredGoodbyes">
+          Queries users in 'goodbye_sent' state with goodbye_expires_at &lt; now.
+          Returns array of users to transition to 'dormant'.
+        </function>
+        <function name="getDueReminders">
+          Queries users in 'remind_later' state with remind_at &lt; now.
+          Returns array of users to transition to 'dormant'.
+        </function>
+      </key-functions>
+    </service>
+  </services-under-test>
+
+  <test-infrastructure>
+    <test-utilities>
+      <utility>
+        <name>Time Manipulation</name>
+        <file>whatsapp-bot/src/__tests__/utils/time-helpers.ts</file>
+        <functions>
+          <function name="setupMockTime(startDate: Date)">
+            Sets up fake timers and mocks current time to specified date.
+            Call in beforeEach() to set deterministic time for tests.
+          </function>
+          <function name="advanceTime(days: number)">
+            Advances time by specified number of days.
+            Updates both Jest fake timers and system time (Date.now()).
+            Critical for testing exact day boundaries (13d vs 14d vs 15d).
+          </function>
+          <function name="resetClock()">
+            Resets Jest timers back to real time.
+            Call in afterEach() to clean up.
+          </function>
+        </functions>
+      </utility>
+
+      <utility>
+        <name>Idempotency Helpers</name>
+        <file>whatsapp-bot/src/__tests__/utils/idempotency-helpers.ts</file>
+        <functions>
+          <function name="seedEngagementState(state: UserEngagementState)">
+            Inserts engagement state into test database.
+            Creates test user in auth.users first (FK constraint).
+            Use in beforeEach() or test setup.
+          </function>
+          <function name="getEngagementState(userId: string)">
+            Retrieves engagement state from test database.
+            Use for assertions to verify state transitions.
+          </function>
+          <function name="getMessagesForUser(userId: string)">
+            Retrieves all messages in queue for specific user.
+            Use to verify messages were queued correctly.
+          </function>
+          <function name="cleanupEngagementStates(userIds: string[])">
+            Deletes engagement states, transitions, and messages for test users.
+            Use in afterEach() to prevent test pollution.
+          </function>
+          <function name="runSchedulerTwice(schedulerFn)">
+            Runs scheduler function twice with same clock state.
+            Returns message counts before, after first run, after second run.
+            Use to verify idempotency (second run should add zero messages).
+          </function>
+          <function name="assertNoNewMessages(countBefore, countAfter)">
+            Asserts that message count did not increase.
+            Use after runSchedulerTwice to verify idempotency.
+          </function>
+        </functions>
+      </utility>
+
+      <utility>
+        <name>Engagement Fixtures</name>
+        <file>whatsapp-bot/src/__tests__/engagement/fixtures/engagement-fixtures.ts</file>
+        <functions>
+          <function name="createMockEngagementState(options)">
+            Creates mock UserEngagementState with sensible defaults.
+            Defaults: state='active', lastActivityAt=now, nullable fields=null.
+            Override specific fields via options parameter.
+          </function>
+          <function name="createMockMessageQueue(options)">
+            Creates mock QueuedMessage with sensible defaults.
+            Defaults: messageType='goodbye', status='pending', retryCount=0.
+          </function>
+        </functions>
+      </utility>
+
+      <utility>
+        <name>Test Database Client</name>
+        <file>whatsapp-bot/src/__tests__/utils/test-database.ts</file>
+        <functions>
+          <function name="getTestSupabaseClient()">
+            Returns Supabase client for test database.
+            Uses .env.test credentials.
+          </function>
+          <function name="createTestUser(userId: string)">
+            Creates test user in auth.users table with specific UUID.
+            Required before seeding engagement state (FK constraint).
+          </function>
+        </functions>
+      </utility>
+    </test-utilities>
+
+    <test-database>
+      <connection>
+        Uses Supabase test instance configured in .env.test.
+        Same schema as production (from Epic 1 Story 1.1).
+      </connection>
+      <tables>
+        <table name="user_engagement_states">
+          Stores current engagement state per user (active, goodbye_sent, dormant, remind_later).
+          Columns: user_id, state, last_activity_at, goodbye_sent_at, goodbye_expires_at, remind_at.
+        </table>
+        <table name="engagement_state_transitions">
+          Logs all state transitions with trigger and metadata.
+          Used to verify transitions occurred correctly.
+        </table>
+        <table name="engagement_message_queue">
+          Queue of pending messages to send.
+          Columns: user_id, message_type, destination, status, idempotency_key.
+        </table>
+        <table name="user_profiles">
+          User preferences including reengagement_opt_out flag.
+          Used to test opt-out preference respect.
+        </table>
+      </tables>
+      <isolation-strategy>
+        Each test creates unique user IDs (randomUUID()).
+        beforeEach() seeds test data.
+        afterEach() cleans up via cleanupEngagementStates().
+        No shared state between tests.
+      </isolation-strategy>
+    </test-database>
+  </test-infrastructure>
+
+  <timing-precision-requirements>
+    <requirement name="14-Day Inactivity Threshold">
+      <day-13>13 * 24 * 60 * 60 * 1000 ms - NO action</day-13>
+      <day-14>14 * 24 * 60 * 60 * 1000 ms - Goodbye sent</day-14>
+      <day-15>15 * 24 * 60 * 60 * 1000 ms - No duplicate (idempotency)</day-15>
+    </requirement>
+
+    <requirement name="48-Hour Goodbye Timeout">
+      <hour-47>47 * 60 * 60 * 1000 ms - NO timeout</hour-47>
+      <hour-48>48 * 60 * 60 * 1000 ms - Timeout triggers, transition to dormant</hour-48>
+      <hour-50>50 * 60 * 60 * 1000 ms - Timeout already occurred, metadata.hours_waited = 50</hour-50>
+    </requirement>
+
+    <requirement name="Weekly Review ISO Week">
+      <week-2025-W05>Messages sent for active users in Week 5, 2025</week-2025-W05>
+      <same-week-rerun>Same week re-run - No duplicates (idempotency key prevents)</same-week-rerun>
+      <week-2025-W06>Week 6 - New messages allowed (different idempotency key)</week-2025-W06>
+    </requirement>
+  </timing-precision-requirements>
+
+  <test-patterns>
+    <pattern name="Testing 14-Day Threshold">
+      <example><![CDATA[
+it('sends goodbye after exactly 14 days inactivity', async () => {
+  setupMockTime(new Date('2025-01-01T00:00:00Z'))
+
+  // Create user with activity on Day 1
+  const user = createMockEngagementState({
+    state: 'active',
+    lastActivityAt: new Date('2025-01-01T00:00:00Z')
+  })
+  await seedEngagementState(user)
+
+  // Day 13: Run job - no action yet
+  advanceTime(13)
+  let result = await runDailyEngagementJob()
+  expect(result.processed).toBe(0) // Not yet 14 days
+
+  // Day 14: Run job - goodbye sent
+  advanceTime(1) // Now = 2025-01-15
+  result = await runDailyEngagementJob()
+  expect(result.processed).toBe(1)
+  expect(result.succeeded).toBe(1)
+
+  // Verify message queued
+  const messages = await getMessagesForUser(user.userId)
+  expect(messages).toHaveLength(1)
+  expect(messages[0].messageType).toBe('goodbye')
+
+  // Day 15: Run job again - no duplicate
+  advanceTime(1)
+  result = await runDailyEngagementJob()
+  expect(result.processed).toBe(0) // User already in goodbye_sent state
+})
+      ]]></example>
+    </pattern>
+
+    <pattern name="Testing 48-Hour Timeout">
+      <example><![CDATA[
+it('transitions to dormant after exactly 48 hours', async () => {
+  const now = new Date('2025-01-03T00:00:00Z')
+  setupMockTime(now)
+
+  // Create user in goodbye_sent state 48 hours ago
+  const user = createMockEngagementState({
+    state: 'goodbye_sent',
+    goodbyeSentAt: new Date('2025-01-01T00:00:00Z'), // 48h ago
+    goodbyeExpiresAt: new Date('2025-01-03T00:00:00Z'), // Expires now
+  })
+  await seedEngagementState(user)
+
+  // Run daily job
+  const result = await runDailyEngagementJob()
+  expect(result.processed).toBe(1)
+  expect(result.succeeded).toBe(1)
+
+  // Verify transition to dormant
+  const finalState = await getEngagementState(user.userId)
+  expect(finalState.state).toBe('dormant')
+
+  // Verify NO message sent (silence by design)
+  const messages = await getMessagesForUser(user.userId)
+  expect(messages).toHaveLength(0)
+})
+      ]]></example>
+    </pattern>
+
+    <pattern name="Testing Weekly Review Idempotency">
+      <example><![CDATA[
+it('prevents duplicate weekly reviews within same week', async () => {
+  // Set date to Monday, Week 5 of 2025
+  const monday = new Date('2025-02-03T09:00:00Z')
+  setupMockTime(monday)
+
+  // Mock active user
+  const user = {
+    userId: 'test-user',
+    transactionCount: 5,
+    preferredDestination: 'individual',
+    destinationJid: 'user@s.whatsapp.net',
+    locale: 'pt-BR'
+  }
+  jest.spyOn(require('@/services/scheduler/activity-detector'), 'getActiveUsersLastWeek')
+    .mockResolvedValue([user])
+
+  // Run job first time
+  let result = await runWeeklyReviewJob()
+  expect(result.succeeded).toBe(1)
+
+  // Verify message queued with correct idempotency key
+  const messages1 = await getMessagesForUser(user.userId)
+  expect(messages1).toHaveLength(1)
+  expect(messages1[0].idempotencyKey).toBe('test-user:weekly_review:2025-W05')
+
+  // Run job again same day (should be idempotent)
+  result = await runWeeklyReviewJob()
+
+  // No duplicate message created
+  const messages2 = await getMessagesForUser(user.userId)
+  expect(messages2).toHaveLength(1) // Still only 1 message
+
+  // Advance to next week (Week 6)
+  advanceTime(7)
+  result = await runWeeklyReviewJob()
+
+  // New message queued with new key
+  const messages3 = await getMessagesForUser(user.userId)
+  expect(messages3).toHaveLength(2)
+  expect(messages3[1].idempotencyKey).toBe('test-user:weekly_review:2025-W06')
+})
+      ]]></example>
+    </pattern>
+
+    <pattern name="Testing Opt-Out Respect">
+      <example><![CDATA[
+it('skips opted-out users and logs metrics', async () => {
+  // Create 2 users: 1 opted-out, 1 opted-in
+  const optedOutUser = createMockEngagementState({
+    state: 'active',
+    lastActivityAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) // 15 days ago
+  })
+  const optedInUser = createMockEngagementState({
+    state: 'active',
+    lastActivityAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)
+  })
+
+  await seedEngagementState(optedOutUser)
+  await seedEngagementState(optedInUser)
+
+  // Set opt-out preference
+  await supabase.from('user_profiles').upsert({
+    id: optedOutUser.userId,
+    reengagement_opt_out: true
+  })
+  await supabase.from('user_profiles').upsert({
+    id: optedInUser.userId,
+    reengagement_opt_out: false
+  })
+
+  // Run daily job
+  const result = await runDailyEngagementJob()
+
+  // Verify results
+  expect(result.processed).toBe(1) // Only opted-in user processed
+  expect(result.succeeded).toBe(1)
+  expect(result.skipped).toBe(1) // Opted-out user skipped
+
+  // Verify opted-in user got message
+  const messages = await getMessagesForUser(optedInUser.userId)
+  expect(messages).toHaveLength(1)
+
+  // Verify opted-out user got NO message
+  const optOutMessages = await getMessagesForUser(optedOutUser.userId)
+  expect(optOutMessages).toHaveLength(0)
+})
+      ]]></example>
+    </pattern>
+
+    <pattern name="Testing Partial Failures">
+      <example><![CDATA[
+it('tracks failures correctly and continues processing', async () => {
+  // Seed 3 users
+  const user1 = createMockEngagementState({
+    state: 'active',
+    lastActivityAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+  })
+  const user2 = createMockEngagementState({
+    state: 'active',
+    lastActivityAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+  })
+  const user3 = createMockEngagementState({
+    state: 'active',
+    lastActivityAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+  })
+
+  await seedEngagementState(user1)
+  await seedEngagementState(user2)
+  await seedEngagementState(user3)
+
+  // Mock transitionState to fail for user2
+  const originalTransition = require('@/services/engagement/state-machine').transitionState
+  jest.spyOn(require('@/services/engagement/state-machine'), 'transitionState')
+    .mockImplementation((userId, trigger) => {
+      if (userId === user2.userId) {
+        return Promise.resolve({
+          success: false,
+          error: 'Simulated DB error',
+          newState: 'active',
+          previousState: 'active',
+        })
+      }
+      return originalTransition(userId, trigger)
+    })
+
+  // Run job
+  const result = await runDailyEngagementJob()
+
+  // Verify results
+  expect(result.processed).toBe(3)
+  expect(result.succeeded).toBe(2) // user1 and user3
+  expect(result.failed).toBe(1) // user2
+  expect(result.errors).toHaveLength(1)
+  expect(result.errors[0].userId).toBe(user2.userId)
+
+  // Verify user1 and user3 succeeded (not rolled back)
+  const state1 = await getEngagementState(user1.userId)
+  const state3 = await getEngagementState(user3.userId)
+  expect(state1.state).toBe('goodbye_sent')
+  expect(state3.state).toBe('goodbye_sent')
+
+  // Verify user2 failed (state unchanged)
+  const state2 = await getEngagementState(user2.userId)
+  expect(state2.state).toBe('active')
+})
+      ]]></example>
+    </pattern>
+  </test-patterns>
+
+  <test-organization>
+    <file name="whatsapp-bot/src/__tests__/engagement/daily-job.test.ts">
+      <describe name="Daily Engagement Job">
+        <describe name="14-Day Inactivity Threshold">
+          Tests for AC-1, AC-10: timing precision (13d, 14d, 15d)
+        </describe>
+        <describe name="48-Hour Goodbye Timeout">
+          Tests for AC-2: timeout threshold (47h, 48h, 50h)
+        </describe>
+        <describe name="Remind Later Due Handling">
+          Tests for AC-3: reminder expiration (future, past, exactly now)
+        </describe>
+        <describe name="Opt-Out Preference Respect">
+          Tests for AC-4: reengagement_opt_out flag
+        </describe>
+        <describe name="JobResult Aggregation">
+          Tests for AC-7, AC-8: result tracking across sub-functions
+        </describe>
+        <describe name="Message Queue Integration">
+          Tests for AC-11: queue processing, error handling
+        </describe>
+        <describe name="Edge Cases and Timing Precision">
+          Tests for AC-10: multi-day progression, boundary conditions
+        </describe>
+      </describe>
+    </file>
+
+    <file name="whatsapp-bot/src/__tests__/engagement/weekly-job.test.ts">
+      <describe name="Weekly Review Job">
+        <describe name="Activity Detection">
+          Tests for AC-5: active vs inactive users
+        </describe>
+        <describe name="ISO Week Idempotency">
+          Tests for AC-6: weekly idempotency keys (same week, different weeks)
+        </describe>
+        <describe name="Analytics Events">
+          Tests for AC-9: PostHog integration
+        </describe>
+        <describe name="Error Handling">
+          Tests for AC-11: resilience to failures
+        </describe>
+      </describe>
+    </file>
+  </test-organization>
+
+  <coverage-and-performance>
+    <coverage-target>
+      ≥ 75% across branches, functions, lines for:
+      - whatsapp-bot/src/services/scheduler/daily-engagement-job.ts
+      - whatsapp-bot/src/services/scheduler/weekly-review-job.ts
+    </coverage-target>
+    <performance-target>
+      All tests complete in &lt; 10 seconds (integration test speed requirement)
+    </performance-target>
+    <validation>
+      Run: npm test -- daily-job.test.ts weekly-job.test.ts --coverage
+    </validation>
+  </coverage-and-performance>
+
+  <dependencies>
+    <existing-infrastructure>
+      <item>Jest test framework (^29.7.0) - already in package.json</item>
+      <item>Existing test fixtures from Story 7.1</item>
+      <item>Existing mocks (Supabase, Baileys, PostHog)</item>
+      <item>date-fns for ISO week utilities (already in package.json)</item>
+    </existing-infrastructure>
+    <no-new-dependencies>
+      All tests use existing infrastructure. No new package.json dependencies required.
+    </no-new-dependencies>
+  </dependencies>
+
+  <integration-with-other-stories>
+    <story id="7.1">
+      This story relies on infrastructure from 7.1:
+      - createMockEngagementState() fixture
+      - seedEngagementState(), cleanupEngagementStates() helpers
+      - setupMockTime(), advanceTime() time manipulation
+    </story>
+    <story id="7.2">
+      This story builds on 7.2's validation of state transitions.
+      Scheduler tests verify that jobs CALL the state machine correctly at the right times.
+    </story>
+    <story id="7.5">
+      Integration tests in 7.5 will simulate scheduler jobs running over 30 days,
+      building on the unit tests in this story.
+    </story>
+    <story id="7.6">
+      This story includes idempotency tests for schedulers.
+      Story 7.6 will extend with additional idempotency verification scenarios.
+    </story>
+  </integration-with-other-stories>
+
+  <key-implementation-notes>
+    <note priority="critical">
+      Scheduler tests must validate not just that jobs run, but that they run at the RIGHT TIME with the RIGHT PRECISION. Use time manipulation to test exact day boundaries (13d vs 14d vs 15d).
+    </note>
+    <note priority="critical">
+      Idempotency is critical - schedulers can run multiple times per day. The second run with identical time state should produce zero new messages.
+    </note>
+    <note priority="high">
+      Use real test database, not mocks. Time manipulation via advanceTime() is critical for timing tests.
+    </note>
+    <note priority="high">
+      Error handling must not fail entire jobs. Test that partial failures are tracked correctly and successful transitions are not rolled back.
+    </note>
+    <note priority="medium">
+      Test isolation is mandatory. Each test creates unique user IDs, seeds data in beforeEach(), cleans up in afterEach().
+    </note>
+  </key-implementation-notes>
+
+  <references>
+    <reference>
+      <title>Epic 7 Tech Spec - AC-7.3-Scheduler-Timing-Validated</title>
+      <file>docs/sprint-artifacts/tech-spec-epic-7.md</file>
+    </reference>
+    <reference>
+      <title>Daily Engagement Job Implementation</title>
+      <file>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</file>
+    </reference>
+    <reference>
+      <title>Weekly Review Job Implementation</title>
+      <file>whatsapp-bot/src/services/scheduler/weekly-review-job.ts</file>
+    </reference>
+    <reference>
+      <title>Epic 5 Tech Spec - Story 5.1 Daily Engagement Job</title>
+      <file>docs/sprint-artifacts/tech-spec-epic-5.md</file>
+    </reference>
+    <reference>
+      <title>Epic 5 Tech Spec - Story 5.3 Weekly Review Job</title>
+      <file>docs/sprint-artifacts/tech-spec-epic-5.md</file>
+    </reference>
+    <reference>
+      <title>Story 7.1 Testing Framework Setup</title>
+      <file>docs/sprint-artifacts/7-1-e2e-testing-framework-setup.md</file>
+    </reference>
+  </references>
+</story-context>

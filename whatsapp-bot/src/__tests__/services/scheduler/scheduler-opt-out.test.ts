@@ -107,9 +107,9 @@ describe('Daily Engagement Job - Opt-Out Respect', () => {
     ]
 
     const profiles = [
-      { id: 'user-1', reengagement_opt_out: true },
-      { id: 'user-2', reengagement_opt_out: false },
-      { id: 'user-3', reengagement_opt_out: true },
+      { user_id: 'user-1', reengagement_opt_out: true },
+      { user_id: 'user-2', reengagement_opt_out: false },
+      { user_id: 'user-3', reengagement_opt_out: true },
     ]
 
     // Mock queries
@@ -151,8 +151,8 @@ describe('Daily Engagement Job - Opt-Out Respect', () => {
     ]
 
     const profiles = [
-      { id: 'user-1', reengagement_opt_out: false },
-      { id: 'user-2', reengagement_opt_out: false },
+      { user_id: 'user-1', reengagement_opt_out: false },
+      { user_id: 'user-2', reengagement_opt_out: false },
     ]
 
     mockSupabaseClient.from.mockImplementation((table: string) => {
@@ -191,8 +191,8 @@ describe('Daily Engagement Job - Opt-Out Respect', () => {
     ]
 
     const profiles = [
-      { id: 'user-1', reengagement_opt_out: true },
-      { id: 'user-2', reengagement_opt_out: true },
+      { user_id: 'user-1', reengagement_opt_out: true },
+      { user_id: 'user-2', reengagement_opt_out: true },
     ]
 
     mockSupabaseClient.from.mockImplementation((table: string) => {
@@ -232,7 +232,7 @@ describe('Daily Engagement Job - Opt-Out Respect', () => {
     ]
 
     const profiles = [
-      { id: 'user-1', reengagement_opt_out: true },
+      { user_id: 'user-1', reengagement_opt_out: true },
     ]
 
     mockSupabaseClient.from.mockImplementation((table: string) => {
@@ -260,11 +260,11 @@ describe('Daily Engagement Job - Opt-Out Respect', () => {
 
     await runDailyEngagementJob()
 
-    // Verify that logger.info was called with skipped_opted_out metric
+    // Verify that logger.info was called with opted_out_users_skipped metric
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringMatching(/completed/i),
       expect.objectContaining({
-        skipped_opted_out: 1,
+        opted_out_users_skipped: 1,
       })
     )
   })

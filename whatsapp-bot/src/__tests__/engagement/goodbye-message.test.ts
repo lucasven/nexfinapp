@@ -73,6 +73,7 @@ describe('Goodbye Message - Story 4.3', () => {
     it('should queue goodbye message when transitioning active → goodbye_sent', async () => {
       // Mock: user in active state
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -83,9 +84,23 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
-        { data: { id: 'state-123', state: 'goodbye_sent' }, error: null }, // Update succeeds
-        { data: { id: 'transition-123' }, error: null }, // Transition log
-        { data: { preferred_language: 'pt-br' }, error: null }, // User profile
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update succeeds
+        { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
+        { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
+        { data: { preferred_language: 'pt-br' }, error: null },
       ])
 
       mockGetMessageDestination.mockResolvedValue({
@@ -109,6 +124,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should include side effect "queued_goodbye_message" in result', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -119,8 +135,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'en' }, error: null },
       ])
 
@@ -261,6 +291,7 @@ describe('Goodbye Message - Story 4.3', () => {
   describe('AC-4.3.3: Message routing', () => {
     it('should route message to individual destination', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -271,8 +302,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'pt-br' }, error: null },
       ])
 
@@ -293,6 +338,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should route message to group destination with correct JID', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -303,8 +349,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'en' }, error: null },
       ])
 
@@ -325,6 +385,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should not queue message if destination not found', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -335,7 +396,20 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
       ])
 
@@ -352,6 +426,7 @@ describe('Goodbye Message - Story 4.3', () => {
   describe('AC-4.3.4: Localization', () => {
     it('should use correct localization key (engagement.goodbye_self_select)', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -362,8 +437,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'pt-br' }, error: null },
       ])
 
@@ -383,6 +472,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should pass pt-BR locale for Portuguese user', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -393,8 +483,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'pt-br' }, error: null },
       ])
 
@@ -414,6 +518,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should pass en locale for English user', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -424,8 +529,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'en' }, error: null },
       ])
 
@@ -445,6 +564,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should default to pt-br locale if preference not set', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -455,8 +575,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale (null = defaults to pt-br)
         { data: { preferred_language: null }, error: null },
       ])
 
@@ -478,6 +612,7 @@ describe('Goodbye Message - Story 4.3', () => {
   describe('AC-4.3.5: Idempotency', () => {
     it('should use idempotency key with format {userId}:goodbye_sent:{date}', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -488,8 +623,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'pt-br' }, error: null },
       ])
 
@@ -506,6 +655,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should not add queued_goodbye_message side effect if queueMessage returns false (duplicate)', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -516,8 +666,22 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
+        // 5. User profile for locale
         { data: { preferred_language: 'pt-br' }, error: null },
       ])
 
@@ -561,6 +725,7 @@ describe('Goodbye Message - Story 4.3', () => {
 
     it('should handle message router error gracefully', async () => {
       mockQuerySequence([
+        // 1. Get current state
         {
           data: {
             id: 'state-123',
@@ -571,7 +736,20 @@ describe('Goodbye Message - Story 4.3', () => {
           },
           error: null,
         },
+        // 2. Refetch state
+        {
+          data: {
+            id: 'state-123',
+            user_id: userId,
+            state: 'active',
+            last_activity_at: '2025-11-01T00:00:00.000Z',
+            updated_at: '2025-11-01T00:00:00.000Z',
+          },
+          error: null,
+        },
+        // 3. Update state
         { data: { id: 'state-123', state: 'goodbye_sent' }, error: null },
+        // 4. Transition log
         { data: { id: 'transition-123' }, error: null },
       ])
 

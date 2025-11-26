@@ -132,8 +132,8 @@ async function processInactiveUsers(result: JobResult): Promise<void> {
   const userIds = inactiveUsers.map((u) => u.user_id)
   const { data: profiles, error: profilesError } = await supabase
     .from('user_profiles')
-    .select('id, reengagement_opt_out')
-    .in('id', userIds)
+    .select('user_id, reengagement_opt_out')
+    .in('user_id', userIds)
 
   if (profilesError) {
     logger.error('Failed to query user profiles', {}, profilesError)
@@ -143,7 +143,7 @@ async function processInactiveUsers(result: JobResult): Promise<void> {
   // Build a map of opt-out status
   const optOutMap = new Map<string, boolean>()
   for (const profile of profiles || []) {
-    optOutMap.set(profile.id, profile.reengagement_opt_out || false)
+    optOutMap.set(profile.user_id, profile.reengagement_opt_out || false)
   }
 
   logger.info('Found inactive users to process', {
