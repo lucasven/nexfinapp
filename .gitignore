@@ -6,6 +6,8 @@ whatsapp-bot/samples/
 .claude/
 .cursor/
 .playwright-mcp/
+whatsapp-bot/coverage/lcov-report/
+whatsapp-bot/.env.test
 
 # Next.js
 .next/
