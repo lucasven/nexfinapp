@@ -21,6 +21,7 @@ import { checkAuthorization, checkAuthorizationWithIdentifiers } from './middlew
 import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
+import { startScheduler, stopScheduler } from './scheduler.js'
 
 dotenv.config()
 
@@ -874,6 +875,9 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🏥 HTTP server running on port ${PORT}`)
     console.log(`   Health check: http://0.0.0.0:${PORT}/health`)
 
+    // Start the cron scheduler
+    startScheduler()
+
     // Start the WhatsApp bot AFTER the health check server is ready
     connectToWhatsApp().catch(error => {
       console.error('⚠️ Error starting WhatsApp bot:', error)
@@ -886,12 +890,14 @@ if (process.env.NODE_ENV !== 'test') {
 // Graceful shutdown handling
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...')
+  stopScheduler()
   await shutdownPostHog()
   process.exit(0)
 })
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...')
+  stopScheduler()
   await shutdownPostHog()
   process.exit(0)
 })
