@@ -27,20 +27,41 @@ interface UndoState {
 const undoStack = new Map<string, UndoState[]>()
 
 // Cleanup interval: Clear undo states older than 5 minutes every minute
-setInterval(() => {
-  const now = new Date()
-  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null
 
-  for (const [whatsappNumber, states] of undoStack.entries()) {
-    const validStates = states.filter(state => state.timestamp > fiveMinutesAgo)
-    
-    if (validStates.length === 0) {
-      undoStack.delete(whatsappNumber)
-    } else if (validStates.length < states.length) {
-      undoStack.set(whatsappNumber, validStates)
+function startCleanupInterval() {
+  if (cleanupIntervalId) return // Already running
+
+  cleanupIntervalId = setInterval(() => {
+    const now = new Date()
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
+
+    for (const [whatsappNumber, states] of undoStack.entries()) {
+      const validStates = states.filter(state => state.timestamp > fiveMinutesAgo)
+
+      if (validStates.length === 0) {
+        undoStack.delete(whatsappNumber)
+      } else if (validStates.length < states.length) {
+        undoStack.set(whatsappNumber, validStates)
+      }
     }
+  }, 60000) // Run every minute
+}
+
+/**
+ * Stop the cleanup interval (for testing purposes)
+ */
+export function stopCleanupInterval(): void {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId)
+    cleanupIntervalId = null
   }
-}, 60000) // Run every minute
+}
+
+// Start the cleanup interval on module load (only in non-test environment)
+if (process.env.NODE_ENV !== 'test') {
+  startCleanupInterval()
+}
 
 /**
  * Store an undo state for a user action
