@@ -355,8 +355,22 @@ describe('Tier Completion Handler - Ignores Opt-Out', () => {
               onboarding_tips_enabled: true, // Tips enabled
               reengagement_opt_out: true,    // Re-engagement opted-out (should NOT block tips)
               preferred_destination: 'individual',
-              whatsapp_jid: 'user-1@s.whatsapp.net',
               locale: 'pt-BR',
+            },
+            error: null,
+          }),
+        }
+      }
+      if (table === 'authorized_whatsapp_numbers') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          order: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          single: jest.fn().mockResolvedValue({
+            data: {
+              whatsapp_jid: 'user-1@s.whatsapp.net',
+              whatsapp_number: '5511999999999',
             },
             error: null,
           }),
