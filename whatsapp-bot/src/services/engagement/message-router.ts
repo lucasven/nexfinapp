@@ -78,11 +78,14 @@ export async function getMessageDestination(
 
   if (destination === 'group') {
     // Look up user's authorized group from authorized_groups table
+    // User may have multiple active groups, so we pick the most recently used one
     const { data: authorizedGroup, error: groupError } = await supabase
       .from('authorized_groups')
       .select('group_jid')
       .eq('user_id', userId)
       .eq('is_active', true)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(1)
       .maybeSingle()
 
     if (groupError) {

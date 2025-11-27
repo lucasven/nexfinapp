@@ -85,11 +85,14 @@ export async function shouldSyncIdentifiers(
   try {
     const supabase = getSupabaseClient()
 
-    // Check if we have this user's record with a JID
+    // Check if we have this specific identifier's record
+    // Filter by JID to get the exact record for this WhatsApp number
+    // (user may have multiple authorized numbers)
     const { data, error } = await supabase
       .from('authorized_whatsapp_numbers')
       .select('whatsapp_jid, whatsapp_lid, account_type')
       .eq('user_id', userId)
+      .eq('whatsapp_jid', identifiers.jid)
       .maybeSingle()
 
     if (error) {
