@@ -37,6 +37,7 @@ export enum WhatsAppAnalyticsEvent {
   WHATSAPP_TRANSACTION_FAILED = 'whatsapp_transaction_failed',
   WHATSAPP_DUPLICATE_DETECTED = 'whatsapp_duplicate_detected',
   WHATSAPP_TRANSACTION_CORRECTED = 'whatsapp_transaction_corrected',
+  TRANSACTION_TYPE_CHANGED = 'transaction_type_changed',
 
   // Group Management Events
   WHATSAPP_GROUP_AUTHORIZATION_REQUESTED = 'whatsapp_group_authorization_requested',

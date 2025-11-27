@@ -202,8 +202,12 @@ Let's begin? 🚀`,
   aiLimitExceeded: '⚠️ Daily AI usage limit exceeded. Some features may be unavailable until tomorrow.',
   transactionDeleted: (id: string) => `✅ Transaction ${id} deleted successfully!`,
   transactionEdited: (id: string, field: string) => `✅ Transaction ${id} ${field} updated!`,
-  transactionDetails: (id: string, amount: number, category: string, date: string) => 
+  transactionDetails: (id: string, amount: number, category: string, date: string) =>
     `📄 Transaction ${id}:\n💵 Amount: $${amount.toFixed(2)}\n📁 Category: ${category}\n📅 Date: ${date}`,
+  transactionTypeChanged: (oldType: 'income' | 'expense', newType: 'income' | 'expense') =>
+    `type (${oldType} → ${newType})`,
+  categoryChanged: (oldCategory: string, newCategory: string) =>
+    `category (${oldCategory} → ${newCategory})`,
   undoSuccess: '↩️ Last action undone successfully!',
   undoNotAvailable: '❌ No recent actions to undo.',
 

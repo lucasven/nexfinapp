@@ -1327,6 +1327,233 @@ This document provides the complete epic and story breakdown for NexFinApp's Sma
 
 ---
 
+## Epic 8: Transaction Type Correction & NLP Deprecation
+
+**Goal:** Allow users to correct transaction type (expense ↔ income) after creation and formally deprecate the legacy NLP parser in favor of AI-first intent processing.
+
+**FRs Covered:** New feature request (not in original PRD)
+
+**Context:** Default transaction type is expense. Users frequently send income-related messages that get logged as expenses. Currently no way to correct via WhatsApp.
+
+---
+
+### Story 8.1: Support Transaction Type Change in Edit Handler
+
+**As a** user,
+**I want** to change a transaction from expense to income (or vice versa),
+**So that** I can correct mistakes without deleting and re-adding.
+
+**Acceptance Criteria:**
+
+**Given** a transaction exists with `type = 'expense'`
+**When** user requests to change it to income via edit
+**Then** the `type` field is updated to `'income'`
+**And** a confirmation message is sent
+
+**Given** a transaction with `type = 'income'`
+**When** user requests to change it to expense
+**Then** the `type` field is updated to `'expense'`
+**And** a confirmation message is sent
+
+**Given** a type change request
+**When** the edit handler processes it
+**Then** the undo state is stored before making changes
+**And** the change is logged with appropriate context
+
+**Prerequisites:** None (core functionality)
+
+**Technical Notes:**
+- Location: `whatsapp-bot/src/handlers/transactions/transactions.ts`
+- Add `type` to the `handleEditTransaction` function's update object
+- Update `changedFields` messaging for type changes
+- Track via analytics: `TRANSACTION_TYPE_CHANGED` event
+
+---
+
+### Story 8.2: AI Intent Support for Type Conversion
+
+**As a** user,
+**I want** to say "convert EXP-123 to income" or "change EXP-123 to receita" naturally,
+**So that** I can correct transactions without learning specific commands.
+
+**Acceptance Criteria:**
+
+**Given** user sends "convert EXP-123 to income" or similar
+**When** AI processes the message
+**Then** intent `edit_transaction` is returned with `entities.type = 'income'` and `entities.transactionId = 'EXP-123'`
+
+**Given** user sends "mudar EXP-123 para receita" (pt-BR)
+**When** AI processes the message
+**Then** intent correctly identifies type change to income
+
+**Given** user sends "this was actually income not expense" after logging
+**When** AI processes in context of recent transaction
+**Then** intent identifies type correction for most recent transaction
+
+**Supported phrases (pt-BR):**
+- "mudar [ID] para receita/despesa"
+- "converter [ID] para receita/despesa"
+- "[ID] era receita/despesa"
+- "corrigir [ID] - era receita"
+
+**Supported phrases (en):**
+- "change [ID] to income/expense"
+- "convert [ID] to income/expense"
+- "[ID] was income/expense"
+- "correct [ID] - was income"
+
+**Prerequisites:** Story 8.1
+
+**Technical Notes:**
+- Location: `whatsapp-bot/src/services/ai/ai-pattern-generator.ts`
+- Update system prompt examples to include type conversion scenarios
+- Add to `edit_transaction` function schema: `type` field as optional enum
+- NO changes to NLP parser (legacy)
+
+---
+
+### Story 8.3: Handle Category Mismatch When Changing Type
+
+**As a** system,
+**I want** to handle category type mismatches when transaction type changes,
+**So that** income transactions have income categories and expense transactions have expense categories.
+
+**Acceptance Criteria:**
+
+**Given** expense transaction with expense category (e.g., "Food")
+**When** type changed to income
+**Then** system offers to change category OR auto-assigns matching income category
+**And** user is notified of the category change
+
+**Given** income transaction with income category (e.g., "Salary")
+**When** type changed to expense
+**Then** system offers to change category OR auto-assigns matching expense category
+
+**Given** category with matching type already assigned
+**When** type remains same category type
+**Then** no category change needed
+
+**Given** user's custom category list
+**When** auto-selecting replacement category
+**Then** prefer user's custom categories over defaults
+**And** fallback to "Other Income" / "Other Expense" if no match
+
+**Prerequisites:** Story 8.1
+
+**Technical Notes:**
+- Location: `whatsapp-bot/src/handlers/transactions/transactions.ts`
+- Use `category-matcher.ts` to find appropriate replacement
+- Query categories by type: `.eq('type', newType)`
+- Consider semantic matching for similar categories across types
+
+---
+
+### Story 8.4: Localization Messages for Type Change
+
+**As a** user,
+**I want** clear confirmation messages when I change transaction type,
+**So that** I understand what changed.
+
+**Acceptance Criteria:**
+
+**Given** type changed from expense to income
+**Then** confirmation message indicates: transaction ID, old type, new type
+**And** if category changed, includes category change info
+
+**Given** type changed with category auto-switch
+**Then** message explains both changes clearly
+
+**Message templates (pt-BR):**
+- `✅ Transação #EXP-123 alterada de despesa para receita.`
+- `✅ Transação #EXP-123 alterada de despesa para receita. Categoria mudou de "Alimentação" para "Outras Receitas".`
+
+**Message templates (en):**
+- `✅ Transaction #EXP-123 changed from expense to income.`
+- `✅ Transaction #EXP-123 changed from expense to income. Category changed from "Food" to "Other Income".`
+
+**Prerequisites:** Story 8.1
+
+**Technical Notes:**
+- Location: `whatsapp-bot/src/localization/pt-br.ts` and `en.ts`
+- Add new message keys: `transactionTypeChanged`, `transactionTypeChangedWithCategory`
+- Follow existing tone guidelines (one emoji max)
+
+---
+
+### Story 8.5: Tests for Transaction Type Correction
+
+**As a** developer,
+**I want** comprehensive tests for type correction functionality,
+**So that** the feature works reliably.
+
+**Acceptance Criteria:**
+
+**Given** unit tests for edit handler
+**Then** coverage includes:
+- Type change expense → income
+- Type change income → expense
+- Type change with category mismatch handling
+- Undo state storage for type changes
+- Analytics event firing
+
+**Given** AI prompt tests
+**Then** coverage includes:
+- Portuguese type change phrases
+- English type change phrases
+- Edge cases (ambiguous phrasing)
+
+**Given** integration tests
+**Then** coverage includes:
+- Full flow: message → AI → handler → database → response
+- Category auto-switch scenarios
+
+**Prerequisites:** Stories 8.1-8.4
+
+**Technical Notes:**
+- Location: `whatsapp-bot/src/__tests__/handlers/transactions/`
+- Follow existing test patterns in `expenses.test.ts`
+- Mock Supabase for unit tests
+- Target 80%+ coverage for new code
+
+---
+
+### Story 8.6: Mark NLP Intent Parser as Legacy
+
+**As a** developer,
+**I want** the NLP intent parser clearly marked as legacy/deprecated,
+**So that** future development uses AI-first approach exclusively.
+
+**Acceptance Criteria:**
+
+**Given** `intent-parser.ts` file
+**When** developer opens it
+**Then** deprecation notice is visible at top of file
+**And** JSDoc comments mark exported functions as `@deprecated`
+
+**Given** CLAUDE.md project documentation
+**When** developer reads architecture section
+**Then** clear guidance states: "NLP parser is legacy. All new features use AI layer."
+
+**Given** new feature development
+**When** developer considers NLP parser modifications
+**Then** documentation redirects to `ai-pattern-generator.ts`
+
+**Documentation updates:**
+- Add `@deprecated` JSDoc to all public functions in `intent-parser.ts`
+- Add file-level deprecation comment block
+- Update CLAUDE.md "WhatsApp Bot Message Flow" section
+- Add "Legacy vs AI-First" guidance section
+
+**Prerequisites:** None
+
+**Technical Notes:**
+- Location: `whatsapp-bot/src/nlp/intent-parser.ts`
+- Location: `CLAUDE.md`
+- DO NOT remove or modify NLP functionality (still used as fallback)
+- Mark as legacy only - no functional changes
+
+---
+
 ## Summary
 
 ### Epic Breakdown Overview
@@ -1340,7 +1567,8 @@ This document provides the complete epic and story breakdown for NexFinApp's Sma
 | 5 | Scheduled Jobs & Weekly Reviews | 6 | FR20-23, 44-48 |
 | 6 | User Preferences & Web Integration | 5 | FR28-32, 43 |
 | 7 | Testing & Quality Assurance | 6 | FR49-53 |
-| **Total** | | **42 stories** | **53 FRs** |
+| 8 | Transaction Type Correction & NLP Deprecation | 6 | New feature |
+| **Total** | | **48 stories** | **53 FRs + 1 feature** |
 
 ### Implementation Sequence
 

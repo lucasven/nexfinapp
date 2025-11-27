@@ -11,6 +11,9 @@ import { messages } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { storeUndoState } from '../core/undo.js'
 import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
+import { trackEvent } from '../../analytics/index.js'
+import { WhatsAppAnalyticsEvent } from '../../analytics/events.js'
+import { findCategoryWithFallback } from '../../services/category-matcher.js'
 
 /**
  * Edit an existing transaction
@@ -20,10 +23,10 @@ import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
  * @returns Success message or error
  */
 export async function handleEditTransaction(
-  whatsappNumber: string, 
+  whatsappNumber: string,
   intent: ParsedIntent
 ): Promise<string> {
-  const { transactionId, amount, category, description, date, paymentMethod } = intent.entities
+  const { transactionId, amount, category, description, date, paymentMethod, type } = intent.entities
 
   if (!transactionId) {
     return '❌ ID da transação não fornecido.'
@@ -37,10 +40,10 @@ export async function handleEditTransaction(
 
     const supabase = getSupabaseClient()
 
-    // Fetch the current transaction
+    // Fetch the current transaction with category info for type mismatch detection
     const { data: transaction, error: fetchError } = await supabase
       .from('transactions')
-      .select('*')
+      .select('*, categories(id, name, type)')
       .eq('user_readable_id', transactionId)
       .eq('user_id', session.userId)
       .single()
@@ -93,6 +96,36 @@ export async function handleEditTransaction(
       changedFields.push('método de pagamento')
     }
 
+    // Story 8.3: Handle category mismatch when changing type (AC-8.3.1, AC-8.3.2)
+    if (type && type !== transaction.type) {
+      updates.type = type
+      changedFields.push(messages.transactionTypeChanged(transaction.type, type))
+
+      // Check if current category type matches new transaction type
+      const currentCategory = (transaction as any).categories
+      if (currentCategory && currentCategory.type !== type) {
+        // Category type mismatch detected - find replacement category
+        // Story 8.3: Prefer user's custom categories, fallback to defaults (AC-8.3.3, AC-8.3.4)
+        const replacementCategory = await findCategoryWithFallback(undefined, {
+          userId: session.userId,
+          type: type as 'income' | 'expense',
+          includeCustom: true
+        })
+
+        // Update category in same transaction
+        updates.category_id = replacementCategory.id
+        changedFields.push(messages.categoryChanged(currentCategory.name, replacementCategory.name))
+
+        logger.info('Category replaced due to type mismatch', {
+          transactionId,
+          oldCategory: currentCategory.name,
+          newCategory: replacementCategory.name,
+          oldType: transaction.type,
+          newType: type
+        })
+      }
+    }
+
     // If no changes, return early
     if (Object.keys(updates).length === 0) {
       return messages.correctionNoChanges
@@ -107,6 +140,27 @@ export async function handleEditTransaction(
     if (updateError) {
       logger.error('Failed to update transaction', { transactionId, error: updateError })
       return messages.genericError
+    }
+
+    // Story 8.1: Fire analytics event for type change (AC-8.1.5)
+    // Story 8.3: Include category change info in analytics (AC-8.3.1, AC-8.3.2)
+    // Fire-and-forget - does NOT block response
+    if (updates.type) {
+      const currentCategory = (transaction as any).categories
+      trackEvent(
+        WhatsAppAnalyticsEvent.TRANSACTION_TYPE_CHANGED,
+        session.userId,
+        {
+          transaction_id: transactionId,
+          old_type: transaction.type,
+          new_type: updates.type,
+          // Include category change info if category was replaced
+          ...(updates.category_id && currentCategory ? {
+            old_category_id: currentCategory.id,
+            new_category_id: updates.category_id
+          } : {})
+        }
+      )
     }
 
     logger.info('Transaction edited', {

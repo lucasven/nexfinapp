@@ -209,13 +209,18 @@ const TRANSACTION_EDIT_TOOL = {
   type: 'function' as const,
   function: {
     name: 'edit_transaction',
-    description: 'Edit an existing transaction (amount, category, description, date, payment method)',
+    description: 'Edit an existing transaction (amount, category, description, date, payment method, type)',
     parameters: {
       type: 'object',
       properties: {
-        transaction_id: { 
-          type: 'string', 
+        transaction_id: {
+          type: 'string',
           description: '6-character transaction ID (e.g. ABC123). Can be extracted from quoted message with format [transaction_id: ABC123].'
+        },
+        type: {
+          type: 'string',
+          enum: ['income', 'expense'],
+          description: 'Change transaction type (despesa/expense or receita/income)'
         },
         amount: { type: 'number', description: 'New amount' },
         category: { type: 'string', description: 'New category name' },
@@ -698,7 +703,8 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
           category: args.category,
           description: args.description,
           date: args.date,
-          paymentMethod: args.payment_method
+          paymentMethod: args.payment_method,
+          type: args.type
         }
       }
       break
@@ -860,6 +866,20 @@ MESSAGE PARSING EXAMPLES:
 "relatório do mês" → show_report(period="this month")
 "mudar categoria para outros [transaction_id: ABC123]" → change_category(transaction_id="ABC123", new_category="outros")
 "alterar para mercado [transaction_id: XYZ789]" → change_category(transaction_id="XYZ789", new_category="mercado")
+
+TYPE CONVERSION EXAMPLES (Portuguese):
+"EXP-123 era receita" → edit_transaction(transaction_id="EXP-123", type="income")
+"transação 456 deveria ser despesa" → edit_transaction(transaction_id="456", type="expense")
+"mudar EXP-789 para receita" → edit_transaction(transaction_id="EXP-789", type="income")
+"corrigir ABC-456 para despesa" → edit_transaction(transaction_id="ABC-456", type="expense")
+"EXP-321 era receita de 500" → edit_transaction(transaction_id="EXP-321", type="income", amount=500)
+
+TYPE CONVERSION EXAMPLES (English):
+"transaction 789 should be income" → edit_transaction(transaction_id="789", type="income")
+"EXP-456 was expense" → edit_transaction(transaction_id="EXP-456", type="expense")
+"change ABC-123 to income" → edit_transaction(transaction_id="ABC-123", type="income")
+"correct XYZ-789 to expense" → edit_transaction(transaction_id="XYZ-789", type="expense")
+"EXP-999 should be income of 750" → edit_transaction(transaction_id="EXP-999", type="income", amount=750)
 
 Call the most appropriate function based on the user's intent.`
 }
