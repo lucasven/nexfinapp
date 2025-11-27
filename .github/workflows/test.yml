@@ -163,6 +163,8 @@ jobs:
         env:
           NODE_ENV: test
           CI: true
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || 'placeholder-service-key' }}
 
       - name: Upload test results on failure
         if: failure()
@@ -241,6 +243,8 @@ jobs:
         env:
           NODE_ENV: test
           CI: true
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || 'placeholder-service-key' }}
 
       - name: Upload burn-in failure artifacts
         if: failure()
@@ -279,6 +283,8 @@ jobs:
         env:
           NODE_ENV: test
           CI: true
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || 'placeholder-service-key' }}
 
       - name: Check coverage thresholds
         working-directory: whatsapp-bot
