@@ -23,20 +23,15 @@ export {
 // First message/Welcome handlers (Epic 2)
 export {
   handleFirstMessage,
-  handleFirstMessageLegacy,
-  hasMagicMoment,
   shouldTriggerWelcomeFlow,
   type FirstMessageResponse,
   type FirstMessageHandlerContext,
-  type FirstMessageContext,
-  type FirstMessageResult,
 } from './first-message-handler.js'
 
 // Tier progress handlers (Epic 3)
 export {
-  recordTierAction,
-  getTierProgress,
-  skipOnboarding,
+  handleTierCompletion,
+  handleTierCompletionAsync,
   type TierAction,
   type TierProgressContext,
   type TierProgressResult,

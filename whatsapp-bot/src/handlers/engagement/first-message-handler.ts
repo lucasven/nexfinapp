@@ -43,24 +43,6 @@ export interface FirstMessageHandlerContext {
   activityResult: ActivityCheckResult
 }
 
-// =============================================================================
-// Legacy interfaces (kept for backward compatibility)
-// =============================================================================
-
-export interface FirstMessageContext {
-  userId: string
-  whatsappJid: string
-  destination: 'individual' | 'group'
-  messageText: string
-  isFirstMessage: boolean
-}
-
-export interface FirstMessageResult {
-  isFirstMessage: boolean
-  welcomeMessageSent: boolean
-  preferredDestinationSet: boolean
-  error?: string
-}
 
 // =============================================================================
 // Story 2.2: Conversational First Response
@@ -225,40 +207,3 @@ export function shouldTriggerWelcomeFlow(activityResult: ActivityCheckResult): b
   return activityResult.isFirstMessage
 }
 
-// =============================================================================
-// Legacy functions (stubs - kept for backward compatibility)
-// =============================================================================
-
-/**
- * @deprecated Use handleFirstMessage with FirstMessageHandlerContext instead
- */
-export async function handleFirstMessageLegacy(
-  context: FirstMessageContext
-): Promise<FirstMessageResult> {
-  logger.info('First message handler called (legacy stub)', {
-    userId: context.userId,
-    destination: context.destination,
-  })
-
-  return {
-    isFirstMessage: false,
-    welcomeMessageSent: false,
-    preferredDestinationSet: false,
-    error: 'Use handleFirstMessage with FirstMessageHandlerContext instead',
-  }
-}
-
-/**
- * Check if user has completed their first successful action (magic moment)
- *
- * @param userId - The user's ID
- * @returns True if user has experienced magic moment
- *
- * TODO: Implement in Epic 2 (Story 2.5)
- */
-export async function hasMagicMoment(userId: string): Promise<boolean> {
-  logger.debug('Checking magic moment (stub)', { userId })
-
-  // Stub implementation - will be completed in Story 2.5
-  return false
-}
