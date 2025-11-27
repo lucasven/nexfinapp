@@ -347,11 +347,30 @@ export function parseOptOutCommand(
  * @param userId - The user's ID
  * @returns True if user has opted out of re-engagement
  *
- * TODO: Implement in Epic 6 (Story 6.4)
+ * // TODO: This function returns false by default which may cause opted-out users
+ * // to receive messages. Ensure calling code handles this appropriately until
+ * // full implementation is complete. Track: Epic 6, Story 6.4
  */
 export async function isOptedOut(userId: string): Promise<boolean> {
-  logger.debug('Checking opt-out status (stub)', { userId })
+  const supabase = getSupabaseClient()
 
-  // Stub implementation - will be completed in Epic 6
-  return false
+  try {
+    const { data: profile, error } = await supabase
+      .from('user_profiles')
+      .select('reengagement_opt_out')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) {
+      logger.error('Error fetching opt-out status', { userId, error: error.message })
+      // Default to false (not opted out) on error - safer to potentially send message
+      // than to block all messages on database error
+      return false
+    }
+
+    return profile?.reengagement_opt_out ?? false
+  } catch (error) {
+    logger.error('Unexpected error in isOptedOut', { userId }, error as Error)
+    return false
+  }
 }
