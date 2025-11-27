@@ -107,6 +107,8 @@ export interface Messages {
   transactionDeleted: (id: string) => string
   transactionEdited: (id: string, field: string) => string
   transactionDetails: (id: string, amount: number, category: string, date: string) => string
+  transactionTypeChanged: (oldType: 'income' | 'expense', newType: 'income' | 'expense') => string
+  categoryChanged: (oldCategory: string, newCategory: string) => string
   undoSuccess: string
   undoNotAvailable: string
   

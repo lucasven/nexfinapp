@@ -74,9 +74,18 @@ psql $DATABASE_URL < fe/scripts/001_initial_schema.sql
    - Automatic identifier sync on first message
    - Database function: `find_user_by_whatsapp_identifier()`
 4. Intent parsing in `handlers/message-handler.ts`:
-   - Layer 1: Explicit commands (`/add`, `/budget`, etc.)
-   - Layer 2: Semantic cache lookup (pgvector similarity search)
-   - Layer 3: OpenAI function calling with structured outputs
+   - Layer 1: Explicit commands (`/add`, `/budget`, etc.) - Always processed first ✓
+   - Layer 2: Semantic cache lookup (pgvector similarity search) - Performance optimization ✓
+   - Layer 3: OpenAI function calling (GPT-4o-mini) - **PREFERRED for new intents** ✓
+   - Layer 4: NLP fallback (`nlp/intent-parser.ts`) - **LEGACY, do not extend** ⚠️
+
+   **AI-First Development Guidance:**
+   - For new intent types: Extend AI prompts in `services/ai/ai-pattern-generator.ts`
+   - Do NOT add patterns to `nlp/intent-parser.ts` (legacy, low accuracy)
+   - NLP parser remains for backward compatibility and explicit commands only
+   - Target: 95%+ intent accuracy via AI (vs 60% with NLP)
+   - See Epic 8 tech spec for AI-first architecture details
+
 5. Transaction handlers in `handlers/transactions/`
 6. Response via localization system (`localization/pt-br.ts`)
 
@@ -94,11 +103,18 @@ psql $DATABASE_URL < fe/scripts/001_initial_schema.sql
 - Integration between web and WhatsApp bot
 
 ### AI/NLP System
-- OpenAI GPT-4o-mini for intent extraction
+- OpenAI GPT-4o-mini for intent extraction (**PRIMARY**)
 - text-embedding-3-small for semantic cache
 - Daily usage limits ($1.00 default per user)
 - Cost tracking and optimization
 - 60% cache hit rate target
+
+**⚠️ NLP Intent Parser Status:**
+- `nlp/intent-parser.ts` is **LEGACY** as of Epic 8 (November 2025)
+- Explicit commands (/add, /budget) still processed via NLP parser
+- Natural language patterns deprecated in favor of AI-first approach
+- Do not extend NLP patterns - use AI prompts instead
+- See file header in intent-parser.ts for migration guidance
 
 ## Testing Strategy
 

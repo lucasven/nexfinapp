@@ -1,9 +1,70 @@
+/**
+ * ============================================================================
+ * ⚠️  LEGACY / DEPRECATED - NLP INTENT PARSER
+ * ============================================================================
+ *
+ * STATUS: This module is considered LEGACY as of Epic 8 (November 2025).
+ *
+ * REASON FOR DEPRECATION:
+ * - Low accuracy compared to AI-based intent parsing (60% vs 95%+)
+ * - High maintenance cost for adding new patterns
+ * - Unable to handle nuanced user language variations
+ * - Superseded by AI-first approach in services/ai/ai-pattern-generator.ts
+ *
+ * CURRENT USAGE:
+ * - Layer 1: Explicit commands (/add, /budget, etc.) - STILL VALID ✓
+ * - Layer 2: NLP fallback for natural language - DEPRECATED ✗
+ * - Layer 3: AI-based parsing (OpenAI GPT-4o-mini) - PREFERRED ✓
+ *
+ * MIGRATION GUIDANCE:
+ * - For new intent types: Extend AI prompts in ai-pattern-generator.ts
+ * - Do NOT add new patterns to this NLP parser
+ * - Explicit commands can still be added (parseExplicitCommand function)
+ * - See Epic 8 tech spec for AI-first architecture details
+ *
+ * REMOVAL TIMELINE:
+ * - This module will remain functional for backward compatibility
+ * - May be removed in a future epic once AI coverage is 100%
+ * - Monitor semantic cache hit rates to determine removal readiness
+ *
+ * REFERENCES:
+ * - [AI-First Approach]: whatsapp-bot/src/services/ai/ai-pattern-generator.ts
+ * - [Message Flow]: See CLAUDE.md → "WhatsApp Bot Message Flow"
+ * - [Epic 8 Tech Spec]: docs/sprint-artifacts/tech-spec-epic-8.md
+ *
+ * ============================================================================
+ */
+
 import nlp from 'compromise'
 import numbers from 'compromise-numbers'
 import { ParsedIntent } from '../types.js'
 
 nlp.extend(numbers)
 
+/**
+ * Parse user message to extract intent and entities.
+ *
+ * @deprecated As of Epic 8 (November 2025) - NLP parsing is legacy.
+ * Prefer AI-based intent extraction using `services/ai/ai-pattern-generator.ts`.
+ *
+ * This function remains for backward compatibility and explicit command parsing.
+ * Natural language patterns (Layer 2) are no longer the preferred extension point.
+ *
+ * @param message - User message text
+ * @param customDate - Optional date for context
+ * @returns ParsedIntent with action, confidence, and entities
+ *
+ * @see {@link services/ai/ai-pattern-generator.ts} for AI-first approach
+ * @see {@link CLAUDE.md} for architecture guidance
+ *
+ * @example
+ * // ✓ STILL VALID: Explicit commands are processed here
+ * parseIntent("/add 50 food")
+ *
+ * @example
+ * // ✗ DISCOURAGED: Natural language should use AI layer
+ * parseIntent("spent 50 on lunch") // Low accuracy, use AI instead
+ */
 export function parseIntent(message: string, customDate?: Date): ParsedIntent {
   // FIRST: Check for explicit commands (highest priority - confidence 0.95+)
   if (message.trim().startsWith('/')) {

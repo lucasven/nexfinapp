@@ -202,8 +202,15 @@ Vamos começar? 🚀`,
   // NEW: Transaction Management
   transactionDeleted: (id: string) => `✅ Transação ${id} deletada com sucesso.`,
   transactionEdited: (id: string, field: string) => `✅ Transação ${id} atualizada: ${field} modificado.`,
-  transactionDetails: (id: string, amount: number, category: string, date: string) => 
+  transactionDetails: (id: string, amount: number, category: string, date: string) =>
     `📋 Detalhes da transação ${id}:\n\n💵 Valor: R$ ${amount.toFixed(2)}\n📁 Categoria: ${category}\n📅 Data: ${date}`,
+  transactionTypeChanged: (oldType: 'income' | 'expense', newType: 'income' | 'expense') => {
+    const oldTypeLabel = oldType === 'expense' ? 'despesa' : 'receita'
+    const newTypeLabel = newType === 'expense' ? 'despesa' : 'receita'
+    return `tipo (${oldTypeLabel} → ${newTypeLabel})`
+  },
+  categoryChanged: (oldCategory: string, newCategory: string) =>
+    `categoria (${oldCategory} → ${newCategory})`,
   undoSuccess: '↩️ Ação desfeita com sucesso!',
   undoNotAvailable: '❌ Não há ações recentes para desfazer.',
 
