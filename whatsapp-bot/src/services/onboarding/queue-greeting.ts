@@ -85,11 +85,11 @@ export async function shouldReceiveGreeting(userId: string): Promise<boolean> {
     const supabase = getSupabaseClient()
 
     // Check if greeting was already sent
-    const { data: existingGreeting, error } = await supabase
+    const { data: existingGreetings, error } = await supabase
       .from('onboarding_messages')
       .select('id')
       .eq('user_id', userId)
-      .maybeSingle()
+      .limit(1)
 
     if (error) {
       console.error('[ShouldReceiveGreeting] Error checking greeting:', error)
@@ -97,7 +97,7 @@ export async function shouldReceiveGreeting(userId: string): Promise<boolean> {
     }
 
     // If no greeting exists, user should receive one
-    return !existingGreeting
+    return !existingGreetings || existingGreetings.length === 0
   } catch (error) {
     console.error('[ShouldReceiveGreeting] Unexpected error:', error)
     return false
