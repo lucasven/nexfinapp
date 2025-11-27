@@ -23,7 +23,10 @@ import { getMessageDestination } from '../../../services/engagement/message-rout
 import { getTestSupabaseClient, createTestUser } from '../../utils/test-database'
 
 // Helper to wait for database consistency in CI environments
-const waitForDbConsistency = () => new Promise(resolve => setTimeout(resolve, 100))
+const waitForDbConsistency = () => new Promise(resolve => setTimeout(resolve, 200))
+
+// Helper to generate unique group JID per test to avoid constraint violations
+const generateUniqueGroupJid = (userId: string) => `120363${userId.substring(0, 8).replace(/-/g, '')}@g.us`
 
 // Unmock message-router since we want to test actual database behavior
 jest.unmock('../../../services/engagement/message-router')
@@ -44,15 +47,10 @@ jest.mock('../../../services/monitoring/logger', () => ({
 
 let testUserIds: string[] = []
 
-// Test group JID used across tests - clean this up specifically
-const TEST_GROUP_JID = '120363456789@g.us'
-
 // Global cleanup before suite runs
 beforeAll(async () => {
   const supabase = getTestSupabaseClient()
-  // Clean up in reverse FK order
-  // Also clean up by group_jid to handle leftover data from previous failed runs
-  await supabase.from('authorized_groups').delete().eq('group_jid', TEST_GROUP_JID)
+  // Clean up in reverse FK order - remove all test data except system user
   await supabase.from('authorized_groups').delete().neq('user_id', '00000000-0000-0000-0000-000000000000')
   await supabase.from('user_profiles').delete().neq('user_id', '00000000-0000-0000-0000-000000000000')
   await supabase.from('authorized_whatsapp_numbers').delete().neq('user_id', '00000000-0000-0000-0000-000000000000')
@@ -155,7 +153,7 @@ describe('Message Queue Integration - resolveDestinationJid()', () => {
   describe('Group Destination Routing', () => {
     it('should resolve to group JID at send time', async () => {
       const userId = randomUUID()
-      const groupJid = '120363456789@g.us'
+      const groupJid = generateUniqueGroupJid(userId)
       const fallbackJid = '5511999999999@s.whatsapp.net'
 
       await createTestUserProfile(userId, 'group', groupJid)
@@ -215,7 +213,7 @@ describe('Message Queue Integration - resolveDestinationJid()', () => {
       // but user switched to group before send
       const userId = randomUUID()
       const originalQueuedJid = '5511999999999@s.whatsapp.net' // Original individual JID
-      const groupJid = '120363456789@g.us'
+      const groupJid = generateUniqueGroupJid(userId)
 
       // At send time, user has group preference
       await createTestUserProfile(userId, 'group', groupJid)
@@ -231,7 +229,7 @@ describe('Message Queue Integration - resolveDestinationJid()', () => {
     it('should handle concurrent destination changes gracefully', async () => {
       const userId = randomUUID()
       const whatsappJid = '5511999999999@s.whatsapp.net'
-      const groupJid = '120363456789@g.us'
+      const groupJid = generateUniqueGroupJid(userId)
       const fallbackJid = '5511888888888@s.whatsapp.net'
 
       // First call - individual
@@ -281,7 +279,7 @@ describe('Message Routing End-to-End Flow', () => {
     it('should route messages to new destination immediately after switch', async () => {
       const userId = randomUUID()
       const whatsappJid = '5511999999999@s.whatsapp.net'
-      const groupJid = '120363456789@g.us'
+      const groupJid = generateUniqueGroupJid(userId)
 
       // Step 1: Initial state - individual destination
       await createTestUserProfile(userId, 'individual', undefined, whatsappJid)
@@ -319,7 +317,7 @@ describe('Message Routing End-to-End Flow', () => {
     it('should handle rapid destination switching', async () => {
       const userId = randomUUID()
       const whatsappJid = '5511999999999@s.whatsapp.net'
-      const groupJid = '120363456789@g.us'
+      const groupJid = generateUniqueGroupJid(userId)
 
       // Create initial user with individual preference
       await createTestUserProfile(userId, 'individual', undefined, whatsappJid)
@@ -374,14 +372,14 @@ describe('Message Routing End-to-End Flow', () => {
     it('should follow fallback chain: group_jid -> individual_jid -> fallback parameter', async () => {
       const fallbackJid = 'fallback@s.whatsapp.net'
       const whatsappJid = '5511999999999@s.whatsapp.net'
-      const groupJid = '120363456789@g.us'
 
       // Case 1: Group preference with group JID -> use group JID
       const userId1 = randomUUID()
-      await createTestUserProfile(userId1, 'group', groupJid, whatsappJid)
+      const groupJid1 = generateUniqueGroupJid(userId1)
+      await createTestUserProfile(userId1, 'group', groupJid1, whatsappJid)
 
       let result = await resolveDestinationJid(userId1, fallbackJid)
-      expect(result.jid).toBe(groupJid)
+      expect(result.jid).toBe(groupJid1)
       expect(result.fallbackUsed).toBe(false)
 
       // Case 2: Group preference without group JID -> fallback to individual JID from profile
