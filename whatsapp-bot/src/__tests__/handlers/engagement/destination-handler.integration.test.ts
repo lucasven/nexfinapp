@@ -28,6 +28,9 @@ const waitForDbConsistency = () => new Promise(resolve => setTimeout(resolve, 20
 // Helper to generate unique group JID per test to avoid constraint violations
 const generateUniqueGroupJid = (userId: string) => `120363${userId.substring(0, 8).replace(/-/g, '')}@g.us`
 
+// Increase timeout for integration tests (default 5s is not enough for CI with DB latency)
+jest.setTimeout(15000)
+
 // Unmock message-router since we want to test actual database behavior
 jest.unmock('../../../services/engagement/message-router')
 
