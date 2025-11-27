@@ -41,10 +41,15 @@ jest.mock('../../../services/monitoring/logger', () => ({
 
 let testUserIds: string[] = []
 
+// Test group JID used across tests - clean this up specifically
+const TEST_GROUP_JID = '120363456789@g.us'
+
 // Global cleanup before suite runs
 beforeAll(async () => {
   const supabase = getTestSupabaseClient()
   // Clean up in reverse FK order
+  // Also clean up by group_jid to handle leftover data from previous failed runs
+  await supabase.from('authorized_groups').delete().eq('group_jid', TEST_GROUP_JID)
   await supabase.from('authorized_groups').delete().neq('user_id', '00000000-0000-0000-0000-000000000000')
   await supabase.from('user_profiles').delete().neq('user_id', '00000000-0000-0000-0000-000000000000')
   await supabase.from('authorized_whatsapp_numbers').delete().neq('user_id', '00000000-0000-0000-0000-000000000000')
