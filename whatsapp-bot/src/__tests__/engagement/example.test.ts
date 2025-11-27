@@ -10,7 +10,7 @@
  * Purpose: Demonstrate and validate the testing framework built in Story 7.1
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
 import { createMockEngagementState, createMockMessageQueue } from './fixtures/engagement-fixtures.js'
 import { setupMockTime, advanceTime, resetClock } from '../utils/time-helpers.js'
 import {
@@ -20,6 +20,9 @@ import {
   getMessageQueueCount,
 } from '../utils/idempotency-helpers.js'
 import { getMockMessages, clearMockMessages } from '../../__mocks__/baileys.js'
+
+// Increase timeout for integration tests with database operations
+jest.setTimeout(15000)
 
 describe('E2E Testing Framework Example', () => {
   let testUserIds: string[] = []
