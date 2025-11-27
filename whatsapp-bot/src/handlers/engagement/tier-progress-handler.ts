@@ -183,16 +183,17 @@ async function getUserCelebrationData(userId: string): Promise<UserCelebrationDa
   const supabase = getSupabaseClient()
 
   // Note: We deliberately do NOT check reengagement_opt_out here (AC-6.4.3)
-  const { data: profile, error } = await supabase
+  // Fetch profile data
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('onboarding_tips_enabled, preferred_destination, whatsapp_jid, locale')
+    .select('onboarding_tips_enabled, preferred_destination, locale')
     .eq('user_id', userId)
     .single()
 
-  if (error) {
+  if (profileError) {
     logger.warn('Could not fetch user profile for celebration', {
       userId,
-      error: error.message,
+      error: profileError.message,
     })
     // Return safe defaults that suppress celebrations
     return {
@@ -203,11 +204,36 @@ async function getUserCelebrationData(userId: string): Promise<UserCelebrationDa
     }
   }
 
+  // Fetch whatsapp_jid from authorized_whatsapp_numbers (primary first, then first by creation date)
+  const { data: authorizedNumber, error: numberError } = await supabase
+    .from('authorized_whatsapp_numbers')
+    .select('whatsapp_jid, whatsapp_number')
+    .eq('user_id', userId)
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (numberError && numberError.code !== 'PGRST116') {
+    // PGRST116 = no rows returned, which is fine (user might not have authorized number yet)
+    logger.warn('Could not fetch authorized number for celebration', {
+      userId,
+      error: numberError.message,
+    })
+  }
+
+  // Build destination JID: prefer whatsapp_jid, fallback to formatted whatsapp_number
+  const destinationJid =
+    authorizedNumber?.whatsapp_jid ||
+    (authorizedNumber?.whatsapp_number
+      ? `${authorizedNumber.whatsapp_number}@s.whatsapp.net`
+      : '')
+
   return {
     // AC-3.5.3: onboarding_tips_enabled controls celebrations (default true)
     tipsEnabled: profile?.onboarding_tips_enabled !== false,
     preferredDestination: profile?.preferred_destination || 'individual',
-    destinationJid: profile?.whatsapp_jid || '',
+    destinationJid,
     locale: (profile?.locale as 'pt-br' | 'en') || 'pt-br',
   }
 }

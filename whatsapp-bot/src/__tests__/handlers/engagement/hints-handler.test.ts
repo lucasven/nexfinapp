@@ -55,7 +55,7 @@ describe('Hints Handler - Story 2.6', () => {
       // Mock: user profile with tier 0 and tips enabled
       mockQuerySequence([
         {
-          data: { onboarding_tier: 0, tips_opt_out: false, magic_moment_at: null },
+          data: { onboarding_tier: 0, onboarding_tips_enabled: true, magic_moment_at: null },
           error: null,
         },
       ])
@@ -81,7 +81,7 @@ describe('Hints Handler - Story 2.6', () => {
       // 2. Category expense count - 3+ expenses
       mockQuerySequence([
         {
-          data: { onboarding_tier: 0, tips_opt_out: false, magic_moment_at: new Date().toISOString() },
+          data: { onboarding_tier: 0, onboarding_tips_enabled: true, magic_moment_at: new Date().toISOString() },
           error: null,
         },
         {
@@ -102,7 +102,7 @@ describe('Hints Handler - Story 2.6', () => {
             single: jest.fn().mockReturnThis(),
             then: jest.fn((resolve) =>
               resolve({
-                data: { onboarding_tier: 0, tips_opt_out: false, magic_moment_at: new Date().toISOString() },
+                data: { onboarding_tier: 0, onboarding_tips_enabled: true, magic_moment_at: new Date().toISOString() },
                 error: null,
               })
             ),
@@ -141,7 +141,7 @@ describe('Hints Handler - Story 2.6', () => {
       const userId = 'user-advanced'
 
       // Mock: user profile with tier 2
-      mockQuerySuccess({ onboarding_tier: 2, tips_opt_out: false, magic_moment_at: new Date().toISOString() })
+      mockQuerySuccess({ onboarding_tier: 2, onboarding_tips_enabled: true, magic_moment_at: new Date().toISOString() })
 
       const result = await getContextualHint(
         userId,
@@ -158,8 +158,8 @@ describe('Hints Handler - Story 2.6', () => {
     it('should return null for opted-out users (AC-2.6.4)', async () => {
       const userId = 'user-opted-out'
 
-      // Mock: user profile with tips_opt_out = true
-      mockQuerySuccess({ onboarding_tier: 0, tips_opt_out: true, magic_moment_at: null })
+      // Mock: user profile with onboarding_tips_enabled = false (opted out)
+      mockQuerySuccess({ onboarding_tier: 0, onboarding_tips_enabled: false, magic_moment_at: null })
 
       const result = await getContextualHint(
         userId,
@@ -177,7 +177,7 @@ describe('Hints Handler - Story 2.6', () => {
       const userId = 'user-other'
 
       // Mock: user profile
-      mockQuerySuccess({ onboarding_tier: 0, tips_opt_out: false, magic_moment_at: null })
+      mockQuerySuccess({ onboarding_tier: 0, onboarding_tips_enabled: true, magic_moment_at: null })
 
       const result = await getContextualHint(
         userId,
@@ -204,7 +204,7 @@ describe('Hints Handler - Story 2.6', () => {
             single: jest.fn().mockReturnThis(),
             then: jest.fn((resolve) =>
               resolve({
-                data: { onboarding_tier: 0, tips_opt_out: false, magic_moment_at: new Date().toISOString() },
+                data: { onboarding_tier: 0, onboarding_tips_enabled: true, magic_moment_at: new Date().toISOString() },
                 error: null,
               })
             ),

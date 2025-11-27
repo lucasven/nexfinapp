@@ -124,7 +124,7 @@ async function getUserHintProfile(userId: string): Promise<UserHintProfile> {
 
   const { data: profile, error } = await supabase
     .from('user_profiles')
-    .select('onboarding_tier, tips_opt_out, magic_moment_at')
+    .select('onboarding_tier, onboarding_tips_enabled, magic_moment_at')
     .eq('user_id', userId)
     .single()
 
@@ -140,7 +140,7 @@ async function getUserHintProfile(userId: string): Promise<UserHintProfile> {
 
   return {
     onboardingTier: profile?.onboarding_tier ?? 0,
-    tipsEnabled: profile?.tips_opt_out !== true, // tips_opt_out = true means disabled
+    tipsEnabled: profile?.onboarding_tips_enabled !== false, // onboarding_tips_enabled defaults to true
     magicMomentAt: profile?.magic_moment_at ?? null,
   }
 }

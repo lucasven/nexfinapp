@@ -53,11 +53,16 @@ const mockLogger = logger as jest.Mocked<typeof logger>
 
 describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
   const userId = 'test-user-123'
+  // Profile data from user_profiles table (no whatsapp_jid - that's in authorized_whatsapp_numbers)
   const defaultUserProfile = {
     onboarding_tips_enabled: true, // Uses new column from Story 3.5
     preferred_destination: 'individual',
-    whatsapp_jid: '5511999999999@s.whatsapp.net',
     locale: 'pt-br',
+  }
+  // Authorized number data from authorized_whatsapp_numbers table
+  const defaultAuthorizedNumber = {
+    whatsapp_jid: '5511999999999@s.whatsapp.net',
+    whatsapp_number: '5511999999999',
   }
 
   beforeEach(() => {
@@ -79,7 +84,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
         }
 
         mockQuerySequence([
-          { data: defaultUserProfile, error: null },
+          { data: defaultUserProfile, error: null }, // user_profiles query
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         await handleTierCompletion(userId, tierUpdate)
@@ -104,7 +110,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
         }
 
         mockQuerySequence([
-          { data: defaultUserProfile, error: null },
+          { data: defaultUserProfile, error: null }, // user_profiles query
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         await handleTierCompletion(userId, tierUpdate)
@@ -128,7 +135,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
         }
 
         mockQuerySequence([
-          { data: defaultUserProfile, error: null },
+          { data: defaultUserProfile, error: null }, // user_profiles query
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         await handleTierCompletion(userId, tierUpdate)
@@ -156,6 +164,7 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
             data: { ...defaultUserProfile, onboarding_tips_enabled: false },
             error: null,
           },
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         await handleTierCompletion(userId, tierUpdate)
@@ -179,6 +188,7 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
             data: { ...defaultUserProfile, onboarding_tips_enabled: false },
             error: null,
           },
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         // This function only handles celebrations, not progress tracking
@@ -199,7 +209,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
         }
 
         mockQuerySequence([
-          { data: defaultUserProfile, error: null },
+          { data: defaultUserProfile, error: null }, // user_profiles query
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         await handleTierCompletion(userId, tierUpdate)
@@ -266,7 +277,13 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
             data: {
               ...defaultUserProfile,
               preferred_destination: 'group',
+            },
+            error: null,
+          },
+          {
+            data: {
               whatsapp_jid: '120363123456789012@g.us',
+              whatsapp_number: null,
             },
             error: null,
           },
@@ -314,7 +331,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
         }
 
         mockQuerySequence([
-          { data: defaultUserProfile, error: null },
+          { data: defaultUserProfile, error: null }, // user_profiles query
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         mockQueueMessage.mockResolvedValue(false)
@@ -335,7 +353,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
         }
 
         mockQuerySequence([
-          { data: defaultUserProfile, error: null },
+          { data: defaultUserProfile, error: null }, // user_profiles query
+          { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
         ])
 
         await handleTierCompletion(userId, tierUpdate)
@@ -358,7 +377,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
       }
 
       mockQuerySequence([
-        { data: defaultUserProfile, error: null },
+        { data: defaultUserProfile, error: null }, // user_profiles query
+        { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
       ])
 
       // Fire-and-forget - should not throw
@@ -375,7 +395,8 @@ describe('Tier Progress Handler - Story 3.3 Celebrations', () => {
       // Force an error
       mockQueueMessage.mockRejectedValue(new Error('Queue service down'))
       mockQuerySequence([
-        { data: defaultUserProfile, error: null },
+        { data: defaultUserProfile, error: null }, // user_profiles query
+        { data: defaultAuthorizedNumber, error: null }, // authorized_whatsapp_numbers query
       ])
 
       // Should not throw

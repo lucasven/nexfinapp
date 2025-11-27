@@ -343,7 +343,7 @@ Qualquer dúvida, é só chamar.`,
 
   engagementHintViewReport: `Dica: veja como está indo. Tenta "quanto gastei esse mês?"`,
 
-  engagementHintFirstExpenseCategory: `💡 Quer criar categorias personalizadas? Manda "criar categoria" pra ver como!`,
+  engagementHintFirstExpenseCategory: `💡 Quer criar categorias personalizadas? Manda "criar categoria mercado" pra ver como!`,
 
   engagementHintBudgetSuggestion: (count: number, category: string) =>
     `💡 Você já tem ${count} gastos em ${category}. Quer criar um orçamento? Manda "orçamento ${category} 500"`,
