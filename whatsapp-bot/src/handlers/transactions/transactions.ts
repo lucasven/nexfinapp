@@ -10,6 +10,7 @@ import { getUserSession } from '../../auth/session-manager.js'
 import { messages } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { storeUndoState } from '../core/undo.js'
+import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
 
 /**
  * Edit an existing transaction
@@ -178,6 +179,12 @@ export async function handleDeleteTransaction(
       transactionId
     })
 
+    // Story 3.2: Track tier action for delete_expense (AC-3.2.2)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    if (transaction.type === 'expense') {
+      trackTierAction(session.userId, 'delete_expense')
+    }
+
     return messages.transactionDeleted(transactionId)
   } catch (error) {
     logger.error('Error in handleDeleteTransaction', { whatsappNumber, transactionId }, error as Error)
@@ -261,6 +268,10 @@ export async function handleChangeCategory(
       oldCategory: (transaction as any).categories?.name,
       newCategory: categoryData.name
     })
+
+    // Story 3.2: Track tier action for edit_category (AC-3.2.4)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    trackTierAction(session.userId, 'edit_category')
 
     return messages.transactionEdited(transactionId, `categoria alterada para ${categoryData.name}`)
   } catch (error) {

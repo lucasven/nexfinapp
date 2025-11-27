@@ -94,6 +94,9 @@ export enum AnalyticsEvent {
   ONBOARDING_TUTORIAL_STARTED = 'onboarding_tutorial_started',
   ONBOARDING_TUTORIAL_ELEMENT_HIGHLIGHTED = 'onboarding_tutorial_element_highlighted',
   ONBOARDING_TOUR_RESUMED = 'onboarding_tour_resumed',
+
+  // Engagement Preference Events
+  ENGAGEMENT_PREFERENCE_CHANGED = 'engagement_preference_changed',
 }
 
 /**

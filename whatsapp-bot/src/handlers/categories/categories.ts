@@ -3,6 +3,7 @@ import { getUserSession } from '../../auth/session-manager.js'
 import { ParsedIntent } from '../../types.js'
 import { messages } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
+import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
 
 export async function handleListCategories(whatsappNumber: string): Promise<string> {
   try {
@@ -49,6 +50,10 @@ export async function handleListCategories(whatsappNumber: string): Promise<stri
       }
     }
 
+    // Story 3.2: Track tier action for list_categories (AC-3.2.7)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    trackTierAction(session.userId, 'list_categories')
+
     return response
   } catch (error) {
     logger.error('Error in handleListCategories:', error as Error)
@@ -87,6 +92,10 @@ export async function handleAddCategory(whatsappNumber: string, intent: ParsedIn
       logger.error('Error creating category:', error)
       return messages.categoryError
     }
+
+    // Story 3.2: Track tier action for add_category (AC-3.2.3)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    trackTierAction(session.userId, 'add_category')
 
     return messages.categoryAdded(category)
   } catch (error) {

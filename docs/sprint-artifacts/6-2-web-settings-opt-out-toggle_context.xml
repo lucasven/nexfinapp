@@ -1,0 +1,675 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>6-2-web-settings-opt-out-toggle</story-id>
+    <story-title>Web Settings Opt-Out Toggle</story-title>
+    <epic-id>6</epic-id>
+    <epic-title>User Preferences &amp; Web Integration</epic-title>
+    <generated-date>2025-11-24</generated-date>
+    <context-version>1.0</context-version>
+  </metadata>
+
+  <story-overview>
+    <description>
+      Implement a web-based toggle switch in the Settings page that allows users to opt-out of
+      re-engagement messages (goodbye messages and weekly reviews) without needing WhatsApp.
+      The toggle provides a seamless, responsive UI with optimistic updates and proper error handling.
+    </description>
+
+    <acceptance-criteria>
+      <criterion id="AC-6.2.1">
+        User navigates to /[locale]/settings/account and sees a "Notification Preferences" Card
+        with a Switch component for "Re-engagement Messages". Switch reflects current reengagement_opt_out
+        state (inverted for UX - checked means notifications enabled).
+      </criterion>
+      <criterion id="AC-6.2.2">
+        User clicks Switch to disable re-engagement messages. On success: Switch stays in new position,
+        success toast displayed, database updated with reengagement_opt_out = true, PostHog event
+        'engagement_preference_changed' tracked with source: 'web'.
+      </criterion>
+      <criterion id="AC-6.2.3">
+        Server action fails during preference update. Switch reverts to previous position, error toast
+        displayed, user can retry operation.
+      </criterion>
+      <criterion id="AC-6.2.4">
+        UI update appears within 200ms (optimistic UI), server confirmation completes within 2 seconds.
+      </criterion>
+      <criterion id="AC-6.2.5">
+        Notification Preferences Card includes info note distinguishing re-engagement messages from
+        onboarding tips, explaining this preference only affects goodbye and weekly review messages.
+      </criterion>
+    </acceptance-criteria>
+
+    <key-technical-requirements>
+      <requirement>Create Radix UI Switch component wrapper</requirement>
+      <requirement>Implement optimistic UI with error rollback</requirement>
+      <requirement>Server action with authentication and error handling</requirement>
+      <requirement>PostHog event tracking for preference changes</requirement>
+      <requirement>Bilingual support (pt-BR and en)</requirement>
+      <requirement>Accessibility compliance (keyboard navigation, ARIA attributes)</requirement>
+    </key-technical-requirements>
+  </story-overview>
+
+  <architecture-context>
+    <database-schema>
+      <table name="user_profiles">
+        <column name="id" type="UUID" primary-key="true"/>
+        <column name="user_id" type="UUID" foreign-key="auth.users.id"/>
+        <column name="reengagement_opt_out" type="BOOLEAN" default="false">
+          <comment>
+            If true, user has opted out of re-engagement messages (goodbye, weekly review).
+            Onboarding tips still allowed.
+          </comment>
+          <migration>fe/scripts/034_engagement_system.sql:121</migration>
+        </column>
+        <column name="display_name" type="TEXT"/>
+        <column name="locale" type="TEXT"/>
+        <column name="updated_at" type="TIMESTAMPTZ"/>
+      </table>
+    </database-schema>
+
+    <data-flow>
+      <step order="1">User clicks Switch component</step>
+      <step order="2">React state updates immediately (optimistic UI, &lt;200ms)</step>
+      <step order="3">Server action updateNotificationPreferences() called in background</step>
+      <step order="4">Server authenticates user via Supabase auth.getUser()</step>
+      <step order="5">Database update: user_profiles.reengagement_opt_out</step>
+      <step order="6">revalidatePath('/[locale]/settings/account') called</step>
+      <step order="7">
+        Success path: Display success toast, track PostHog event
+        Failure path: Revert Switch state, display error toast
+      </step>
+    </data-flow>
+
+    <integration-points>
+      <integration type="database">
+        <description>Shares reengagement_opt_out column with Story 6.1 (WhatsApp commands)</description>
+        <table>user_profiles.reengagement_opt_out</table>
+        <access-pattern>Direct update via Supabase server client</access-pattern>
+      </integration>
+
+      <integration type="analytics">
+        <description>PostHog event tracking for preference changes</description>
+        <event>engagement_preference_changed</event>
+        <properties>
+          <property name="user_id" type="string"/>
+          <property name="preference" type="string" values="opted_out|opted_in"/>
+          <property name="source" type="string" value="web"/>
+          <property name="timestamp" type="string" format="ISO-8601"/>
+        </properties>
+      </integration>
+
+      <integration type="engagement-system">
+        <description>Epic 5 scheduler respects opt-out preference</description>
+        <service>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</service>
+        <filter>.eq('user_profiles.reengagement_opt_out', false)</filter>
+      </integration>
+    </integration-points>
+  </architecture-context>
+
+  <existing-code-context>
+    <ui-components>
+      <component name="Card" path="fe/components/ui/card.tsx">
+        <exports>Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction</exports>
+        <usage-pattern>
+          <![CDATA[
+<Card>
+  <CardHeader>
+    <CardTitle>Title Here</CardTitle>
+    <CardDescription>Description here</CardDescription>
+  </CardHeader>
+  <CardContent>
+    {/* Content */}
+  </CardContent>
+</Card>
+          ]]>
+        </usage-pattern>
+      </component>
+
+      <component name="Label" path="fe/components/ui/label.tsx">
+        <description>Radix UI label wrapper for accessibility</description>
+        <based-on>@radix-ui/react-label</based-on>
+      </component>
+
+      <component name="Switch" path="fe/components/ui/switch.tsx" status="NEEDS_CREATION">
+        <description>Radix UI Switch component wrapper - DOES NOT EXIST YET</description>
+        <package>@radix-ui/react-switch@1.1.2</package>
+        <note>Package installed but component wrapper needs to be created</note>
+        <reference-implementation>fe/components/ui/checkbox.tsx (similar Radix pattern)</reference-implementation>
+      </component>
+
+      <component name="Toast" library="sonner@1.7.4">
+        <import>import { toast } from "sonner"</import>
+        <usage>
+          <![CDATA[
+toast.success("Success message")
+toast.error("Error message")
+          ]]>
+        </usage>
+        <toaster-location>fe/app/[locale]/landing/layout.tsx</toaster-location>
+      </component>
+
+      <component name="Button" path="fe/components/ui/button.tsx">
+        <variants>default, destructive, outline, secondary, ghost, link</variants>
+        <sizes>default, sm, lg, icon, icon-sm, icon-lg</sizes>
+      </component>
+    </ui-components>
+
+    <settings-page>
+      <location>fe/app/[locale]/settings/account/page.tsx</location>
+      <type>Client Component ("use client")</type>
+
+      <current-structure>
+        <section order="1">Account Information</section>
+        <section order="2">Your Data (with data summary)</section>
+        <section order="3">LGPD Data Rights (blue border)</section>
+        <section order="4">Danger Zone (red border, delete account)</section>
+      </current-structure>
+
+      <insertion-point>
+        Add new "Notification Preferences" Card between "Your Data" and "LGPD Data Rights"
+      </insertion-point>
+
+      <card-styling-patterns>
+        <pattern type="default">Standard border</pattern>
+        <pattern type="info">border-blue-200 dark:border-blue-900</pattern>
+        <pattern type="danger">border-destructive</pattern>
+      </card-styling-patterns>
+    </settings-page>
+
+    <server-actions>
+      <example-action path="fe/lib/actions/profile.ts">
+        <pattern>
+          <![CDATA[
+"use server"
+
+import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { revalidatePath } from "next/cache"
+
+export async function updateProfile(data: UpdateData) {
+  const supabase = await getSupabaseServerClient()
+
+  // Authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  // Database update
+  const { data: profile, error } = await supabase
+    .from("user_profiles")
+    .update({
+      ...data,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  // Revalidate cache
+  revalidatePath("/profile")
+  return profile
+}
+          ]]>
+        </pattern>
+      </example-action>
+
+      <new-action-needed>
+        <name>updateReengagementOptOut</name>
+        <location>fe/lib/actions/profile.ts (add to existing file)</location>
+        <signature>updateReengagementOptOut(optOut: boolean): Promise&lt;UserProfile&gt;</signature>
+      </new-action-needed>
+
+      <authentication-pattern>
+        <![CDATA[
+const supabase = await getSupabaseServerClient()
+const { data: { user } } = await supabase.auth.getUser()
+if (!user) throw new Error("Not authenticated")
+        ]]>
+      </authentication-pattern>
+
+      <revalidation-pattern>
+        <usage>Always call after data mutations</usage>
+        <example>revalidatePath("/settings/account")</example>
+        <example>revalidatePath("/", "layout")</example>
+      </revalidation-pattern>
+    </server-actions>
+
+    <localization>
+      <files>
+        <file path="fe/lib/localization/pt-br.ts" lines="364-398">
+          <section>settings.account</section>
+          <add-new-section>settings.notifications</add-new-section>
+        </file>
+        <file path="fe/lib/localization/en.ts" lines="364-398">
+          <section>settings.account</section>
+          <add-new-section>settings.notifications</add-new-section>
+        </file>
+        <file path="fe/lib/localization/types.ts">
+          <update-interface>LocalizationStrings</update-interface>
+        </file>
+      </files>
+
+      <keys-to-add>
+        <key path="settings.notifications.title">
+          <pt-br>Notificações e Preferências</pt-br>
+          <en>Notifications &amp; Preferences</en>
+        </key>
+        <key path="settings.notifications.description">
+          <pt-br>Gerencie como nos comunicamos com você</pt-br>
+          <en>Manage how we communicate with you</en>
+        </key>
+        <key path="settings.notifications.reengagement.title">
+          <pt-br>Mensagens de Re-engajamento</pt-br>
+          <en>Re-engagement Messages</en>
+        </key>
+        <key path="settings.notifications.reengagement.description">
+          <pt-br>Receba mensagens após períodos de inatividade</pt-br>
+          <en>Receive messages after periods of inactivity</en>
+        </key>
+        <key path="settings.notifications.reengagement.optOutLabel">
+          <pt-br>Não enviar mensagens de re-engajamento</pt-br>
+          <en>Do not send re-engagement messages</en>
+        </key>
+        <key path="settings.notifications.reengagement.optOutDescription">
+          <pt-br>Se marcado, você não receberá mensagens quando estiver inativo por 14 dias</pt-br>
+          <en>If checked, you will not receive messages when inactive for 14 days</en>
+        </key>
+        <key path="settings.notifications.reengagement.infoNote">
+          <pt-br>Nota: Esta preferência não afeta as dicas de integração que você recebe ao completar níveis.</pt-br>
+          <en>Note: This preference does not affect onboarding tips you receive when completing tiers.</en>
+        </key>
+        <key path="settings.notifications.reengagement.updateSuccess">
+          <pt-br>Preferências atualizadas com sucesso</pt-br>
+          <en>Preferences updated successfully</en>
+        </key>
+        <key path="settings.notifications.reengagement.updateError">
+          <pt-br>Erro ao atualizar preferências</pt-br>
+          <en>Error updating preferences</en>
+        </key>
+      </keys-to-add>
+
+      <usage-pattern>
+        <![CDATA[
+import { useTranslations } from "next-intl"
+
+const t = useTranslations()
+// Access: t("settings.notifications.title")
+        ]]>
+      </usage-pattern>
+    </localization>
+
+    <analytics>
+      <tracker-file>fe/lib/analytics/tracker.ts</tracker-file>
+      <events-file>fe/lib/analytics/events.ts</events-file>
+
+      <usage-pattern>
+        <![CDATA[
+import { trackEvent } from '@/lib/analytics/tracker'
+import { AnalyticsEvent } from '@/lib/analytics/events'
+
+trackEvent(AnalyticsEvent.PROFILE_UPDATED, {
+  changed_fields: ['reengagement_opt_out'],
+  reengagement_opt_out: true,
+})
+        ]]>
+      </usage-pattern>
+
+      <new-event-needed>
+        <name>REENGAGEMENT_OPT_OUT_TOGGLED</name>
+        <location>fe/lib/analytics/events.ts (add to AnalyticsEvent enum, line ~55)</location>
+        <value>'reengagement_opt_out_toggled'</value>
+        <properties>
+          <property name="opt_out" type="boolean"/>
+          <property name="source" type="string" value="web"/>
+        </properties>
+      </new-event-needed>
+
+      <posthog-initialization>
+        <file>fe/instrumentation-client.ts</file>
+        <provider>fe/app/providers.tsx (PostHogProvider)</provider>
+        <auto-tracking>Pageviews tracked automatically</auto-tracking>
+      </posthog-initialization>
+    </analytics>
+
+    <supabase-integration>
+      <server-client>
+        <file>fe/lib/supabase/server.ts</file>
+        <function>getSupabaseServerClient()</function>
+        <usage>
+          <![CDATA[
+const supabase = await getSupabaseServerClient()
+const { data: { user } } = await supabase.auth.getUser()
+          ]]>
+        </usage>
+      </server-client>
+
+      <browser-client>
+        <file>fe/lib/supabase/client.ts</file>
+        <function>getSupabaseBrowserClient()</function>
+        <note>Use for reading data in client components</note>
+      </browser-client>
+
+      <query-pattern>
+        <![CDATA[
+const { data, error } = await supabase
+  .from("user_profiles")
+  .update({ reengagement_opt_out: optOut })
+  .eq("user_id", user.id)
+  .select()
+  .single()
+        ]]>
+      </query-pattern>
+    </supabase-integration>
+
+    <type-definitions>
+      <file>fe/lib/types.ts</file>
+      <interface name="UserProfile">
+        <existing-fields>
+          id, user_id, display_name, locale, onboarding_completed,
+          onboarding_step, whatsapp_setup_completed, first_category_added,
+          first_expense_added, created_at, updated_at
+        </existing-fields>
+        <field-to-add>
+          <name>reengagement_opt_out</name>
+          <type>boolean | undefined</type>
+        </field-to-add>
+      </interface>
+    </type-definitions>
+  </existing-code-context>
+
+  <implementation-patterns>
+    <optimistic-ui-pattern>
+      <description>
+        Update UI immediately (optimistic update) while server action runs in background.
+        On failure, revert to previous state.
+      </description>
+
+      <code-example>
+        <![CDATA[
+const [optOut, setOptOut] = useState(initialOptOut)
+const [previousOptOut, setPreviousOptOut] = useState(initialOptOut)
+const [isUpdating, setIsUpdating] = useState(false)
+
+const handleToggle = async (checked: boolean) => {
+  // Save previous state for rollback
+  setPreviousOptOut(optOut)
+
+  // Optimistic update
+  setOptOut(checked)
+  setIsUpdating(true)
+
+  try {
+    await updateReengagementOptOut(checked)
+
+    // Track analytics
+    trackEvent(AnalyticsEvent.REENGAGEMENT_OPT_OUT_TOGGLED, {
+      opt_out: checked,
+      source: 'web'
+    })
+
+    toast.success(t('settings.notifications.reengagement.updateSuccess'))
+  } catch (error) {
+    // Rollback on error
+    setOptOut(previousOptOut)
+    toast.error(t('settings.notifications.reengagement.updateError'))
+  } finally {
+    setIsUpdating(false)
+  }
+}
+        ]]>
+      </code-example>
+
+      <performance-requirements>
+        <optimistic-ui>< 200ms perceived latency</optimistic-ui>
+        <server-confirmation>< 2 seconds</server-confirmation>
+      </performance-requirements>
+    </optimistic-ui-pattern>
+
+    <accessibility-requirements>
+      <keyboard-navigation>
+        <action>Tab key</action>
+        <description>Focus Switch component</description>
+      </keyboard-navigation>
+      <keyboard-navigation>
+        <action>Space key</action>
+        <description>Toggle Switch</description>
+      </keyboard-navigation>
+      <aria-attributes>
+        <attribute name="role">switch</attribute>
+        <attribute name="aria-checked">true|false</attribute>
+        <attribute name="aria-label">Switch label text</attribute>
+      </aria-attributes>
+      <focus-styling>
+        <requirement>focus-visible ring for keyboard users</requirement>
+        <requirement>No ring on mouse click (only keyboard focus)</requirement>
+      </focus-styling>
+      <color-contrast>
+        <requirement>WCAG AA compliance (4.5:1 minimum)</requirement>
+      </color-contrast>
+    </accessibility-requirements>
+
+    <error-handling-strategy>
+      <scenario type="unauthenticated-user">
+        <detection>Server action checks auth.getUser()</detection>
+        <response>Throw error, caught by client, show error toast</response>
+        <fallback>Redirect to login (handled by page-level auth)</fallback>
+      </scenario>
+
+      <scenario type="database-unavailable">
+        <detection>Supabase update returns error</detection>
+        <response>Revert Switch to previous state, show error toast</response>
+        <retry>User can manually retry by clicking Switch again</retry>
+      </scenario>
+
+      <scenario type="network-timeout">
+        <detection>Fetch timeout or network error</detection>
+        <response>Same as database-unavailable</response>
+      </scenario>
+
+      <scenario type="posthog-tracking-fails">
+        <detection>PostHog capture throws error</detection>
+        <response>Log warning but don't fail preference update (non-critical)</response>
+      </scenario>
+    </error-handling-strategy>
+  </implementation-patterns>
+
+  <cross-story-dependencies>
+    <dependency type="completed" story-id="6-1">
+      <title>WhatsApp Opt-Out/Opt-In Commands</title>
+      <shared-resource>user_profiles.reengagement_opt_out column</shared-resource>
+      <shared-event>engagement_preference_changed PostHog event (different source value)</shared-event>
+      <note>Both stories write to same database column - single source of truth</note>
+    </dependency>
+
+    <dependency type="future" story-id="6-3">
+      <title>Cross-Channel Preference Sync</title>
+      <requirement>Changes made in web UI must be visible in WhatsApp handler within 5s</requirement>
+    </dependency>
+
+    <dependency type="future" story-id="6-4">
+      <title>Opt-Out Respect in Engagement System</title>
+      <requirement>Epic 5 scheduler must respect opt-out preference set via web</requirement>
+      <verification>Story 6.4 will add explicit tests</verification>
+    </dependency>
+
+    <dependency type="completed" story-id="5-1">
+      <title>Daily Engagement Job</title>
+      <integration>Scheduler already filters opted-out users</integration>
+      <code-location>whatsapp-bot/src/services/scheduler/daily-engagement-job.ts</code-location>
+      <filter>.eq('user_profiles.reengagement_opt_out', false)</filter>
+    </dependency>
+  </cross-story-dependencies>
+
+  <testing-guidance>
+    <unit-tests>
+      <test-file path="fe/__tests__/components/ui/switch.test.tsx" status="NEW">
+        <test>Switch renders in checked state</test>
+        <test>Switch renders in unchecked state</test>
+        <test>Switch calls onCheckedChange on click</test>
+        <test>Switch supports keyboard navigation (Tab, Space)</test>
+        <test>Switch has correct ARIA attributes</test>
+        <test>Switch disabled state prevents interaction</test>
+      </test-file>
+
+      <test-file path="fe/__tests__/components/settings/notification-preferences.test.tsx" status="NEW">
+        <test>Card renders with current preference</test>
+        <test>Switch toggles optimistically on click</test>
+        <test>Success toast shows on server action success</test>
+        <test>Error toast shows on server action failure</test>
+        <test>Switch reverts on server action failure</test>
+        <test>PostHog event tracked after success</test>
+        <test>Info note is visible</test>
+      </test-file>
+
+      <test-file path="fe/__tests__/actions/profile.test.ts" status="MODIFIED">
+        <test>updateReengagementOptOut: authenticated user can update</test>
+        <test>updateReengagementOptOut: unauthenticated returns error</test>
+        <test>updateReengagementOptOut: database success returns profile</test>
+        <test>updateReengagementOptOut: database failure throws error</test>
+        <test>updateReengagementOptOut: revalidatePath called after success</test>
+      </test-file>
+    </unit-tests>
+
+    <integration-tests>
+      <test-file path="fe/__tests__/integration/settings-notification-preferences.test.tsx" status="NEW">
+        <test>User navigates to settings page, sees Notification Preferences Card</test>
+        <test>User toggles Switch to disable notifications, sees success toast, preference persisted</test>
+        <test>User toggles Switch with server error, sees error toast, Switch reverts</test>
+        <test>User refreshes page, Switch reflects saved preference</test>
+        <test>Optimistic UI updates within 200ms</test>
+      </test-file>
+    </integration-tests>
+
+    <manual-qa-checklist>
+      <test>Navigate to /[locale]/settings/account in both pt-BR and en</test>
+      <test>Verify Notification Preferences Card visible</test>
+      <test>Click Switch to disable notifications → verify success toast</test>
+      <test>Check database: reengagement_opt_out = true</test>
+      <test>Check PostHog: event 'engagement_preference_changed' with source: 'web'</test>
+      <test>Refresh page → verify Switch reflects opt-out state</test>
+      <test>Click Switch to enable notifications → verify opt-in</test>
+      <test>Test with database unavailable (mock) → verify error handling</test>
+      <test>Test keyboard navigation (Tab to Switch, Space to toggle)</test>
+      <test>Test screen reader announces "On" / "Off"</test>
+    </manual-qa-checklist>
+  </testing-guidance>
+
+  <file-checklist>
+    <files-to-create>
+      <file path="fe/components/ui/switch.tsx">
+        Radix UI Switch component wrapper with Tailwind styling
+      </file>
+    </files-to-create>
+
+    <files-to-modify>
+      <file path="fe/app/[locale]/settings/account/page.tsx">
+        Add Notification Preferences Card with Switch toggle
+      </file>
+      <file path="fe/lib/actions/profile.ts">
+        Add updateReengagementOptOut server action
+      </file>
+      <file path="fe/lib/localization/pt-br.ts">
+        Add settings.notifications translation keys
+      </file>
+      <file path="fe/lib/localization/en.ts">
+        Add settings.notifications translation keys
+      </file>
+      <file path="fe/lib/localization/types.ts">
+        Update LocalizationStrings interface
+      </file>
+      <file path="fe/lib/analytics/events.ts">
+        Add REENGAGEMENT_OPT_OUT_TOGGLED event constant
+      </file>
+      <file path="fe/lib/types.ts">
+        Add reengagement_opt_out field to UserProfile interface
+      </file>
+    </files-to-modify>
+
+    <test-files-to-create>
+      <file path="fe/__tests__/components/ui/switch.test.tsx">Switch component tests (6 tests)</file>
+      <file path="fe/__tests__/components/settings/notification-preferences.test.tsx">
+        Notification preferences component tests (7 tests)
+      </file>
+      <file path="fe/__tests__/integration/settings-notification-preferences.test.tsx">
+        Integration tests (5 tests)
+      </file>
+    </test-files-to-create>
+
+    <test-files-to-modify>
+      <file path="fe/__tests__/actions/profile.test.ts">
+        Add updateReengagementOptOut tests (5 tests)
+      </file>
+    </test-files-to-modify>
+  </file-checklist>
+
+  <implementation-notes>
+    <note priority="high">
+      CREATE Switch component first - it's a dependency for the main feature
+    </note>
+
+    <note priority="high">
+      State inversion: Database stores reengagement_opt_out (true = opted out),
+      UI shows "notifications enabled" (checked = receive notifications).
+      Invert in component logic for better UX.
+    </note>
+
+    <note priority="medium">
+      Info note MUST distinguish re-engagement messages from onboarding tips.
+      Users need to understand this toggle only affects goodbye/weekly review messages.
+    </note>
+
+    <note priority="medium">
+      PostHog tracking failure should NOT fail the preference update.
+      Wrap trackEvent in try-catch and log warning only.
+    </note>
+
+    <note priority="low">
+      Card styling: Use default border (no special color) for Notification Preferences.
+      It's neither danger zone nor special feature highlight.
+    </note>
+
+    <note priority="low">
+      Consider adding Bell icon from lucide-react for visual consistency
+      (import { Bell } from 'lucide-react')
+    </note>
+  </implementation-notes>
+
+  <definition-of-done>
+    <item>Switch component created with Radix UI wrapper</item>
+    <item>Notification Preferences Card added to settings page</item>
+    <item>Server action created with authentication and error handling</item>
+    <item>Localization messages added for pt-BR and en</item>
+    <item>PostHog event tracking implemented</item>
+    <item>Type definitions updated</item>
+    <item>Optimistic UI with error rollback working</item>
+    <item>All unit tests passing (18 tests)</item>
+    <item>All integration tests passing (5 tests)</item>
+    <item>Manual QA checklist completed</item>
+    <item>Accessibility requirements verified (keyboard navigation, ARIA, contrast)</item>
+    <item>Performance requirements met (&lt;200ms optimistic, &lt;2s server confirmation)</item>
+    <item>Code follows existing patterns from settings page and profile actions</item>
+    <item>No ESLint errors or warnings</item>
+  </definition-of-done>
+
+  <references>
+    <reference type="tech-spec">
+      docs/sprint-artifacts/tech-spec-epic-6.md#AC-6.2-Web-Settings-Toggle
+    </reference>
+    <reference type="tech-spec">
+      docs/sprint-artifacts/tech-spec-epic-6.md#Detailed-Design-Switch-Component
+    </reference>
+    <reference type="tech-spec">
+      docs/sprint-artifacts/tech-spec-epic-6.md#Web-Server-Action-API
+    </reference>
+    <reference type="project-docs">
+      CLAUDE.md#Frontend-Development
+    </reference>
+    <reference type="related-story">
+      docs/sprint-artifacts/6-1-whatsapp-opt-out-opt-in-commands.md#PostHog-Event-Schema
+    </reference>
+    <reference type="migration">
+      fe/scripts/034_engagement_system.sql:121 (reengagement_opt_out column)
+    </reference>
+  </references>
+</story-context>

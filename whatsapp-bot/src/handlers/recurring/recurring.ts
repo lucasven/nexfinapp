@@ -4,6 +4,7 @@ import { ParsedIntent } from '../../types.js'
 import { messages } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { storeUndoState } from '../core/undo.js'
+import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
 
 export async function handleAddRecurring(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {
@@ -61,6 +62,10 @@ export async function handleAddRecurring(whatsappNumber: string, intent: ParsedI
 
     // Generate payments for the next 3 months
     await generateRecurringPayments(session.userId, data.id, dayOfMonth)
+
+    // Story 3.2: Track tier action for add_recurring (AC-3.2.6)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    trackTierAction(session.userId, 'add_recurring')
 
     return messages.recurringAdded(amount, categoryName, dayOfMonth)
   } catch (error) {

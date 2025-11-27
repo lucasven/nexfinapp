@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story-key="3-5-skip-onboarding-command" generated="2025-11-22">
+  <story>
+    <title>Skip Onboarding Command</title>
+    <epic>3 - Progressive Tier Journey</epic>
+    <objective>Allow users to disable/enable onboarding tips via WhatsApp commands</objective>
+  </story>
+
+  <acceptance-criteria>
+    <criterion id="AC-3.5.1">"parar dicas" or "stop tips" disables tips, sends confirmation</criterion>
+    <criterion id="AC-3.5.2">"ativar dicas" or "enable tips" re-enables tips, sends confirmation</criterion>
+    <criterion id="AC-3.5.3">With tips disabled, tier completions tracked but NOT celebrated</criterion>
+    <criterion id="AC-3.5.4">Tip preference is separate from re-engagement opt-out (FR28-32)</criterion>
+    <criterion id="AC-3.5.5">Command matching is case-insensitive</criterion>
+  </acceptance-criteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/stories/tech-spec-epic-3.md" relevance="high">Opt-out handler specification</doc>
+      <doc path="docs/prd.md" relevance="medium">FR10: Users can explicitly skip onboarding guidance</doc>
+    </docs>
+
+    <code>
+      <file path="whatsapp-bot/src/handlers/engagement/opt-out-handler.ts" relevance="high">
+        <purpose>Target file - implement tip opt-out commands</purpose>
+        <current-state>Stub from Epic 1</current-state>
+        <functions>handleTipOptOut, isTipCommand</functions>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/core/text-handler.ts" relevance="medium">
+        <purpose>Integration point - check for tip commands early</purpose>
+      </file>
+
+      <file path="whatsapp-bot/src/localization/pt-br.ts" relevance="high">
+        <purpose>Confirmation messages</purpose>
+        <keys>engagementTipsDisabled, engagementTipsEnabled</keys>
+      </file>
+
+      <file path="whatsapp-bot/src/localization/en.ts" relevance="high">
+        <purpose>English confirmation messages</purpose>
+      </file>
+    </code>
+
+    <dependencies>
+      <dependency>services/database/supabase-client.ts - Database updates</dependency>
+      <dependency>localization/*.ts - Confirmation messages</dependency>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <function name="handleTipOptOut" location="opt-out-handler.ts">
+      <param name="userId" type="string">User ID</param>
+      <param name="messageText" type="string">Raw message text</param>
+      <param name="locale" type="'pt-br' | 'en'">User's preferred language</param>
+      <returns>string | null - Confirmation message or null if not a tip command</returns>
+    </function>
+
+    <function name="isTipCommand" location="opt-out-handler.ts">
+      <param name="messageText" type="string">Raw message text</param>
+      <returns>'disable' | 'enable' | null</returns>
+    </function>
+  </interfaces>
+
+  <command-patterns>
+    <pattern name="disable-patterns">
+      /parar\s*dicas/i
+      /stop\s*tips/i
+      /desativar\s*dicas/i
+      /disable\s*tips/i
+    </pattern>
+
+    <pattern name="enable-patterns">
+      /ativar\s*dicas/i
+      /enable\s*tips/i
+      /start\s*tips/i
+      /ligar\s*dicas/i
+    </pattern>
+  </command-patterns>
+
+  <database>
+    <table name="user_profiles">
+      <column name="onboarding_tips_enabled" type="BOOLEAN" constraint="DEFAULT true">
+        Tips preference - separate from reengagement_opt_out
+      </column>
+    </table>
+  </database>
+
+  <preference-separation>
+    <setting name="onboarding_tips_enabled" affects="Tier celebrations, contextual hints" default="true"/>
+    <setting name="reengagement_opt_out" affects="Goodbye messages, weekly reviews" default="false"/>
+    <note>Both default to opt-in. They are independent settings.</note>
+  </preference-separation>
+
+  <localization-keys>
+    <key name="engagementTipsDisabled" language="pt-BR">
+      Dicas desativadas. Envie 'ativar dicas' para reativar.
+    </key>
+    <key name="engagementTipsEnabled" language="pt-BR">
+      Dicas ativadas! Você receberá sugestões após ações.
+    </key>
+  </localization-keys>
+
+  <constraints>
+    <constraint type="pattern">Case-insensitive matching</constraint>
+    <constraint type="pattern">Handle early in message flow before NLP</constraint>
+    <constraint type="separation">Tips != re-engagement (different settings)</constraint>
+  </constraints>
+
+  <tests>
+    <test-file path="whatsapp-bot/src/__tests__/engagement/opt-out-handler.test.ts">
+      <test-case>"parar dicas" disables tips</test-case>
+      <test-case>"STOP TIPS" (uppercase) disables tips</test-case>
+      <test-case>"ativar dicas" enables tips</test-case>
+      <test-case>"desativar dicas" disables tips</test-case>
+      <test-case>"disable tips" disables tips</test-case>
+      <test-case>Non-matching text returns null</test-case>
+      <test-case>Tier completion with tips disabled - no celebration</test-case>
+      <test-case>Tips setting independent of reengagement opt-out</test-case>
+    </test-file>
+  </tests>
+
+  <implementation-notes>
+    <note>Check for tip command before NLP processing in message handler</note>
+    <note>Return confirmation immediately without further processing</note>
+    <note>areTipsEnabled() in tier-tracker reads this setting</note>
+    <note>Epic 6 has re-engagement opt-out - keep them separate</note>
+  </implementation-notes>
+</story-context>

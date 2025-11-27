@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,15 @@ export default function WelcomePage() {
   const [whatsappNumbers, setWhatsappNumbers] = useState<AuthorizedWhatsAppNumber[]>([])
   const [loading, setLoading] = useState(false)
 
+  const loadWhatsAppNumbers = useCallback(async () => {
+    try {
+      const numbers = await getAuthorizedNumbers()
+      setWhatsappNumbers(numbers)
+    } catch (error) {
+      console.error("Error loading WhatsApp numbers:", error)
+    }
+  }, [])
+
   useEffect(() => {
     // Track page view
     trackEvent(AnalyticsEvent.ONBOARDING_STARTED, {
@@ -26,16 +35,7 @@ export default function WelcomePage() {
     })
 
     loadWhatsAppNumbers()
-  }, [])
-
-  const loadWhatsAppNumbers = async () => {
-    try {
-      const numbers = await getAuthorizedNumbers()
-      setWhatsappNumbers(numbers)
-    } catch (error) {
-      console.error("Error loading WhatsApp numbers:", error)
-    }
-  }
+  }, [loadWhatsAppNumbers])
 
   const handleGetStarted = async () => {
     setLoading(true)

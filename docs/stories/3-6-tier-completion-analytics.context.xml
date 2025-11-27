@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story-key="3-6-tier-completion-analytics" generated="2025-11-22">
+  <story>
+    <title>Tier Completion Analytics</title>
+    <epic>3 - Progressive Tier Journey</epic>
+    <objective>Track tier completion events in PostHog for funnel analysis</objective>
+  </story>
+
+  <acceptance-criteria>
+    <criterion id="AC-3.6.1">Tier completion fires PostHog event 'onboarding_tier_completed'</criterion>
+    <criterion id="AC-3.6.2">Event includes: tier, completed_at, time_to_complete_days, days_since_signup</criterion>
+    <criterion id="AC-3.6.3">Analytics can calculate T1→T2 conversion rate from events</criterion>
+    <criterion id="AC-3.6.4">Analytics can calculate average time per tier from events</criterion>
+  </acceptance-criteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/stories/tech-spec-epic-3.md" relevance="high">Analytics event specification</doc>
+      <doc path="docs/prd.md" relevance="high">Success metrics - tier completion rates</doc>
+      <doc path="docs/architecture.md" relevance="medium">Observability requirements</doc>
+    </docs>
+
+    <code>
+      <file path="whatsapp-bot/src/handlers/engagement/tier-progress-handler.ts" relevance="high">
+        <purpose>Add PostHog capture on tier completion</purpose>
+      </file>
+
+      <file path="whatsapp-bot/src/services/onboarding/tier-tracker.ts" relevance="high">
+        <purpose>Provides tier completion data for event payload</purpose>
+      </file>
+
+      <file path="whatsapp-bot/src/services/analytics/posthog.ts" relevance="high">
+        <purpose>PostHog client - use posthog.capture()</purpose>
+      </file>
+    </code>
+
+    <dependencies>
+      <dependency>posthog-node - PostHog client (already in package.json)</dependency>
+      <dependency>services/onboarding/tier-tracker.ts - getTierProgress</dependency>
+    </dependencies>
+  </artifacts>
+
+  <event-specification>
+    <event name="onboarding_tier_completed">
+      <property name="tier" type="number">1, 2, or 3</property>
+      <property name="completed_at" type="string">ISO timestamp</property>
+      <property name="time_to_complete_days" type="number">Days from previous milestone</property>
+      <property name="days_since_signup" type="number">Days from user creation</property>
+      <property name="previous_tier_completed_at" type="string | undefined">For T2/T3 calculations</property>
+    </event>
+  </event-specification>
+
+  <time-calculations>
+    <calculation name="time_to_complete_days" for="tier1">
+      Days from user.created_at to tier1.completed_at
+    </calculation>
+    <calculation name="time_to_complete_days" for="tier2">
+      Days from tier1.completed_at to tier2.completed_at (or created_at if T1 not done)
+    </calculation>
+    <calculation name="time_to_complete_days" for="tier3">
+      Days from tier2.completed_at to tier3.completed_at (or created_at if T2 not done)
+    </calculation>
+  </time-calculations>
+
+  <prd-metrics-alignment>
+    <metric name="Tier 1 Completion Rate" target="80%">
+      PostHog: Count of tier=1 events / Total users
+    </metric>
+    <metric name="Tier Progression T1→T2" target="80%">
+      PostHog: Count of tier=2 events / Count of tier=1 events
+    </metric>
+    <metric name="Tier Progression T2→T3" target="60%">
+      PostHog: Count of tier=3 events / Count of tier=2 events
+    </metric>
+  </prd-metrics-alignment>
+
+  <constraints>
+    <constraint type="analytics">Event fired AFTER tier completion confirmed</constraint>
+    <constraint type="analytics">Include user_id for cohort analysis</constraint>
+    <constraint type="idempotent">Only fire once per tier completion</constraint>
+  </constraints>
+
+  <code-example>
+    import { posthog } from '../services/analytics/posthog.js'
+
+    async function fireTierCompletionEvent(
+      userId: string,
+      tier: 1 | 2 | 3,
+      progress: TierProgress,
+      userCreatedAt: Date
+    ): Promise&lt;void&gt; {
+      const completedAt = new Date()
+      const timeToComplete = calculateTimeToComplete(tier, progress, userCreatedAt)
+      const daysSinceSignup = calculateDaysSinceSignup(userCreatedAt)
+
+      posthog.capture({
+        distinctId: userId,
+        event: 'onboarding_tier_completed',
+        properties: {
+          tier,
+          completed_at: completedAt.toISOString(),
+          time_to_complete_days: timeToComplete,
+          days_since_signup: daysSinceSignup,
+        }
+      })
+    }
+  </code-example>
+
+  <tests>
+    <test-file path="whatsapp-bot/src/__tests__/engagement/tier-analytics.test.ts">
+      <test-case>Tier 1 completion fires PostHog event</test-case>
+      <test-case>Tier 2 completion fires PostHog event</test-case>
+      <test-case>Tier 3 completion fires PostHog event</test-case>
+      <test-case>Event payload contains all required fields</test-case>
+      <test-case>time_to_complete_days calculation correct for T1</test-case>
+      <test-case>time_to_complete_days calculation correct for T2 (from T1)</test-case>
+      <test-case>time_to_complete_days handles missing previous tier</test-case>
+      <test-case>days_since_signup calculation correct</test-case>
+    </test-file>
+  </tests>
+
+  <implementation-notes>
+    <note>PostHog client already configured in whatsapp-bot</note>
+    <note>Fire event in handleTierCompletion after message queuing</note>
+    <note>Analytics event fires regardless of tips setting (for complete data)</note>
+    <note>Use posthog.capture() with distinctId = userId</note>
+  </implementation-notes>
+</story-context>

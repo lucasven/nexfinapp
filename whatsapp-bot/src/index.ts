@@ -505,7 +505,7 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
 // Start this FIRST so Railway health checks pass even if WhatsApp connection fails
 const PORT = parseInt(process.env.PORT || '3001', 10)
 
-http.createServer(async (req: any, res: any) => {
+const server = http.createServer(async (req: any, res: any) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE')
@@ -865,17 +865,23 @@ http.createServer(async (req: any, res: any) => {
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'text/plain' })
   res.end('Not Found')
-}).listen(PORT, '0.0.0.0', () => {
-  console.log(`🏥 HTTP server running on port ${PORT}`)
-  console.log(`   Health check: http://0.0.0.0:${PORT}/health`)
-  
-  // Start the WhatsApp bot AFTER the health check server is ready
-  connectToWhatsApp().catch(error => {
-    console.error('⚠️ Error starting WhatsApp bot:', error)
-    console.error('   Health check server is still running')
-    // Don't exit - keep the server running for health checks
-  })
 })
+
+// Only start the HTTP server in non-test environments
+// This prevents port conflicts and resource usage during test runs
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🏥 HTTP server running on port ${PORT}`)
+    console.log(`   Health check: http://0.0.0.0:${PORT}/health`)
+
+    // Start the WhatsApp bot AFTER the health check server is ready
+    connectToWhatsApp().catch(error => {
+      console.error('⚠️ Error starting WhatsApp bot:', error)
+      console.error('   Health check server is still running')
+      // Don't exit - keep the server running for health checks
+    })
+  })
+}
 
 // Graceful shutdown handling
 process.on('SIGINT', async () => {
@@ -889,4 +895,13 @@ process.on('SIGTERM', async () => {
   await shutdownPostHog()
   process.exit(0)
 })
+
+/**
+ * Get the Baileys socket instance
+ * Used by message queue processor (Story 5.4)
+ * @returns The Baileys socket instance or null if not connected
+ */
+export function getSocket(): WASocket | null {
+  return sock
+}
 

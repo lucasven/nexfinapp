@@ -1,0 +1,196 @@
+<story-context id="4-2-activity-tracking-auto-reactivation" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>2</storyId>
+    <title>Activity Tracking & Auto-Reactivation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/4-2-activity-tracking-auto-reactivation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>to track user activity and auto-reactivate dormant users</iWant>
+    <soThat>any user message immediately brings them back to active state without manual intervention</soThat>
+    <tasks>
+      <task id="1" ac="1-5">Create activity-tracker.ts service file with trackActivity function and MessageContext interface</task>
+      <task id="2" ac="1">Implement last_activity_at update using upsert pattern with Supabase</task>
+      <task id="3" ac="2,3,4">Implement auto-reactivation logic for dormant and goodbye_sent states</task>
+      <task id="4" ac="4">Calculate unprompted return detection (3+ days since last activity)</task>
+      <task id="5" ac="1">Integrate with handlers/core/text-handler.ts - call trackActivity early in message processing</task>
+      <task id="6" ac="5">Performance optimization - keep under 50ms, non-blocking async pattern</task>
+      <task id="7" ac="1">Update services/engagement/index.ts exports</task>
+      <task id="8" ac="1-5">Write unit tests for all acceptance criteria</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.2.1">Every incoming message updates last_activity_at timestamp</criterion>
+    <criterion id="AC-4.2.2">User in dormant state sending any message transitions to active</criterion>
+    <criterion id="AC-4.2.3">User in goodbye_sent state sending non-response message transitions to active</criterion>
+    <criterion id="AC-4.2.4">Unprompted return (3+ days since last activity) logged in transition metadata</criterion>
+    <criterion id="AC-4.2.5">Activity tracking completes in less than 50ms (non-blocking)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-4.md</path>
+        <title>Epic 4 Technical Specification</title>
+        <section>Story 4.2: Activity Tracking & Auto-Reactivation</section>
+        <snippet>Implements FR18 (any message from dormant to active). Activity tracking service updates last_activity_at on every message and triggers auto-reactivation when state is dormant or goodbye_sent.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - Smart Onboarding & Engagement System</title>
+        <section>Integration Points: WhatsApp Bot to Engagement System</section>
+        <snippet>Message flow: Activity Tracker updates last_activity_at, then checks state - if DORMANT/GOODBYE_SENT, transitions to ACTIVE via state machine.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Novel Pattern Design: Engagement State Machine</section>
+        <snippet>DORMANT state transitions to ACTIVE on user_message trigger. GOODBYE_SENT can transition to ACTIVE on user_message (non-response) or process response via goodbye-handler.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>NexFinApp Epic Breakdown</title>
+        <section>Story 4.2: Activity Tracking & Auto-Reactivation</section>
+        <snippet>Track user activity and auto-reactivate dormant users. Unprompted return (3+ days) logged in metadata. Activity tracking must complete in under 50ms.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/4-1-state-machine-service-core.md</path>
+        <title>Story 4.1: State Machine Service Core</title>
+        <section>Implementation Pattern</section>
+        <snippet>Use transitionState(userId, trigger) for all state changes. State machine handles validation, logging, and side effects. This is the dependency for Story 4.2.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/activity-tracker.ts</path>
+        <kind>service</kind>
+        <symbol>checkAndRecordActivity, isFirstMessage, MessageContext, ActivityCheckResult</symbol>
+        <lines>1-270</lines>
+        <reason>EXISTING FILE - Contains Story 2.1 first message detection. Story 4.2 needs to EXTEND this file with auto-reactivation logic for dormant/goodbye_sent states.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/state-machine.ts</path>
+        <kind>service</kind>
+        <symbol>transitionState, getEngagementState, TransitionResult, TransitionOptions</symbol>
+        <lines>1-119</lines>
+        <reason>DEPENDENCY - Story 4.1 implements this. Activity tracker must call transitionState() to trigger dormant/goodbye_sent to active transitions. Currently has stub implementation.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/types.ts</path>
+        <kind>types</kind>
+        <symbol>EngagementState, TransitionTrigger, UserEngagementState, isValidTransition</symbol>
+        <lines>1-152</lines>
+        <reason>Type definitions for engagement states and transitions. Use these types in activity-tracker.ts implementation.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/handlers/core/text-handler.ts</path>
+        <kind>handler</kind>
+        <symbol>handleTextMessage, checkAndRecordActivity</symbol>
+        <lines>524-606</lines>
+        <reason>INTEGRATION POINT - Already calls checkAndRecordActivity at line 536. Story 4.2 may need to modify MessageContext or add isGoodbyeResponse detection logic here.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/index.ts</path>
+        <kind>module</kind>
+        <symbol>exports</symbol>
+        <reason>Export barrel file - ensure trackActivity and new types are exported.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/__tests__/engagement/activity-tracker.test.ts</path>
+        <kind>test</kind>
+        <symbol>Activity Tracker Tests</symbol>
+        <lines>1-201</lines>
+        <reason>EXISTING TESTS for Story 2.1. Story 4.2 tests should extend this file with dormant/goodbye_sent reactivation tests.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/database/supabase-client.ts</path>
+        <kind>service</kind>
+        <symbol>getSupabaseClient</symbol>
+        <reason>Database client - use for user_engagement_states table operations.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <node>
+        <package>@supabase/supabase-js</package>
+        <version>^2.39.3</version>
+        <purpose>Database access for user_engagement_states table</purpose>
+      </node>
+      <node>
+        <package>posthog-node</package>
+        <version>^5.11.2</version>
+        <purpose>Analytics events for unprompted returns and state transitions</purpose>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface>
+      <name>trackActivity</name>
+      <kind>function</kind>
+      <signature>async function trackActivity(userId: string, messageContext: { isGoodbyeResponse: boolean }): Promise&lt;void&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/activity-tracker.ts</path>
+      <note>NEW FUNCTION to implement - extends existing activity-tracker.ts</note>
+    </interface>
+    <interface>
+      <name>transitionState</name>
+      <kind>function</kind>
+      <signature>async function transitionState(options: TransitionOptions): Promise&lt;TransitionResult&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/state-machine.ts</path>
+      <note>DEPENDENCY from Story 4.1 - call with trigger='user_message' for auto-reactivation</note>
+    </interface>
+    <interface>
+      <name>checkAndRecordActivity</name>
+      <kind>function</kind>
+      <signature>async function checkAndRecordActivity(userId: string, context: MessageContext): Promise&lt;ActivityCheckResult&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/activity-tracker.ts</path>
+      <note>EXISTING - Called from text-handler.ts. May need to integrate auto-reactivation or call trackActivity internally.</note>
+    </interface>
+    <interface>
+      <name>user_engagement_states table</name>
+      <kind>database</kind>
+      <signature>id, user_id, state, last_activity_at, goodbye_sent_at, goodbye_expires_at, remind_at, created_at, updated_at</signature>
+      <path>fe/scripts/033_engagement_system.sql</path>
+      <note>Database table for engagement state - update last_activity_at via upsert</note>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint source="architecture.md">All state changes MUST go through transitionState() - never update state directly in database</constraint>
+    <constraint source="architecture.md">Activity tracking is on the critical path - must be fast and non-blocking</constraint>
+    <constraint source="tech-spec-epic-4.md">Performance target: Activity tracking completes in under 50ms</constraint>
+    <constraint source="tech-spec-epic-4.md">Use optimistic locking for concurrent state transitions</constraint>
+    <constraint source="epics.md">Goodbye responses (1, 2, 3) must NOT trigger auto-reactivation - let goodbye-handler process them</constraint>
+    <constraint source="architecture.md">Follow existing service patterns from services/onboarding/tier-tracker.ts</constraint>
+    <constraint source="architecture.md">Use non-blocking pattern in text-handler.ts - trackActivity().catch() for error handling</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Jest testing framework with TypeScript. Mock Supabase client using __mocks__/supabase.ts patterns.
+      Follow existing test patterns from __tests__/engagement/activity-tracker.test.ts (Story 2.1 tests).
+      Tests should be in describe/it blocks with clear AC references. Use mockQuerySuccess and mockQuerySequence helpers.
+    </standards>
+    <locations>
+      <location>whatsapp-bot/src/__tests__/engagement/activity-tracker.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/engagement/</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-4.2.1">Test that every message call to trackActivity updates last_activity_at timestamp in database</idea>
+      <idea ac="AC-4.2.2">Test dormant user sending message triggers transitionState with user_message trigger and transitions to active</idea>
+      <idea ac="AC-4.2.3">Test goodbye_sent user sending non-response message (isGoodbyeResponse=false) transitions to active</idea>
+      <idea ac="AC-4.2.3">Test goodbye_sent user sending response message (isGoodbyeResponse=true) does NOT auto-transition</idea>
+      <idea ac="AC-4.2.4">Test unprompted return detection: 3+ days since last activity sets metadata.unprompted_return=true</idea>
+      <idea ac="AC-4.2.4">Test return under 3 days does NOT set unprompted_return flag</idea>
+      <idea ac="AC-4.2.1">Test new user with no engagement state gets one created with state=active</idea>
+      <idea ac="AC-4.2.5">Test activity tracking performance (mock timing to verify sub-50ms patterns used)</idea>
+    </ideas>
+  </tests>
+</story-context>

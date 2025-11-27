@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story-key="2-1-first-message-detection" generated="2025-11-21">
+  <story>
+    <title>First Message Detection</title>
+    <epic>2 - Conversation-First Welcome</epic>
+    <objective>Detect first WhatsApp message and create engagement state record</objective>
+  </story>
+
+  <acceptance-criteria>
+    <criterion id="AC-2.1.1">First message creates user_engagement_states record with state='active'</criterion>
+    <criterion id="AC-2.1.2">isFirstMessage() returns false for returning users</criterion>
+    <criterion id="AC-2.1.3">last_activity_at updated on every message</criterion>
+    <criterion id="AC-2.1.4">Works for both individual and group messages</criterion>
+  </acceptance-criteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/stories/tech-spec-epic-2.md" relevance="high">Epic 2 technical specification with data models and APIs</doc>
+      <doc path="docs/architecture.md" relevance="medium">System architecture and state machine design</doc>
+    </docs>
+
+    <code>
+      <file path="whatsapp-bot/src/services/engagement/activity-tracker.ts" relevance="high">
+        <purpose>Target file - implement checkAndRecordActivity() and isFirstMessage()</purpose>
+        <current-state>Stub with recordActivity(), isInactive(), getDaysSinceLastActivity()</current-state>
+        <pattern>Uses logger, returns Promise-based results</pattern>
+      </file>
+
+      <file path="whatsapp-bot/src/services/engagement/types.ts" relevance="high">
+        <purpose>Type definitions for engagement system</purpose>
+        <exports>EngagementState, TransitionTrigger, MessageType, UserEngagementState, VALID_TRANSITIONS</exports>
+      </file>
+
+      <file path="whatsapp-bot/src/services/engagement/index.ts" relevance="medium">
+        <purpose>Re-exports all engagement services - update with new exports</purpose>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/engagement/first-message-handler.ts" relevance="medium">
+        <purpose>Handler that will call activity tracker</purpose>
+        <interfaces>FirstMessageContext, FirstMessageResult</interfaces>
+      </file>
+
+      <file path="whatsapp-bot/src/services/database/supabase-client.ts" relevance="high">
+        <purpose>Database client pattern - use getSupabaseClient()</purpose>
+      </file>
+    </code>
+
+    <dependencies>
+      <dependency>@supabase/supabase-js - Database operations</dependency>
+      <dependency>services/monitoring/logger.js - Logging</dependency>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface name="ActivityCheckResult" location="activity-tracker.ts">
+      <field name="isFirstMessage" type="boolean">True if no prior engagement state exists</field>
+      <field name="userId" type="string">User UUID</field>
+      <field name="preferredDestination" type="'individual' | 'group'">Detected from message context</field>
+      <field name="engagementState" type="EngagementState">Current state (always 'active' for first message)</field>
+    </interface>
+
+    <interface name="MessageContext" location="activity-tracker.ts">
+      <field name="jid" type="string">Sender JID</field>
+      <field name="isGroup" type="boolean">True if JID ends with @g.us</field>
+      <field name="groupJid" type="string | undefined">Group JID if applicable</field>
+      <field name="pushName" type="string | undefined">WhatsApp display name</field>
+      <field name="messageText" type="string">Raw message content</field>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint type="performance">Database query &lt; 100ms (use indexes on user_id)</constraint>
+    <constraint type="pattern">Use getSupabaseClient() for DB access</constraint>
+    <constraint type="pattern">Use logger from services/monitoring/logger.js</constraint>
+    <constraint type="pattern">ESM imports with .js extension</constraint>
+  </constraints>
+
+  <database>
+    <table name="user_engagement_states">
+      <column name="id" type="UUID" constraint="PRIMARY KEY"/>
+      <column name="user_id" type="UUID" constraint="UNIQUE, REFERENCES auth.users"/>
+      <column name="state" type="TEXT" constraint="CHECK (state IN ('active','goodbye_sent','help_flow','remind_later','dormant'))"/>
+      <column name="last_activity_at" type="TIMESTAMPTZ" constraint="DEFAULT NOW()"/>
+      <column name="goodbye_sent_at" type="TIMESTAMPTZ" constraint="NULLABLE"/>
+      <column name="goodbye_expires_at" type="TIMESTAMPTZ" constraint="NULLABLE"/>
+      <column name="remind_at" type="TIMESTAMPTZ" constraint="NULLABLE"/>
+      <column name="created_at" type="TIMESTAMPTZ" constraint="DEFAULT NOW()"/>
+      <column name="updated_at" type="TIMESTAMPTZ" constraint="DEFAULT NOW()"/>
+    </table>
+  </database>
+
+  <tests>
+    <test-file path="whatsapp-bot/src/__tests__/engagement/activity-tracker.test.ts">
+      <test-case>New user: checkAndRecordActivity creates engagement state with state='active'</test-case>
+      <test-case>Returning user: checkAndRecordActivity returns isFirstMessage=false</test-case>
+      <test-case>Every call updates last_activity_at timestamp</test-case>
+      <test-case>Group message (JID ends @g.us) detected correctly</test-case>
+      <test-case>Individual message (JID ends @s.whatsapp.net) detected correctly</test-case>
+      <test-case>isFirstMessage() returns true when no engagement state exists</test-case>
+      <test-case>isFirstMessage() returns false when engagement state exists</test-case>
+    </test-case>
+  </tests>
+
+  <implementation-notes>
+    <note>Group JIDs end with @g.us, individual JIDs end with @s.whatsapp.net</note>
+    <note>Use upsert pattern: INSERT on first message, UPDATE on subsequent</note>
+    <note>Supabase upsert with onConflict: 'user_id' handles race conditions</note>
+    <note>Return EngagementState from types.ts, not string literal</note>
+  </implementation-notes>
+</story-context>

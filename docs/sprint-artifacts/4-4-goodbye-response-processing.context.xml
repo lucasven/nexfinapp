@@ -1,0 +1,197 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>4</storyId>
+    <title>Goodbye Response Processing</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/4-4-goodbye-response-processing.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user who received a goodbye message</asA>
+    <iWant>my response processed correctly</iWant>
+    <soThat>the system respects my choice</soThat>
+    <tasks>
+      <task id="1" ac="5">Create goodbye-handler.ts with response detection - implement isGoodbyeResponse() with regex patterns for 1/2/3, emoji variants, and keyword variants</task>
+      <task id="2" ac="1-4">Implement processGoodbyeResponse() main handler - switch on response type, call transitions, return localized confirmations</task>
+      <task id="3" ac="1">Implement confused response handler (Option 1) - transition to help_flow, queue help message, reset tier progress, transition to active</task>
+      <task id="4" ac="2">Implement busy response handler (Option 2) - transition to remind_later, set remind_at = now + 14 days</task>
+      <task id="5" ac="3">Implement all-good response handler (Option 3) - transition to dormant</task>
+      <task id="6" ac="4">Handle non-goodbye responses - check goodbye_sent state, transition to active, pass to normal NLP pipeline</task>
+      <task id="7" ac="1-3">Extend state machine for goodbye response transitions - add goodbye_response_1/2/3 triggers with side effects</task>
+      <task id="8" ac="6">Add localization keys for goodbye responses - pt-BR and en confirmations</task>
+      <task id="9" ac="1-4">Integrate goodbye handler into message flow - check state before NLP, route appropriately</task>
+      <task id="10" ac="1-3">Track goodbye response analytics - PostHog event, transition metadata</task>
+      <task id="11" ac="1-6">Write comprehensive unit tests - all patterns, transitions, localization</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.4.1">Response "1" (confused) triggers transition to help_flow, sends help message, restarts Tier 1 hints, then transitions to active</criterion>
+    <criterion id="AC-4.4.2">Response "2" (busy) triggers transition to remind_later, sets remind_at = now() + 14 days, sends confirmation message</criterion>
+    <criterion id="AC-4.4.3">Response "3" (all good) triggers transition to dormant, sends confirmation message</criterion>
+    <criterion id="AC-4.4.4">Non-matching responses (other text) trigger transition to active and process the message normally through existing handlers</criterion>
+    <criterion id="AC-4.4.5">Responses match via simple regex including number emoji variants (1, 1️⃣, "confuso", "confused", etc.)</criterion>
+    <criterion id="AC-4.4.6">All response confirmations are localized (pt-BR and en) and follow tone guidelines</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - Smart Onboarding and Engagement System</title>
+        <section>Novel Pattern Design: Engagement State Machine</section>
+        <snippet>State transition contract defines VALID_TRANSITIONS including goodbye_sent → active/remind_later/dormant based on triggers. State machine validates transitions and logs to audit table.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>State Transition Contract</section>
+        <snippet>TransitionTrigger type includes goodbye_response_1, goodbye_response_2, goodbye_response_3. VALID_TRANSITIONS[goodbye_sent] can go to active, help_flow, remind_later, dormant.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>NexFinApp Epic Breakdown</title>
+        <section>Story 4.4: Goodbye Response Processing</section>
+        <snippet>FR14-FR16: Process goodbye responses. Response 1 → help_flow + restart T1. Response 2 → remind_later + 14d timer. Response 3 → dormant. Other → active + normal processing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/4-3-self-select-goodbye-message.md</path>
+        <title>Story 4.3: Self-Select Goodbye Message</title>
+        <section>Dev Notes</section>
+        <snippet>Companion story - 4.3 sends the goodbye message with options 1️⃣/2️⃣/3️⃣, 4.4 processes responses. Localization key engagement.goodbye_self_select. Idempotency pattern established.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>whatsapp-bot/src/handlers/engagement/goodbye-handler.ts</path>
+        <kind>handler</kind>
+        <symbol>handleGoodbyeResponse, parseGoodbyeResponse</symbol>
+        <lines>1-73</lines>
+        <reason>STUB - needs full implementation. Contains interface definitions GoodbyeResponse, GoodbyeResult. parseGoodbyeResponse returns 1|2|3|null.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/state-machine.ts</path>
+        <kind>service</kind>
+        <symbol>transitionState, TransitionOptions, TransitionResult</symbol>
+        <lines>1-119</lines>
+        <reason>STUB - core state machine to extend. Add goodbye_response_1/2/3 handling with side effects (set remind_at, reset tiers, queue messages).</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/types.ts</path>
+        <kind>types</kind>
+        <symbol>EngagementState, TransitionTrigger, VALID_TRANSITIONS</symbol>
+        <lines>1-152</lines>
+        <reason>Type definitions. TransitionTrigger already includes goodbye_response_1/2/3. VALID_TRANSITIONS[goodbye_sent] includes active, remind_later, dormant. Need to add help_flow.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/activity-tracker.ts</path>
+        <kind>service</kind>
+        <symbol>checkAndRecordActivity</symbol>
+        <reason>Activity tracking service - used to get current engagement state. Provides MessageContext interface.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/handlers/core/text-handler.ts</path>
+        <kind>handler</kind>
+        <symbol>handleTextMessage</symbol>
+        <lines>33-914</lines>
+        <reason>Main message entry point. Add goodbye state check after authentication, before NLP layers. Follow pattern of tip command check at line 181.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>messages</symbol>
+        <reason>Portuguese messages. Add engagement.goodbye_response_confused, engagement.goodbye_response_busy, engagement.goodbye_response_dormant keys.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>messages</symbol>
+        <reason>English messages. Add equivalent keys for goodbye response confirmations.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/handlers/engagement/index.ts</path>
+        <kind>index</kind>
+        <symbol>exports</symbol>
+        <reason>Export goodbye handler functions from this index file.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/message-router.ts</path>
+        <kind>service</kind>
+        <symbol>getDestination</symbol>
+        <reason>Get user preferred destination for sending confirmation messages.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>supabase-js</package>
+        <version>^2.x</version>
+        <usage>Database operations for user_engagement_states, user_profiles updates</usage>
+      </node>
+      <node>
+        <package>posthog-node</package>
+        <usage>Analytics tracking for engagement_goodbye_response events</usage>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture">All state changes MUST go through transitionState() - never update DB directly</constraint>
+    <constraint source="architecture">Simple regex for response matching - no NLP needed for 1/2/3 responses</constraint>
+    <constraint source="architecture">Tone guidelines: curiosity, dignity, no guilt/pressure, max one emoji</constraint>
+    <constraint source="architecture">Casual register in Portuguese (você not o senhor)</constraint>
+    <constraint source="dev-notes">help_flow is transient - transition to active immediately after setup</constraint>
+    <constraint source="dev-notes">Response detection is case-insensitive with trimmed input</constraint>
+    <constraint source="pattern">Follow existing handler patterns from handlers/transactions/</constraint>
+    <constraint source="pattern">Use kebab-case files, camelCase exports</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>isGoodbyeResponse</name>
+      <kind>function</kind>
+      <signature>function isGoodbyeResponse(message: string): GoodbyeResponseType | null</signature>
+      <path>whatsapp-bot/src/handlers/engagement/goodbye-handler.ts</path>
+    </interface>
+    <interface>
+      <name>processGoodbyeResponse</name>
+      <kind>function</kind>
+      <signature>async function processGoodbyeResponse(userId: string, responseType: GoodbyeResponseType, locale: 'pt-BR' | 'en'): Promise&lt;string&gt;</signature>
+      <path>whatsapp-bot/src/handlers/engagement/goodbye-handler.ts</path>
+    </interface>
+    <interface>
+      <name>transitionState</name>
+      <kind>function</kind>
+      <signature>async function transitionState(options: TransitionOptions): Promise&lt;TransitionResult&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/state-machine.ts</path>
+    </interface>
+    <interface>
+      <name>getEngagementState</name>
+      <kind>function</kind>
+      <signature>async function getEngagementState(userId: string): Promise&lt;UserEngagementState | null&gt;</signature>
+      <path>whatsapp-bot/src/services/engagement/state-machine.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Jest test framework with TypeScript. Tests in __tests__/ directories mirroring source structure. Use mocks from __mocks__/ for Supabase. Coverage threshold 70% for branches, functions, lines, statements. Follow existing test patterns from engagement tests.</standards>
+    <locations>
+      <location>whatsapp-bot/src/__tests__/handlers/engagement/goodbye-handler.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/engagement/</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-4.4.1">Test response "1" transitions to help_flow, resets onboarding_tier to 0, clears tier_progress, re-enables tips, then transitions to active</idea>
+      <idea ac="AC-4.4.2">Test response "2" transitions to remind_later with remind_at = now + 14 days exactly</idea>
+      <idea ac="AC-4.4.3">Test response "3" transitions to dormant</idea>
+      <idea ac="AC-4.4.4">Test non-matching text (e.g., "hello") transitions to active and returns null to allow normal processing</idea>
+      <idea ac="AC-4.4.5">Test all pattern variants: "1", "1️⃣", "confuso", "confused", "2", "2️⃣", "ocupado", "busy", "3", "3️⃣", "tudo certo", "all good"</idea>
+      <idea ac="AC-4.4.5">Test case insensitivity: "CONFUSO", "Busy", "TUDO CERTO"</idea>
+      <idea ac="AC-4.4.5">Test whitespace trimming: " 1 ", " confuso "</idea>
+      <idea ac="AC-4.4.6">Test pt-BR locale returns Portuguese confirmation messages</idea>
+      <idea ac="AC-4.4.6">Test en locale returns English confirmation messages</idea>
+      <idea ac="AC-4.4.6">Verify no guilt/pressure language in confirmations</idea>
+    </ideas>
+  </tests>
+</story-context>

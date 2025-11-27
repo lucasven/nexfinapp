@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story-key="3-2-tier-action-detection-hooks" generated="2025-11-22">
+  <story>
+    <title>Tier Action Detection Hooks</title>
+    <epic>3 - Progressive Tier Journey</epic>
+    <objective>Integrate tier tracking into existing handlers for automatic progress recording</objective>
+  </story>
+
+  <acceptance-criteria>
+    <criterion id="AC-3.2.1">Adding expense calls recordAction(userId, 'add_expense')</criterion>
+    <criterion id="AC-3.2.2">Deleting expense calls recordAction(userId, 'delete_expense')</criterion>
+    <criterion id="AC-3.2.3">Adding category calls recordAction(userId, 'add_category')</criterion>
+    <criterion id="AC-3.2.4">Editing category calls recordAction(userId, 'edit_category')</criterion>
+    <criterion id="AC-3.2.5">Setting budget calls recordAction(userId, 'set_budget')</criterion>
+    <criterion id="AC-3.2.6">Adding recurring expense calls recordAction(userId, 'add_recurring')</criterion>
+    <criterion id="AC-3.2.7">Listing categories calls recordAction(userId, 'list_categories')</criterion>
+    <criterion id="AC-3.2.8">Viewing report calls recordAction(userId, 'view_report')</criterion>
+    <criterion id="AC-3.2.9">Tier tracking does NOT block or slow down primary handler response</criterion>
+  </acceptance-criteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/stories/tech-spec-epic-3.md" relevance="high">Handler integration points table</doc>
+      <doc path="docs/stories/3-1-tier-progress-tracking-service.md" relevance="high">Tier tracker service API</doc>
+    </docs>
+
+    <code>
+      <file path="whatsapp-bot/src/handlers/transactions/expenses.ts" relevance="high">
+        <purpose>Add hooks for add_expense, delete_expense</purpose>
+        <current-state>Existing expense handler</current-state>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/categories/categories.ts" relevance="high">
+        <purpose>Add hooks for add_category, edit_category, list_categories</purpose>
+        <current-state>Existing category handler</current-state>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/budgets/budgets.ts" relevance="high">
+        <purpose>Add hook for set_budget</purpose>
+        <current-state>Existing budget handler</current-state>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/recurring/recurring.ts" relevance="high">
+        <purpose>Add hook for add_recurring</purpose>
+        <current-state>Existing recurring expense handler</current-state>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/reports/reports.ts" relevance="high">
+        <purpose>Add hook for view_report</purpose>
+        <current-state>Existing reports handler</current-state>
+      </file>
+
+      <file path="whatsapp-bot/src/services/onboarding/tier-tracker.ts" relevance="high">
+        <purpose>Import recordAction from this service</purpose>
+      </file>
+    </code>
+
+    <dependencies>
+      <dependency>services/onboarding/tier-tracker.ts - recordAction function</dependency>
+      <dependency>services/monitoring/logger.js - Error logging</dependency>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">Hooks must be fire-and-forget (non-blocking)</constraint>
+    <constraint type="resilience">Tracking errors must not fail primary handler</constraint>
+    <constraint type="pattern">Use try-catch wrapper for all hook calls</constraint>
+  </constraints>
+
+  <code-patterns>
+    <pattern name="fire-and-forget-hook">
+      // Helper function for all hooks
+      function trackTierAction(userId: string, action: TierAction): void {
+        recordAction(userId, action).catch(err => {
+          logger.error('Tier tracking failed', { userId, action, error: err })
+          // Don't throw - primary handler should still succeed
+        })
+      }
+
+      // Usage in handler
+      const expense = await createExpense(...)
+      trackTierAction(userId, 'add_expense')  // Fire and forget
+      return formatExpenseResponse(expense)   // Return immediately
+    </pattern>
+  </code-patterns>
+
+  <tests>
+    <test-file path="whatsapp-bot/src/__tests__/engagement/tier-action-hooks.test.ts">
+      <test-case>Expense creation triggers add_expense tracking</test-case>
+      <test-case>Expense deletion triggers delete_expense tracking</test-case>
+      <test-case>Category creation triggers add_category tracking</test-case>
+      <test-case>Category edit triggers edit_category tracking</test-case>
+      <test-case>Budget set triggers set_budget tracking</test-case>
+      <test-case>Recurring creation triggers add_recurring tracking</test-case>
+      <test-case>Category list triggers list_categories tracking</test-case>
+      <test-case>Report view triggers view_report tracking</test-case>
+      <test-case>Handler returns before tracking completes</test-case>
+      <test-case>Handler succeeds even if tracking fails</test-case>
+    </test-file>
+  </tests>
+
+  <implementation-notes>
+    <note>Each handler needs minimal modification - just add hook call after success</note>
+    <note>Use trackTierAction helper to ensure consistent non-blocking pattern</note>
+    <note>Test thoroughly - handler modifications carry risk of breaking existing flows</note>
+    <note>Consider creating single shared helper in services/onboarding/</note>
+  </implementation-notes>
+</story-context>

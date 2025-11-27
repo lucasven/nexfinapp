@@ -1,8 +1,8 @@
-// Mock OpenAI client
+// Mock OpenAI client - use plain objects, not jest.fn() at module level
 export const mockOpenAIClient = {
   chat: {
     completions: {
-      create: jest.fn().mockResolvedValue({
+      create: async () => ({
         choices: [{
           message: {
             content: 'Mocked AI response'
@@ -12,7 +12,7 @@ export const mockOpenAIClient = {
     }
   },
   images: {
-    generate: jest.fn().mockResolvedValue({
+    generate: async () => ({
       data: [{
         url: 'https://example.com/mock-image.jpg'
       }]
@@ -20,22 +20,10 @@ export const mockOpenAIClient = {
   }
 }
 
-// Mock OpenAI constructor
-export const OpenAI = jest.fn(() => mockOpenAIClient)
-
-// Reset all mocks
-export const resetOpenAIMocks = () => {
-  jest.clearAllMocks()
-  mockOpenAIClient.chat.completions.create.mockResolvedValue({
-    choices: [{
-      message: {
-        content: 'Mocked AI response'
-      }
-    }]
-  })
-  mockOpenAIClient.images.generate.mockResolvedValue({
-    data: [{
-      url: 'https://example.com/mock-image.jpg'
-    }]
-  })
+// Mock OpenAI constructor as default export
+const OpenAI = function() {
+  return mockOpenAIClient
 }
+
+export default OpenAI
+export { OpenAI }

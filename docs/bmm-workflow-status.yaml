@@ -27,7 +27,7 @@ workflow_status:
     note: "Required for brownfield projects without existing docs"
     workflows:
       - id: "document-project"
-        status: "required"
+        status: "docs/index.md"
         agent: "analyst"
         command: "/bmad:bmm:workflows:document-project"
         output: "Comprehensive project documentation"
@@ -48,7 +48,7 @@ workflow_status:
         command: "/bmad:bmm:workflows:research"
 
       - id: "product-brief"
-        status: "optional"
+        status: "docs/product-brief-NexFinApp-2025-11-21.md"
         agent: "analyst"
         command: "/bmad:bmm:workflows:product-brief"
 
@@ -56,7 +56,7 @@ workflow_status:
     name: "Planning"
     workflows:
       - id: "prd"
-        status: "required"
+        status: "docs/prd.md"
         agent: "pm"
         command: "/bmad:bmm:workflows:prd"
         output: "PRD focused on new features/changes"
@@ -67,7 +67,7 @@ workflow_status:
         command: "/bmad:bmm:workflows:validate-prd"
 
       - id: "create-design"
-        status: "conditional"
+        status: "docs/ux-notification-preferences.md"
         condition: "if_has_ui"
         agent: "ux-designer"
         command: "/bmad:bmm:workflows:create-ux-design"
@@ -76,18 +76,18 @@ workflow_status:
     name: "Solutioning"
     workflows:
       - id: "create-architecture"
-        status: "recommended"
+        status: "docs/architecture.md"
         agent: "architect"
         command: "/bmad:bmm:workflows:architecture"
         note: "HIGHLY RECOMMENDED: Focuses massive brownfield context into solution design"
 
       - id: "create-epics-and-stories"
-        status: "required"
+        status: "docs/epics.md"
         agent: "pm"
         command: "/bmad:bmm:workflows:create-epics-and-stories"
 
       - id: "test-design"
-        status: "recommended"
+        status: "docs/test-design-system.md"
         agent: "tea"
         command: "/bmad:bmm:workflows:test-design"
 
@@ -97,7 +97,7 @@ workflow_status:
         command: "/bmad:bmm:workflows:validate-architecture"
 
       - id: "implementation-readiness"
-        status: "required"
+        status: "docs/implementation-readiness-report-2025-11-21.md"
         agent: "architect"
         command: "/bmad:bmm:workflows:implementation-readiness"
 
@@ -105,6 +105,6 @@ workflow_status:
     name: "Implementation"
     workflows:
       - id: "sprint-planning"
-        status: "required"
+        status: "docs/stories/sprint-status.yaml"
         agent: "sm"
         command: "/bmad:bmm:workflows:sprint-planning"

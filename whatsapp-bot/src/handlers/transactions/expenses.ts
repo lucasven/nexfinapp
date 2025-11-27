@@ -8,11 +8,14 @@ import { logger } from '../../services/monitoring/logger.js'
 import { findCategoryWithFallback } from '../../services/category-matcher.js'
 import { trackEvent } from '../../analytics/index.js'
 import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
+import { recordMagicMoment, trackTierAction } from '../../services/onboarding/tier-tracker.js'
+import { getContextualHint, isFirstExpense } from '../engagement/hints-handler.js'
 
 export async function handleAddExpense(
   whatsappNumber: string,
   intent: ParsedIntent,
-  parsingMetricId?: string | null
+  parsingMetricId?: string | null,
+  wasNlpParsed?: boolean
 ): Promise<string> {
   try {
     const session = await getUserSession(whatsappNumber)
@@ -183,6 +186,38 @@ export async function handleAddExpense(
       )
     }
 
+    // Story 2.5: Record magic moment for first NLP-parsed expense
+    // AC-2.5.1: First NLP expense sets magic_moment_at
+    // AC-2.5.3: Explicit commands do NOT trigger magic moment (wasNlpParsed=false)
+    if (wasNlpParsed && type !== 'income') {
+      try {
+        const magicMomentResult = await recordMagicMoment(
+          session.userId,
+          true, // wasNlpParsed
+          {
+            amount: amount,
+            category: categoryName,
+          }
+        )
+
+        if (magicMomentResult.isFirstMagicMoment) {
+          logger.info('Magic moment recorded for user', {
+            userId: session.userId,
+            transactionId: data.id,
+          })
+        }
+      } catch (magicMomentError) {
+        // Don't fail the transaction if magic moment tracking fails
+        logger.error('Failed to record magic moment', { userId: session.userId }, magicMomentError as Error)
+      }
+    }
+
+    // Story 3.2: Track tier action for add_expense (AC-3.2.1)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    if (type !== 'income') {
+      trackTierAction(session.userId, 'add_expense')
+    }
+
     // Link back from parsing_metrics to transaction (bidirectional link)
     if (parsingMetricId && data.id) {
       logger.info('Creating bidirectional link', {
@@ -228,8 +263,30 @@ export async function handleAddExpense(
       response = messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText
     }
 
-    // Check if this is the user's first expense and celebrate!
+    // Story 2.6: Contextual hints after actions
+    // AC-2.6.5: Hints are appended (not sent as separate message)
     if (type !== 'income') {
+      // Check if this is the user's first expense
+      const firstExpenseCheck = await isFirstExpense(session.userId)
+
+      // Get contextual hint based on action context
+      const hint = await getContextualHint(
+        session.userId,
+        {
+          action: 'add_expense',
+          categoryId: categoryId,
+          categoryName: categoryName,
+          isFirstExpense: firstExpenseCheck,
+        },
+        messages
+      )
+
+      // Append hint to response if applicable
+      if (hint) {
+        response += hint
+      }
+
+      // Legacy first expense celebration (mark as completed)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('first_expense_added')
@@ -246,12 +303,10 @@ export async function handleAddExpense(
           })
           .eq('user_id', session.userId)
 
-        // Add celebration message
-        response += '\n\n🎉 *Parabéns!* Primeira despesa registrada com sucesso!'
-        response += '\n\n💡 *Próximos passos:*'
-        response += '\n• Configure um orçamento mensal para suas categorias'
-        response += '\n• Envie fotos de SMS bancários para registro automático'
-        response += '\n• Digite "relatório" para ver suas finanças'
+        // Only add celebration if no hint was already added
+        if (!hint) {
+          response += '\n\n🎉 *Parabéns!* Primeira despesa registrada com sucesso!'
+        }
       }
     }
 

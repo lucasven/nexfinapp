@@ -17,6 +17,16 @@ jobs:
     command: npm run cron:generate-payments
     description: "Monthly generation of recurring payment entries for the next 3 months"
 
+  - name: engagement-daily
+    schedule: "0 6 * * *"  # Run daily at 6 AM UTC
+    command: tsx src/cron/run-engagement-daily.ts
+    description: "Daily engagement job: 14-day inactivity, 48h timeout, remind-later expiration"
+
+  - name: engagement-weekly
+    schedule: "0 9 * * 1"  # Run weekly on Monday at 9 AM UTC
+    command: tsx src/cron/run-engagement-weekly.ts
+    description: "Weekly review job: send celebratory messages to active users"
+
   - name: execute-auto-payments
     schedule: "0 6 * * *"  # Run daily at 6 AM UTC
     command: npm run cron:execute-auto-pay

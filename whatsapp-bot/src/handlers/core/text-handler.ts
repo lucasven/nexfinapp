@@ -23,6 +23,14 @@ import { executeIntent } from './intent-executor.js'
 import { setUserOcrPreference, getUserPreferences } from '../../services/user/preference-manager.js'
 import { trackEvent } from '../../analytics/index.js'
 import { WhatsAppAnalyticsEvent, WhatsAppAnalyticsProperty } from '../../analytics/events.js'
+import { checkAndRecordActivity, type MessageContext as EngagementMessageContext } from '../../services/engagement/activity-tracker.js'
+import { handleFirstMessage, shouldTriggerWelcomeFlow, type FirstMessageHandlerContext } from '../engagement/first-message-handler.js'
+import { autoDetectDestination } from '../../services/engagement/message-router.js'
+import { messages as ptBrMessages } from '../../localization/pt-br.js'
+import { messages as enMessages } from '../../localization/en.js'
+import { isTipCommand, handleTipOptOut, parseOptOutCommand, handleOptOutCommand, type OptOutContext } from '../engagement/opt-out-handler.js'
+import { checkAndHandleGoodbyeResponse } from '../engagement/goodbye-handler.js'
+import { isDestinationSwitchCommand, handleDestinationSwitch, type DestinationSwitchContext } from '../engagement/destination-handler.js'
 
 export async function handleTextMessage(
   whatsappNumber: string,
@@ -167,6 +175,212 @@ export async function handleTextMessage(
       })
 
       return result
+    }
+
+    // LAYER 0.9: Tip Command Check (Story 3.5)
+    // AC-3.5.1, AC-3.5.2: Handle "parar dicas"/"stop tips" and "ativar dicas"/"enable tips"
+    // Must be checked BEFORE NLP processing but AFTER authentication
+    if (isTipCommand(message)) {
+      // Need authentication for tip preference update
+      if (groupOwnerId) {
+        session = await getUserSession(whatsappNumber)
+        if (!session) {
+          await createUserSession(whatsappNumber, groupOwnerId)
+          session = await getUserSession(whatsappNumber)
+        }
+      } else {
+        session = await getOrCreateSession(whatsappNumber)
+      }
+
+      if (!session) {
+        return messages.loginPrompt
+      }
+
+      // TODO: Detect user locale properly (for now default to pt-BR)
+      const locale: 'pt-BR' | 'en' = 'pt-BR'
+      const result = await handleTipOptOut(session.userId, message, locale)
+
+      if (result) {
+        strategy = 'tip_command'
+        await recordParsingMetric({
+          whatsappNumber,
+          userId: session.userId,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime,
+        })
+        return result
+      }
+    }
+
+    // LAYER 0.91: Re-engagement Opt-Out Command Check (Story 6.1)
+    // AC-6.1.1, AC-6.1.2: Handle "parar lembretes"/"stop reminders" and "ativar lembretes"/"start reminders"
+    // Must be checked at HIGHEST PRIORITY (before NLP) to ensure fast response (< 2s)
+    const optOutIntent = parseOptOutCommand(message, 'pt-BR') // TODO: Detect user locale properly
+    if (optOutIntent) {
+      // Need authentication for preference update
+      let optOutSession = session
+      if (!optOutSession) {
+        if (groupOwnerId) {
+          optOutSession = await getUserSession(whatsappNumber)
+          if (!optOutSession) {
+            await createUserSession(whatsappNumber, groupOwnerId)
+            optOutSession = await getUserSession(whatsappNumber)
+          }
+        } else {
+          optOutSession = await getOrCreateSession(whatsappNumber)
+        }
+      }
+
+      if (optOutSession) {
+        // TODO: Detect user locale properly (for now default to pt-BR)
+        const locale: 'pt-BR' | 'en' = 'pt-BR'
+        const optOutContext: OptOutContext = {
+          userId: optOutSession.userId,
+          whatsappJid: whatsappNumber,
+          command: optOutIntent,
+          locale
+        }
+
+        const optOutResult = await handleOptOutCommand(optOutContext)
+
+        if (optOutResult.success) {
+          strategy = 'engagement_opt_out' as ParsingStrategy
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: optOutSession.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: true,
+            parseDurationMs: Date.now() - startTime,
+          })
+
+          // Return localized confirmation message
+          const userMessages = locale === 'pt-BR' ? ptBrMessages : enMessages
+          const confirmationKey = optOutIntent === 'opt_out' ? 'engagementOptOutConfirmed' : 'engagementOptInConfirmed'
+          return userMessages[confirmationKey]
+        } else {
+          // Failed to update preference, return error message
+          strategy = 'engagement_opt_out' as ParsingStrategy
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: optOutSession.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: false,
+            errorMessage: optOutResult.error || 'Failed to update preference',
+            parseDurationMs: Date.now() - startTime,
+          })
+          return optOutResult.error || 'Failed to update preference'
+        }
+      }
+      // If no session, continue to normal flow (will prompt for login)
+      session = optOutSession
+    }
+
+    // LAYER 0.95: Goodbye Response Check (Story 4.4)
+    // AC-4.4.1 to AC-4.4.4: Handle responses to goodbye message (1/2/3)
+    // Must be checked BEFORE NLP processing but AFTER authentication
+    // Checks if user is in goodbye_sent state and processes response accordingly
+    {
+      // Need authentication for goodbye response handling
+      let goodbyeSession = session
+      if (!goodbyeSession) {
+        if (groupOwnerId) {
+          goodbyeSession = await getUserSession(whatsappNumber)
+          if (!goodbyeSession) {
+            await createUserSession(whatsappNumber, groupOwnerId)
+            goodbyeSession = await getUserSession(whatsappNumber)
+          }
+        } else {
+          goodbyeSession = await getOrCreateSession(whatsappNumber)
+        }
+      }
+
+      if (goodbyeSession) {
+        // TODO: Detect user locale properly (for now default to pt-BR)
+        const locale: 'pt-BR' | 'en' = 'pt-BR'
+        const goodbyeResult = await checkAndHandleGoodbyeResponse(
+          goodbyeSession.userId,
+          message,
+          locale
+        )
+
+        if (goodbyeResult) {
+          // User was in goodbye_sent state and sent a valid goodbye response
+          strategy = 'goodbye_response'
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: goodbyeSession.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: true,
+            parseDurationMs: Date.now() - startTime,
+          })
+          return goodbyeResult
+        }
+        // If goodbyeResult is null:
+        // - Either user is not in goodbye_sent state, or
+        // - User sent a non-goodbye response and was transitioned to active
+        // Either way, continue with normal processing
+        session = goodbyeSession
+      }
+    }
+
+    // LAYER 0.96: Destination Switch Command Check (Story 4.6)
+    // AC-4.6.3, AC-4.6.4: Handle "mudar para grupo"/"switch to group" and "mudar para individual"/"switch to private"
+    // Must be checked BEFORE NLP processing but AFTER authentication
+    if (isDestinationSwitchCommand(message)) {
+      // Need authentication for destination switch
+      let destSession = session
+      if (!destSession) {
+        if (groupOwnerId) {
+          destSession = await getUserSession(whatsappNumber)
+          if (!destSession) {
+            await createUserSession(whatsappNumber, groupOwnerId)
+            destSession = await getUserSession(whatsappNumber)
+          }
+        } else {
+          destSession = await getOrCreateSession(whatsappNumber)
+        }
+      }
+
+      if (destSession) {
+        // TODO: Detect user locale properly (for now default to pt-BR)
+        const locale: 'pt-BR' | 'en' = 'pt-BR'
+        const destContext: DestinationSwitchContext = {
+          userId: destSession.userId,
+          messageSource: groupOwnerId ? 'group' : 'individual',
+          groupJid: groupOwnerId ? whatsappNumber : undefined, // In group context, whatsappNumber is the group JID
+          locale,
+        }
+
+        const destResult = await handleDestinationSwitch(
+          destSession.userId,
+          message,
+          destContext
+        )
+
+        if (destResult) {
+          strategy = 'destination_switch' as ParsingStrategy
+          await recordParsingMetric({
+            whatsappNumber,
+            userId: destSession.userId,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: destResult.success,
+            parseDurationMs: Date.now() - startTime,
+          })
+          return destResult.message
+        }
+        session = destSession
+      }
     }
 
     // LAYER 1: Explicit Commands (fast path, zero cost)
@@ -440,7 +654,8 @@ export async function handleTextMessage(
           intentEntities: commandResult.entities
         })
 
-        const result = await executeIntent(whatsappNumber, commandResult, session, parsingMetricId)
+        // AC-2.5.3: Explicit commands do NOT trigger magic moment
+        const result = await executeIntent(whatsappNumber, commandResult, session, parsingMetricId, false)
 
         return result
       }
@@ -475,6 +690,90 @@ export async function handleTextMessage(
     }
     
     await updateUserActivity(whatsappNumber)
+
+    // FIRST MESSAGE CHECK: Detect and handle first-time user messages (Story 2.2)
+    // This triggers the conversational welcome flow for new users
+    let firstMessageWelcome: string | null = null
+    try {
+      const engagementContext: EngagementMessageContext = {
+        jid: whatsappNumber,
+        isGroup: !!groupOwnerId,
+        groupJid: undefined, // Group JID not available here
+        pushName: userIdentifiers?.pushName ?? undefined, // Convert null to undefined
+        messageText: message,
+      }
+
+      const activityResult = await checkAndRecordActivity(session.userId, engagementContext)
+
+      if (shouldTriggerWelcomeFlow(activityResult)) {
+        logger.info('First message detected - triggering welcome flow', {
+          whatsappNumber,
+          userId: session.userId,
+          isGroup: engagementContext.isGroup,
+        })
+
+        // Story 2.4: Auto-detect preferred destination on first message
+        const destinationJid = engagementContext.isGroup && engagementContext.groupJid
+          ? engagementContext.groupJid
+          : whatsappNumber
+        await autoDetectDestination(
+          session.userId,
+          activityResult.preferredDestination,
+          destinationJid
+        )
+
+        // TODO: Detect user locale properly (for now default to pt-BR)
+        const userMessages = ptBrMessages
+
+        const firstMessageContext: FirstMessageHandlerContext = {
+          userId: session.userId,
+          pushName: userIdentifiers?.pushName ?? undefined, // Convert null to undefined
+          messageText: message,
+          locale: 'pt-BR',
+          activityResult,
+        }
+
+        const firstMessageResponse = await handleFirstMessage(firstMessageContext, {
+          engagementFirstMessage: userMessages.engagementFirstMessage,
+          engagementFirstExpenseSuccess: userMessages.engagementFirstExpenseSuccess,
+          engagementGuideToFirstExpense: userMessages.engagementGuideToFirstExpense,
+          engagementFirstExpenseCelebration: userMessages.engagementFirstExpenseCelebration,
+        })
+
+        if (firstMessageResponse.message) {
+          if (firstMessageResponse.shouldProcessExpense) {
+            // Message is an expense - store welcome to prepend to response
+            firstMessageWelcome = firstMessageResponse.message
+            logger.info('First message is expense - will prepend welcome to response', {
+              userId: session.userId,
+            })
+          } else {
+            // Message is not an expense - return welcome message directly
+            logger.info('First message not parseable - returning welcome only', {
+              userId: session.userId,
+            })
+
+            await recordParsingMetric({
+              whatsappNumber,
+              userId: session.userId,
+              messageText: message,
+              messageType: 'text',
+              strategyUsed: 'first_message_welcome',
+              success: true,
+              parseDurationMs: Date.now() - startTime,
+            })
+
+            return firstMessageResponse.message
+          }
+        }
+      }
+    } catch (firstMessageError) {
+      // Don't fail the entire flow if first message detection fails
+      logger.error('First message detection failed, continuing with normal flow', {
+        whatsappNumber,
+        userId: session.userId,
+      }, firstMessageError as Error)
+    }
 
     // LAYER 2: Semantic Cache Lookup (low cost)
     strategy = 'semantic_cache'
@@ -556,7 +855,15 @@ export async function handleTextMessage(
         intentEntities: cachedIntent.entities
       })
 
-      const result = await executeIntent(whatsappNumber, cachedIntent, session, parsingMetricId)
+      // Story 2.5: Semantic cache hit is NLP-parsed (wasNlpParsed=true)
+      const result = await executeIntent(whatsappNumber, cachedIntent, session, parsingMetricId, true)
+
+      // Prepend first message welcome if this is the user's first interaction
+      if (firstMessageWelcome) {
+        logger.info('Prepending first message welcome to cache result', { userId: session.userId })
+        const resultStr = Array.isArray(result) ? result.join('\n\n') : result
+        return `${firstMessageWelcome}\n\n${resultStr}`
+      }
 
       return result
     }
@@ -695,10 +1002,18 @@ export async function handleTextMessage(
       )
 
       // Execute the intent
-      let result = await executeIntent(whatsappNumber, aiResult, session, parsingMetricId)
+      // Story 2.5: LLM parsed intent is NLP-parsed (wasNlpParsed=true)
+      let result = await executeIntent(whatsappNumber, aiResult, session, parsingMetricId, true)
 
       // Save to cache for future use (async, don't wait)
       saveToCache(session.userId, message, aiResult)
+
+      // Prepend first message welcome if this is the user's first interaction
+      if (firstMessageWelcome) {
+        logger.info('Prepending first message welcome to LLM result', { userId: session.userId })
+        const resultStr = Array.isArray(result) ? result.join('\n\n') : result
+        return `${firstMessageWelcome}\n\n${resultStr}`
+      }
 
       return result
     } catch (error) {

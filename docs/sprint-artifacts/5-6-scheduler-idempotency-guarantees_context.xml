@@ -1,0 +1,729 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>5-6-scheduler-idempotency-guarantees</story-id>
+    <epic>5</epic>
+    <title>Scheduler Idempotency Guarantees</title>
+    <generated-at>2025-11-24</generated-at>
+    <status>ready-for-dev</status>
+  </metadata>
+
+  <story-overview>
+    <summary>
+      Implement idempotency guarantees in the scheduler system to prevent duplicate messages
+      and state transitions when jobs are re-run due to failures, restarts, or manual triggers.
+      Uses a multi-layer defense: database UNIQUE constraint on idempotency_key, application-level
+      upsert with ignoreDuplicates, state-based query filtering, and atomic state transitions.
+    </summary>
+
+    <acceptance-criteria>
+      <criterion id="AC-5.6.1">
+        Given a goodbye message was already sent today, when the daily job re-runs,
+        then no duplicate goodbye is queued (idempotency key prevents insert).
+      </criterion>
+      <criterion id="AC-5.6.2">
+        Given a weekly review was already sent this week, when the weekly job re-runs,
+        then no duplicate review is queued.
+      </criterion>
+      <criterion id="AC-5.6.3">
+        Given the service restarts mid-job, when the job re-runs,
+        then already-processed users are skipped and partial work completes.
+      </criterion>
+      <criterion id="AC-5.6.4">
+        Given queueMessage() is called with the same idempotencyKey twice, when executed,
+        then only one queue entry exists (upsert with ignoreDuplicates).
+      </criterion>
+    </acceptance-criteria>
+  </story-overview>
+
+  <architecture-context>
+    <design-decisions>
+      <decision ref="ADR-003">
+        Message queue table with UNIQUE constraint on idempotency_key column.
+        This provides database-level enforcement of no duplicates.
+      </decision>
+      <decision ref="ADR-002">
+        Database-driven scheduler - jobs query state to find eligible users.
+        Already-processed users automatically excluded by state changes.
+      </decision>
+      <decision ref="ADR-005">
+        Single daily job handles all timeouts - idempotency ensures safe re-runs
+        without duplicate state transitions or messages.
+      </decision>
+    </design-decisions>
+
+    <functional-requirements>
+      <requirement id="FR19">
+        Idempotency guarantees for scheduled messages - no duplicates on job re-runs
+      </requirement>
+      <requirement id="FR47">
+        No duplicate message delivery - enforced at database and application layers
+      </requirement>
+      <requirement id="NFR7">
+        State persistence and recovery - jobs can restart mid-execution safely
+      </requirement>
+    </functional-requirements>
+
+    <integration-points>
+      <service name="message-sender" file="services/scheduler/message-sender.ts">
+        <modification>Add idempotencyKey parameter to queueMessage()</modification>
+        <modification>Implement upsert with onConflict and ignoreDuplicates</modification>
+        <modification>Log duplicate detection for observability</modification>
+        <exports>
+          <function>queueMessage(params: QueueMessageParams): Promise&lt;boolean&gt;</function>
+          <function>getIdempotencyKey(userId: string, eventType: string, date?: Date): string</function>
+        </exports>
+      </service>
+
+      <service name="daily-engagement-job" file="services/scheduler/daily-engagement-job.ts">
+        <modification>Generate daily idempotency keys when queuing goodbye messages</modification>
+        <modification>Pass idempotency key to state machine transitions</modification>
+        <modification>Add state-based filtering to skip already-processed users</modification>
+        <imports>
+          <function>transitionState(userId, trigger, metadata)</function>
+          <function>getExpiredGoodbyes(), getDueReminders()</function>
+        </imports>
+      </service>
+
+      <service name="weekly-review-job" file="services/scheduler/weekly-review-job.ts">
+        <modification>Generate ISO week-based idempotency keys</modification>
+        <modification>Pass idempotency key to queueMessage()</modification>
+        <imports>
+          <function>queueMessage(params)</function>
+          <function>getActiveUsersLastWeek()</function>
+        </imports>
+      </service>
+
+      <service name="state-machine" file="services/engagement/state-machine.ts">
+        <usage>State transitions are already atomic and logged</usage>
+        <usage>Query-based filtering naturally excludes already-processed users</usage>
+        <note>No modifications needed - existing design supports idempotency</note>
+      </service>
+    </integration-points>
+
+    <database-schema>
+      <table name="engagement_message_queue">
+        <column name="id" type="UUID" constraint="PRIMARY KEY"/>
+        <column name="user_id" type="UUID" constraint="REFERENCES users(id)"/>
+        <column name="message_type" type="TEXT" constraint="CHECK IN (...)"/>
+        <column name="message_key" type="TEXT"/>
+        <column name="message_params" type="JSONB"/>
+        <column name="destination" type="TEXT" constraint="CHECK IN ('individual', 'group')"/>
+        <column name="destination_jid" type="TEXT"/>
+        <column name="scheduled_for" type="TIMESTAMPTZ"/>
+        <column name="sent_at" type="TIMESTAMPTZ"/>
+        <column name="status" type="TEXT" constraint="CHECK IN ('pending', 'sent', 'failed', 'cancelled')"/>
+        <column name="retry_count" type="INTEGER" default="0"/>
+        <column name="error_message" type="TEXT"/>
+        <column name="idempotency_key" type="TEXT" constraint="UNIQUE"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+
+        <index name="idx_queue_idempotency_key" type="UNIQUE">
+          <condition>WHERE idempotency_key IS NOT NULL</condition>
+          <purpose>Enforce idempotency at database level</purpose>
+        </index>
+      </table>
+
+      <migration-file>fe/scripts/034_engagement_system.sql</migration-file>
+      <migration-status>Already applied - UNIQUE constraint exists</migration-status>
+    </database-schema>
+  </architecture-context>
+
+  <implementation-guide>
+    <idempotency-key-patterns>
+      <pattern type="daily-goodbye">
+        <format>{userId}:goodbye_sent:{YYYY-MM-DD}</format>
+        <example>a1b2c3d4:goodbye_sent:2025-11-24</example>
+        <scope>One goodbye per user per day</scope>
+        <implementation>
+          const today = format(new Date(), 'yyyy-MM-dd')
+          const idempotencyKey = `${userId}:goodbye_sent:${today}`
+        </implementation>
+      </pattern>
+
+      <pattern type="weekly-review">
+        <format>{userId}:weekly_review:{YYYY-Www}</format>
+        <example>a1b2c3d4:weekly_review:2025-W48</example>
+        <scope>One review per user per ISO week</scope>
+        <implementation>
+          const weekYear = getISOWeekYear(now)
+          const weekNumber = getISOWeek(now)
+          const idempotencyKey = `${userId}:weekly_review:${weekYear}-W${weekNumber.toString().padStart(2, '0')}`
+        </implementation>
+      </pattern>
+
+      <pattern type="reminder">
+        <format>{userId}:reminder:{timestamp}</format>
+        <example>a1b2c3d4:reminder:1732464000000</example>
+        <scope>Unique per remind_at timestamp</scope>
+        <implementation>
+          const idempotencyKey = `${userId}:reminder:${remindAt.getTime()}`
+        </implementation>
+      </pattern>
+
+      <properties>
+        <property name="deterministic">Same inputs always produce same key</property>
+        <property name="time-scoped">Keys include time period to allow new messages in new periods</property>
+        <property name="user-scoped">Keys include userId to prevent cross-user collisions</property>
+        <property name="collision-safe">Format ensures no accidental overlaps between types</property>
+      </properties>
+    </idempotency-key-patterns>
+
+    <multi-layer-defense>
+      <layer order="1" name="database">
+        <mechanism>UNIQUE constraint on idempotency_key column</mechanism>
+        <enforcement>PostgreSQL enforces at storage layer</enforcement>
+        <error-code>23505 (unique constraint violation)</error-code>
+        <behavior>Insert fails, application handles gracefully</behavior>
+      </layer>
+
+      <layer order="2" name="application">
+        <mechanism>Upsert with onConflict and ignoreDuplicates</mechanism>
+        <enforcement>Supabase client silently skips duplicates</enforcement>
+        <behavior>No error thrown, empty data array returned</behavior>
+        <logging>Log duplicate detection for observability</logging>
+      </layer>
+
+      <layer order="3" name="state-machine">
+        <mechanism>State-based query filtering</mechanism>
+        <enforcement>Query only users in eligible states</enforcement>
+        <example>Daily job queries state='active', already-transitioned users excluded</example>
+        <behavior>Natural idempotency through state changes</behavior>
+      </layer>
+
+      <layer order="4" name="atomic-transitions">
+        <mechanism>Optimistic locking on state updates</mechanism>
+        <enforcement>State machine checks updated_at timestamp</enforcement>
+        <behavior>Concurrent transitions fail gracefully, require retry</behavior>
+        <guarantee>No partial state changes - either complete or not</guarantee>
+      </layer>
+    </multi-layer-defense>
+
+    <mid-job-restart-recovery>
+      <scenario>
+        <description>Daily job starts at 6:00 AM, processes 50 of 100 users, service crashes</description>
+        <recovery>
+          <step>Service restarts at 6:01 AM</step>
+          <step>Daily job re-runs (manual trigger or cron retry)</step>
+          <step>Query finds 50 remaining users (first 50 already transitioned)</step>
+          <step>Processes remaining 50 users</step>
+          <step>Result: All 100 users processed, no duplicates</step>
+        </recovery>
+      </scenario>
+
+      <guarantees>
+        <guarantee>State transitions are atomic - each user independent</guarantee>
+        <guarantee>Already-transitioned users excluded by state filter</guarantee>
+        <guarantee>Unprocessed users remain eligible for next run</guarantee>
+        <guarantee>Partial progress preserved in database</guarantee>
+        <guarantee>Messages queued atomically - either queued or not, no partial</guarantee>
+      </guarantees>
+    </mid-job-restart-recovery>
+
+    <code-examples>
+      <example file="services/scheduler/message-sender.ts">
+        <description>Idempotent message queueing with upsert</description>
+        <code><![CDATA[
+export async function queueMessage(params: QueueMessageParams): Promise<boolean> {
+  const supabase = getSupabaseClient()
+
+  // Use custom idempotency key if provided, otherwise generate default
+  const idempotencyKey = params.idempotencyKey || getIdempotencyKey(
+    params.userId,
+    params.messageType,
+    params.scheduledFor || new Date()
+  )
+
+  logger.info('Queueing engagement message', {
+    userId: params.userId,
+    messageType: params.messageType,
+    idempotencyKey,
+  })
+
+  try {
+    // Insert with ON CONFLICT DO NOTHING for idempotency
+    const { error } = await supabase
+      .from('engagement_message_queue')
+      .upsert(
+        {
+          user_id: params.userId,
+          message_type: params.messageType,
+          message_key: params.messageKey,
+          message_params: params.messageParams || {},
+          destination: params.destination,
+          destination_jid: params.destinationJid,
+          scheduled_for: (params.scheduledFor || new Date()).toISOString(),
+          status: 'pending',
+          retry_count: 0,
+          idempotency_key: idempotencyKey,
+        },
+        {
+          onConflict: 'idempotency_key',
+          ignoreDuplicates: true,  // Skip silently on duplicate
+        }
+      )
+
+    if (error) {
+      logger.error('Failed to queue message', { error: error.message })
+      return false
+    }
+
+    logger.info('Message queued successfully', { idempotencyKey })
+    return true
+  } catch (error) {
+    // Handle constraint violation gracefully
+    if (error.code === '23505') {
+      logger.info('Duplicate message detected via constraint', { idempotencyKey })
+      return true  // Not an error - duplicate is expected behavior
+    }
+    throw error
+  }
+}
+        ]]></code>
+      </example>
+
+      <example file="services/scheduler/daily-engagement-job.ts">
+        <description>Generate idempotency key for goodbye messages</description>
+        <code><![CDATA[
+async function processInactiveUsers(result: JobResult): Promise<void> {
+  // Query inactive users in 'active' state
+  // Users already transitioned to 'goodbye_sent' are automatically excluded
+  const { data: inactiveUsers } = await supabase
+    .from('user_engagement_states')
+    .select('user_id, last_activity_at')
+    .eq('state', 'active')  // Natural filtering by state
+    .lt('last_activity_at', inactivityDate.toISOString())
+
+  for (const user of inactiveUsers || []) {
+    result.processed++
+    try {
+      // Generate idempotency key for today's goodbye message
+      const today = format(new Date(), 'yyyy-MM-dd')
+      const idempotencyKey = `${user.user_id}:goodbye_sent:${today}`
+
+      // Transition state (includes message queuing with idempotency key)
+      await transitionState(user.user_id, 'inactivity_14d', { idempotencyKey })
+
+      result.succeeded++
+    } catch (error) {
+      result.failed++
+      result.errors.push({ userId: user.user_id, error: error.message })
+    }
+  }
+}
+        ]]></code>
+      </example>
+
+      <example file="services/scheduler/weekly-review-job.ts">
+        <description>Generate ISO week idempotency key</description>
+        <code><![CDATA[
+export async function runWeeklyReviewJob(): Promise<JobResult> {
+  const activeUsers = await getActiveUsersLastWeek()
+
+  for (const user of activeUsers) {
+    try {
+      // Generate idempotency key using ISO week
+      const now = new Date()
+      const weekYear = getISOWeekYear(now)
+      const weekNumber = getISOWeek(now)
+      const idempotencyKey = `${user.userId}:weekly_review:${weekYear}-W${weekNumber.toString().padStart(2, '0')}`
+
+      // Queue weekly review message
+      await queueMessage({
+        userId: user.userId,
+        messageType: 'weekly_review',
+        messageKey: 'engagementWeeklyReviewCelebration',
+        messageParams: { count: user.transactionCount },
+        destination: user.preferredDestination,
+        destinationJid: user.destinationJid,
+        scheduledFor: now,
+        idempotencyKey,  // Explicit idempotency key
+      })
+
+      result.succeeded++
+    } catch (error) {
+      result.failed++
+    }
+  }
+
+  return result
+}
+        ]]></code>
+      </example>
+    </code-examples>
+
+    <testing-strategy>
+      <unit-tests>
+        <test name="queueMessage with same key twice creates one entry">
+          <verify>Call queueMessage() twice with identical idempotencyKey</verify>
+          <assert>Only one row exists in engagement_message_queue</assert>
+        </test>
+
+        <test name="Daily job re-run produces no duplicate goodbye">
+          <setup>User inactive for 15 days, in 'active' state</setup>
+          <action>Run runDailyEngagementJob() twice on same day</action>
+          <assert>Only one goodbye message in queue</assert>
+          <assert>User in 'goodbye_sent' state (not processed twice)</assert>
+        </test>
+
+        <test name="Weekly job re-run in same week produces no duplicate">
+          <setup>User with activity in last 7 days</setup>
+          <action>Run runWeeklyReviewJob() twice in same ISO week</action>
+          <assert>Only one weekly_review message in queue</assert>
+        </test>
+
+        <test name="Mid-job restart completes partial work">
+          <setup>100 inactive users in 'active' state</setup>
+          <action>Manually transition first 50 users to 'goodbye_sent'</action>
+          <action>Run runDailyEngagementJob()</action>
+          <assert>Job processes exactly 50 users (remaining)</assert>
+          <assert>All 100 users now in 'goodbye_sent' state</assert>
+        </test>
+
+        <test name="Different dates produce separate messages">
+          <action>Queue goodbye with key 'user1:goodbye_sent:2025-11-24'</action>
+          <action>Queue goodbye with key 'user1:goodbye_sent:2025-11-25'</action>
+          <assert>Two separate messages exist</assert>
+        </test>
+
+        <test name="Idempotency key generation format">
+          <verify>getIdempotencyKey('user1', 'goodbye_sent', new Date('2025-11-24'))</verify>
+          <assert>Returns 'user1:goodbye_sent:2025-11-24'</assert>
+        </test>
+      </unit-tests>
+
+      <integration-tests>
+        <test name="Full daily job idempotency">
+          <setup>5 inactive users, all in 'active' state</setup>
+          <action>Run daily job</action>
+          <verify>5 goodbye messages queued, 5 users in 'goodbye_sent'</verify>
+          <action>Run daily job again (same day)</action>
+          <verify>Still only 5 messages, no duplicates</verify>
+        </test>
+
+        <test name="Full weekly job idempotency">
+          <setup>3 active users with transactions last week</setup>
+          <action>Run weekly job</action>
+          <verify>3 weekly_review messages queued</verify>
+          <action>Run weekly job again (same week)</action>
+          <verify>Still only 3 messages, no duplicates</verify>
+        </test>
+
+        <test name="Simulated mid-job crash">
+          <setup>10 inactive users</setup>
+          <action>Process first 5 (simulate partial run)</action>
+          <action>Run job again (simulate restart)</action>
+          <verify>Remaining 5 processed, no duplicates for first 5</verify>
+        </test>
+      </integration-tests>
+    </testing-strategy>
+
+    <observability>
+      <logging>
+        <event name="duplicate_message_skipped">
+          <level>info</level>
+          <fields>
+            <field>user_id</field>
+            <field>message_type</field>
+            <field>idempotency_key</field>
+            <field>skipped_at (timestamp)</field>
+          </fields>
+          <message>Duplicate message skipped via idempotency key</message>
+        </event>
+
+        <event name="message_queued_successfully">
+          <level>info</level>
+          <fields>
+            <field>user_id</field>
+            <field>message_type</field>
+            <field>message_id</field>
+            <field>idempotency_key</field>
+            <field>queued_at (timestamp)</field>
+          </fields>
+          <message>Message queued successfully</message>
+        </event>
+
+        <event name="constraint_violation_detected">
+          <level>info</level>
+          <fields>
+            <field>user_id</field>
+            <field>message_type</field>
+            <field>idempotency_key</field>
+            <field>constraint_code (23505)</field>
+          </fields>
+          <message>Duplicate message detected via database constraint</message>
+        </event>
+      </logging>
+
+      <metrics>
+        <metric name="idempotency_duplicate_skipped_count">
+          <type>counter</type>
+          <description>Number of duplicate messages prevented by idempotency</description>
+        </metric>
+
+        <metric name="message_queue_insert_count">
+          <type>counter</type>
+          <description>Total messages queued (excluding duplicates)</description>
+        </metric>
+
+        <metric name="idempotency_effectiveness_ratio">
+          <type>gauge</type>
+          <calculation>duplicate_skipped / (queue_insert + duplicate_skipped)</calculation>
+          <description>Percentage of duplicate attempts vs total attempts</description>
+        </metric>
+      </metrics>
+
+      <monitoring-queries>
+        <query name="check_duplicate_messages">
+          <sql><![CDATA[
+-- Check for duplicate messages (should be 0 with idempotency)
+SELECT idempotency_key, COUNT(*) as count
+FROM engagement_message_queue
+GROUP BY idempotency_key
+HAVING COUNT(*) > 1;
+          ]]></sql>
+        </query>
+
+        <query name="verify_unique_constraint">
+          <sql><![CDATA[
+-- Verify UNIQUE constraint exists
+SELECT constraint_name, constraint_type
+FROM information_schema.table_constraints
+WHERE table_name = 'engagement_message_queue'
+  AND constraint_type = 'UNIQUE';
+          ]]></sql>
+        </query>
+      </monitoring-queries>
+    </observability>
+  </implementation-guide>
+
+  <related-stories>
+    <story id="5-1" relationship="depends-on">
+      <title>Daily Engagement Job</title>
+      <relevance>Provides job structure that needs idempotency guarantees</relevance>
+      <file>services/scheduler/daily-engagement-job.ts</file>
+    </story>
+
+    <story id="5-3" relationship="depends-on">
+      <title>Weekly Review Job &amp; Message</title>
+      <relevance>Provides weekly job that needs ISO week-based idempotency</relevance>
+      <file>services/scheduler/weekly-review-job.ts</file>
+    </story>
+
+    <story id="5-4" relationship="depends-on">
+      <title>Message Queue Processor</title>
+      <relevance>Provides queueMessage() function that enforces idempotency</relevance>
+      <file>services/scheduler/message-sender.ts</file>
+    </story>
+
+    <story id="5-5" relationship="depends-on">
+      <title>Railway Cron Integration</title>
+      <relevance>Cron can trigger jobs multiple times - idempotency prevents duplicates</relevance>
+      <file>railway.cron.yml</file>
+    </story>
+
+    <story id="4-1" relationship="uses">
+      <title>State Machine Service Core</title>
+      <relevance>State transitions are atomic and provide natural idempotency</relevance>
+      <file>services/engagement/state-machine.ts</file>
+    </story>
+
+    <story id="1-1" relationship="uses">
+      <title>Database Schema Migration</title>
+      <relevance>Created engagement_message_queue with UNIQUE idempotency_key constraint</relevance>
+      <file>fe/scripts/034_engagement_system.sql</file>
+    </story>
+  </related-stories>
+
+  <risk-mitigation>
+    <risk name="Idempotency key collision">
+      <probability>low</probability>
+      <impact>high</impact>
+      <mitigation>
+        Include userId, message type, and timestamp in key format.
+        Format ensures no accidental overlaps between types.
+      </mitigation>
+    </risk>
+
+    <risk name="Missing UNIQUE constraint">
+      <probability>very-low</probability>
+      <impact>high</impact>
+      <mitigation>
+        Verify constraint exists via query.
+        Document required migration if missing.
+        Application-level upsert provides fallback.
+      </mitigation>
+    </risk>
+
+    <risk name="Clock drift causing key mismatch">
+      <probability>low</probability>
+      <impact>medium</impact>
+      <mitigation>
+        Use server-side date generation (consistent within job run).
+        Database timestamp (NOW()) ensures consistency.
+      </mitigation>
+    </risk>
+
+    <risk name="Concurrent job executions">
+      <probability>medium</probability>
+      <impact>low</impact>
+      <mitigation>
+        Database UNIQUE constraint serializes concurrent inserts.
+        State-based filtering prevents duplicate processing.
+        Optimistic locking handles concurrent state updates.
+      </mitigation>
+    </risk>
+
+    <risk name="Partial state transitions">
+      <probability>very-low</probability>
+      <impact>medium</impact>
+      <mitigation>
+        State machine ensures atomic transitions (Epic 4).
+        Each user's transition is independent.
+        Database transactions ensure consistency.
+      </mitigation>
+    </risk>
+  </risk-mitigation>
+
+  <performance-expectations>
+    <target name="no-duplicate-messages">
+      <goal>100% idempotency - zero duplicate messages</goal>
+      <implementation>Triple-layer defense (database + application + state-based)</implementation>
+      <monitoring>Log all duplicate detections for validation</monitoring>
+    </target>
+
+    <target name="job-rerun-safety">
+      <goal>Jobs can be run multiple times per day/week without side effects</goal>
+      <implementation>Idempotency keys scoped to time periods</implementation>
+      <validation>Integration tests verify safe re-runs</validation>
+    </target>
+
+    <target name="mid-job-recovery">
+      <goal>Partial progress preserved, remaining work completed on restart</goal>
+      <implementation>State-based filtering excludes already-processed users</implementation>
+      <guarantee>Atomic state transitions ensure no partial updates</guarantee>
+    </target>
+  </performance-expectations>
+
+  <file-modifications>
+    <file path="whatsapp-bot/src/services/scheduler/message-sender.ts">
+      <status>existing</status>
+      <modifications>
+        <modification>Add idempotencyKey parameter to QueueMessageParams interface</modification>
+        <modification>Implement upsert with onConflict: 'idempotency_key', ignoreDuplicates: true</modification>
+        <modification>Add constraint error handling (error.code === '23505')</modification>
+        <modification>Add logging for duplicate detection</modification>
+        <modification>Export getIdempotencyKey() helper function</modification>
+      </modifications>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts">
+      <status>existing</status>
+      <modifications>
+        <modification>Generate idempotency key for goodbye messages (format: yyyy-MM-dd)</modification>
+        <modification>Pass idempotency key to transitionState() metadata</modification>
+        <modification>Add state-based checks to skip already-processed users</modification>
+        <modification>Add counter for already-processed users in JobResult</modification>
+      </modifications>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/weekly-review-job.ts">
+      <status>existing</status>
+      <modifications>
+        <modification>Generate ISO week idempotency key (format: YYYY-Www)</modification>
+        <modification>Pass idempotency key to queueMessage() call</modification>
+        <modification>Import getISOWeek, getISOWeekYear from date-fns</modification>
+      </modifications>
+    </file>
+
+    <file path="whatsapp-bot/src/__tests__/scheduler/message-sender.test.ts">
+      <status>existing</status>
+      <modifications>
+        <modification>Add test: queueMessage with same key twice creates one entry</modification>
+        <modification>Add test: different dates produce separate messages</modification>
+        <modification>Add test: idempotency key generation format</modification>
+        <modification>Add test: constraint violation handling</modification>
+      </modifications>
+    </file>
+
+    <file path="whatsapp-bot/src/__tests__/scheduler/daily-engagement-job.test.ts">
+      <status>may-need-creation</status>
+      <modifications>
+        <modification>Add test: daily job re-run produces no duplicate goodbye</modification>
+        <modification>Add test: mid-job restart completes partial work</modification>
+        <modification>Add test: state-based filtering excludes processed users</modification>
+      </modifications>
+    </file>
+
+    <file path="whatsapp-bot/src/__tests__/scheduler/weekly-review-job.test.ts">
+      <status>may-need-creation</status>
+      <modifications>
+        <modification>Add test: weekly job re-run in same week produces no duplicate</modification>
+        <modification>Add test: different weeks produce new messages</modification>
+        <modification>Add test: ISO week key generation</modification>
+      </modifications>
+    </file>
+  </file-modifications>
+
+  <dependencies>
+    <npm-packages>
+      <package name="date-fns">
+        <version>^2.30.0</version>
+        <usage>ISO week functions: getISOWeek(), getISOWeekYear(), format()</usage>
+        <status>already-installed</status>
+      </package>
+    </npm-packages>
+
+    <database>
+      <requirement>UNIQUE constraint on engagement_message_queue.idempotency_key</requirement>
+      <migration>fe/scripts/034_engagement_system.sql</migration>
+      <status>already-applied</status>
+    </database>
+  </dependencies>
+
+  <developer-notes>
+    <note category="critical">
+      <title>Idempotency is multi-layer defense</title>
+      <description>
+        Don't rely on just one mechanism. Database constraint is the ultimate enforcement,
+        but application-level upsert provides graceful handling, and state-based filtering
+        provides natural deduplication. All three layers work together.
+      </description>
+    </note>
+
+    <note category="testing">
+      <title>Time-based testing requires mocking</title>
+      <description>
+        Tests should mock Date() and date-fns functions to simulate same-day/same-week
+        scenarios. Use jest.setSystemTime() or mock date-fns functions directly.
+      </description>
+    </note>
+
+    <note category="observability">
+      <title>Log all duplicate detections</title>
+      <description>
+        Even though duplicates are expected behavior, log them at INFO level for
+        monitoring idempotency effectiveness. High duplicate rates may indicate
+        configuration issues (jobs running too frequently).
+      </description>
+    </note>
+
+    <note category="state-machine">
+      <title>State machine already provides natural idempotency</title>
+      <description>
+        Epic 4's state machine design means users automatically move out of eligible
+        states after processing. Query-based filtering excludes them from subsequent
+        runs on the same day. Idempotency keys provide additional safety for messages.
+      </description>
+    </note>
+
+    <note category="recovery">
+      <title>Mid-job restart is safe by design</title>
+      <description>
+        Each user's processing is independent and atomic. If job crashes after processing
+        50 users, those 50 are in new states and won't be re-selected. Remaining users
+        are still eligible and will be processed on next run. No special recovery logic needed.
+      </description>
+    </note>
+  </developer-notes>
+</story-context>

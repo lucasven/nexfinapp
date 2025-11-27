@@ -3,6 +3,7 @@ import { getUserSession } from '../../auth/session-manager.js'
 import { ParsedIntent } from '../../types.js'
 import { messages, getMonthName } from '../../localization/pt-br.js'
 import { logger } from '../../services/monitoring/logger.js'
+import { trackTierAction } from '../../services/onboarding/tier-tracker.js'
 
 export async function handleShowReport(whatsappNumber: string, intent: ParsedIntent): Promise<string> {
   try {
@@ -105,6 +106,10 @@ export async function handleShowReport(whatsappNumber: string, intent: ParsedInt
       const formattedDate = new Date(date).toLocaleDateString('pt-BR')
       response += `\n📅 Dia com mais gastos: ${formattedDate} (R$ ${total.toFixed(2)})`
     }
+
+    // Story 3.2: Track tier action for view_report (AC-3.2.8)
+    // Fire-and-forget - does NOT block response (AC-3.2.9)
+    trackTierAction(session.userId, 'view_report')
 
     return response
   } catch (error) {

@@ -1,0 +1,221 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>1</storyId>
+    <title>Tier Progress Tracking Service</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/3-1-tier-progress-tracking-service.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>a service to track user progress through onboarding tiers</iWant>
+    <soThat>I can detect tier completions and trigger appropriate celebration messages</soThat>
+    <tasks>
+      <task id="1" acs="1,5,7">Create tier-tracker.ts service file
+        <subtask>Create whatsapp-bot/src/services/onboarding/tier-tracker.ts</subtask>
+        <subtask>Define TierAction type union for all tracked actions</subtask>
+        <subtask>Define TierProgress interface matching architecture spec</subtask>
+        <subtask>Implement getTierProgress(userId) to read current progress from DB</subtask>
+        <subtask>Implement recordAction(userId, action) with atomic JSONB update</subtask>
+        <subtask>Ensure idempotent behavior (re-recording same action = no-op)</subtask>
+      </task>
+      <task id="2" acs="2,3,4,6">Implement tier completion detection
+        <subtask>Create checkTierCompletion(userId, tier: 1|2|3) function</subtask>
+        <subtask>Implement Tier 1 completion check (all 4 actions)</subtask>
+        <subtask>Implement Tier 2 completion check (all 3 actions)</subtask>
+        <subtask>Implement Tier 3 completion check (all 2 actions)</subtask>
+        <subtask>Set tierX.completed_at timestamp on first completion</subtask>
+        <subtask>Update user_profiles.onboarding_tier to highest completed tier</subtask>
+      </task>
+      <task id="3" acs="1">Add tier constants to engagement constants
+        <subtask>Add TIER_1_ACTIONS: ['add_expense', 'edit_category', 'delete_expense', 'add_category']</subtask>
+        <subtask>Add TIER_2_ACTIONS: ['set_budget', 'add_recurring', 'list_categories']</subtask>
+        <subtask>Add TIER_3_ACTIONS: ['edit_category', 'view_report']</subtask>
+        <subtask>Note: edit_category appears in both Tier 1 and Tier 3 (intentional)</subtask>
+      </task>
+      <task id="4" acs="1,2,3,4">Create TierUpdate return type
+        <subtask>Define TierUpdate interface: { action, tierCompleted: number | null, shouldSendUnlock: boolean }</subtask>
+        <subtask>Return tierCompleted when tier is newly completed</subtask>
+        <subtask>Return shouldSendUnlock = true only on FIRST completion</subtask>
+      </task>
+      <task id="5" acs="7">Export from service index
+        <subtask>Update services/onboarding/index.ts to export tier-tracker functions</subtask>
+        <subtask>Ensure TypeScript types are exported for consumers</subtask>
+      </task>
+      <task id="6" acs="1,2,3,4,5,6,7">Write unit tests
+        <subtask>Create __tests__/services/onboarding/tier-tracker.test.ts</subtask>
+        <subtask>Test: recordAction() updates JSONB correctly</subtask>
+        <subtask>Test: recordAction() idempotent (double-call = same result)</subtask>
+        <subtask>Test: Tier 1 completion detected when all 4 actions done</subtask>
+        <subtask>Test: Tier 2 completion detected when all 3 actions done</subtask>
+        <subtask>Test: Tier 3 completion detected when all 2 actions done</subtask>
+        <subtask>Test: onboarding_tier column updated on completion</subtask>
+        <subtask>Test: completed_at timestamp set only on first completion</subtask>
+        <subtask>Test: getTierProgress() returns correct structure</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="3.1.1">Given a user completes an action tracked in any tier (add_expense, set_budget, view_report, etc.), when recordAction(userId, actionName) is called, then user_profiles.onboarding_tier_progress JSONB is updated atomically with {action: true}</ac>
+    <ac id="3.1.2">Given all actions in Tier 1 are complete (add_expense, edit_category, delete_expense, add_category), when checkTierCompletion(userId, 1) is called, then it returns true and sets tier1.completed_at timestamp in the progress JSONB</ac>
+    <ac id="3.1.3">Given all actions in Tier 2 are complete (set_budget, add_recurring, list_categories), when checkTierCompletion(userId, 2) is called, then it returns true and sets tier2.completed_at timestamp in the progress JSONB</ac>
+    <ac id="3.1.4">Given all actions in Tier 3 are complete (edit_category, view_report), when checkTierCompletion(userId, 3) is called, then it returns true and sets tier3.completed_at timestamp in the progress JSONB</ac>
+    <ac id="3.1.5">Given recordAction() is called with the same action twice, when the update completes, then the action remains true (idempotent - no error, no duplicate timestamp)</ac>
+    <ac id="3.1.6">Given a tier is marked complete, when onboarding_tier column is updated, then the value reflects the highest completed tier (0=none, 1=tier1, 2=tier2, 3=tier3)</ac>
+    <ac id="3.1.7">Given getTierProgress(userId) is called, when the user has partial progress, then it returns a typed TierProgress object with current state of all tiers</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Smart Onboarding and Engagement Architecture</title>
+        <section>Tier Progress Structure</section>
+        <snippet>TierProgress interface definition with tier1/tier2/tier3 objects containing action booleans and completed_at timestamps. Stored in user_profiles.onboarding_tier_progress JSONB.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Smart Onboarding and Engagement Architecture</title>
+        <section>API Contracts - Tier Tracker Service</section>
+        <snippet>recordAction(), getTierProgress(), checkTierCompletion() function signatures. TierUpdate interface returns tierCompleted and shouldSendUnlock.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic 3: Progressive Tier Journey</title>
+        <section>Story 3.1 - Tier Progress Tracking Service</section>
+        <snippet>FRs covered: FR4, FR5, FR38. Service to track user progress through onboarding tiers, detect completions, and trigger celebration messages.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd.md</path>
+        <title>NexFinApp PRD</title>
+        <section>Functional Requirements FR4-FR5, FR38</section>
+        <snippet>FR4: Track 3-tier onboarding progress. FR5: Detect tier action completion. FR38: Track tier completion events with timestamps.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>whatsapp-bot/src/services/engagement/types.ts</path>
+        <kind>types</kind>
+        <symbol>TierProgress</symbol>
+        <lines>109-129</lines>
+        <reason>TierProgress interface already defined here - REUSE this, don't recreate. Contains tier1/tier2/tier3 objects with action booleans and completed_at timestamps.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/handlers/engagement/tier-progress-handler.ts</path>
+        <kind>handler</kind>
+        <symbol>recordTierAction, getTierProgress, TierAction</symbol>
+        <lines>1-105</lines>
+        <reason>Stub handler file with TierAction type union and placeholder functions. This story implements the actual service that this handler will call.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/handlers/engagement/hints-handler.ts</path>
+        <kind>handler</kind>
+        <symbol>getUserHintProfile</symbol>
+        <lines>122-146</lines>
+        <reason>Pattern for querying user_profiles.onboarding_tier. Shows how to access tier-related columns from user_profiles table.</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/services/database/supabase-client.ts</path>
+        <kind>service</kind>
+        <symbol>getSupabaseClient</symbol>
+        <lines>8-26</lines>
+        <reason>Database client getter - use this for all Supabase operations. Follow existing singleton pattern.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>@supabase/supabase-js</package>
+        <version>^2.39.3</version>
+        <usage>Database operations for user_profiles JSONB updates</usage>
+      </node>
+      <node>
+        <package>jest</package>
+        <version>^29.7.0</version>
+        <usage>Unit testing framework</usage>
+      </node>
+      <node>
+        <package>ts-jest</package>
+        <version>^29.1.1</version>
+        <usage>TypeScript support for Jest</usage>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture">TierProgress interface is already defined in services/engagement/types.ts - import and use it, do not recreate</constraint>
+    <constraint source="architecture">All state changes must be atomic - use JSONB merge operators for concurrent safety</constraint>
+    <constraint source="architecture">Service must be non-blocking - errors should be logged but not propagate to user-facing responses</constraint>
+    <constraint source="architecture">edit_category action counts for BOTH Tier 1 AND Tier 3 - completing once satisfies both</constraint>
+    <constraint source="prd">No celebration messages in this story - only tracking. Story 3.3 handles celebrations</constraint>
+    <constraint source="architecture">Use existing logger from services/monitoring/logger.ts for all logging</constraint>
+    <constraint source="jest.config">Test files must be in __tests__ directory with .test.ts extension</constraint>
+    <constraint source="jest.config">Coverage threshold: 70% for branches, functions, lines, statements</constraint>
+    <constraint source="project">ESM modules - use .js extension in imports despite .ts source files</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>TierProgress</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface TierProgress { tier1: { add_expense: boolean; edit_category: boolean; delete_expense: boolean; add_category: boolean; completed_at?: string }; tier2: { set_budget: boolean; add_recurring: boolean; list_categories: boolean; completed_at?: string }; tier3: { edit_category: boolean; view_report: boolean; completed_at?: string }; magic_moment_at?: string }</signature>
+      <path>whatsapp-bot/src/services/engagement/types.ts</path>
+    </interface>
+    <interface>
+      <name>TierAction</name>
+      <kind>TypeScript type union</kind>
+      <signature>type TierAction = 'add_expense' | 'edit_category' | 'delete_expense' | 'add_category' | 'set_budget' | 'add_recurring' | 'list_categories' | 'view_report'</signature>
+      <path>whatsapp-bot/src/handlers/engagement/tier-progress-handler.ts</path>
+    </interface>
+    <interface>
+      <name>recordAction</name>
+      <kind>async function</kind>
+      <signature>async function recordAction(userId: string, action: TierAction): Promise&lt;TierUpdate&gt;</signature>
+      <path>whatsapp-bot/src/services/onboarding/tier-tracker.ts (TO CREATE)</path>
+    </interface>
+    <interface>
+      <name>getTierProgress</name>
+      <kind>async function</kind>
+      <signature>async function getTierProgress(userId: string): Promise&lt;TierProgress&gt;</signature>
+      <path>whatsapp-bot/src/services/onboarding/tier-tracker.ts (TO CREATE)</path>
+    </interface>
+    <interface>
+      <name>checkTierCompletion</name>
+      <kind>async function</kind>
+      <signature>async function checkTierCompletion(userId: string, tier: 1 | 2 | 3): Promise&lt;boolean&gt;</signature>
+      <path>whatsapp-bot/src/services/onboarding/tier-tracker.ts (TO CREATE)</path>
+    </interface>
+    <interface>
+      <name>Supabase JSONB Update</name>
+      <kind>SQL pattern</kind>
+      <signature>UPDATE user_profiles SET onboarding_tier_progress = onboarding_tier_progress || $1::jsonb WHERE id = $2</signature>
+      <path>Database operation pattern for atomic updates</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Jest with ts-jest preset for ESM. Tests in __tests__ directories. Mock Supabase client for unit tests. 70% coverage threshold required. Use existing mock patterns from whatsapp-bot/src/__mocks__/supabase.ts.</standards>
+    <locations>
+      <location>whatsapp-bot/src/__tests__/services/onboarding/tier-tracker.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/**/*.test.ts</location>
+    </locations>
+    <ideas>
+      <idea ac="3.1.1">Test recordAction() updates JSONB with correct action:true value</idea>
+      <idea ac="3.1.1">Test recordAction() with new user (empty progress) initializes structure correctly</idea>
+      <idea ac="3.1.2">Test Tier 1 completion when all 4 actions (add_expense, edit_category, delete_expense, add_category) are true</idea>
+      <idea ac="3.1.2">Test Tier 1 NOT complete when only 3 of 4 actions done</idea>
+      <idea ac="3.1.3">Test Tier 2 completion when all 3 actions (set_budget, add_recurring, list_categories) are true</idea>
+      <idea ac="3.1.4">Test Tier 3 completion when both actions (edit_category, view_report) are true</idea>
+      <idea ac="3.1.5">Test idempotency - calling recordAction twice with same action returns same result, no errors</idea>
+      <idea ac="3.1.5">Test completed_at timestamp NOT overwritten on duplicate recordAction call</idea>
+      <idea ac="3.1.6">Test onboarding_tier column updated to 1 when Tier 1 completes</idea>
+      <idea ac="3.1.6">Test onboarding_tier column updated to 2 when Tier 2 completes (after Tier 1)</idea>
+      <idea ac="3.1.6">Test out-of-order completion: completing Tier 2 before Tier 1 sets onboarding_tier to max completed</idea>
+      <idea ac="3.1.7">Test getTierProgress returns correct TierProgress structure with partial progress</idea>
+      <idea ac="3.1.7">Test getTierProgress returns default empty structure for new user</idea>
+    </ideas>
+  </tests>
+</story-context>

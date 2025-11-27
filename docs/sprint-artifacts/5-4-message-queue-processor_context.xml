@@ -1,0 +1,752 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>5.4</story-id>
+    <story-key>5-4-message-queue-processor</story-key>
+    <story-title>Message Queue Processor</story-title>
+    <epic-id>5</epic-id>
+    <epic-title>Scheduled Jobs &amp; Weekly Reviews</epic-title>
+    <generated-date>2025-11-24</generated-date>
+    <status>ready-for-dev</status>
+  </metadata>
+
+  <story-overview>
+    <summary>
+      Implement the message queue processor that reliably sends queued engagement messages via Baileys with retry logic, rate limiting, and comprehensive error handling. This is the final piece that enables reliable proactive messaging for the Smart Onboarding &amp; Engagement System.
+    </summary>
+    <acceptance-criteria>
+      <criterion id="AC-5.4.1">
+        Given pending messages in the queue with scheduled_for &lt;= now(), when processMessageQueue() runs, then each message is sent via Baileys and marked status = 'sent' with sent_at = now().
+      </criterion>
+      <criterion id="AC-5.4.2">
+        Given a message fails to send, when retry_count &lt; 3, then the message remains 'pending' with retry_count incremented and retry uses exponential backoff (1s, 2s, 4s).
+      </criterion>
+      <criterion id="AC-5.4.3">
+        Given a message fails and retry_count &gt;= 3, when processing, then status = 'failed' and error_message is set.
+      </criterion>
+      <criterion id="AC-5.4.4">
+        Given multiple messages to send, when processing, then there is a 500ms delay between sends (rate limiting).
+      </criterion>
+    </acceptance-criteria>
+  </story-overview>
+
+  <architecture-context>
+    <system-design>
+      <description>
+        The message queue processor is the final link in the engagement message delivery chain. Jobs (Story 5.1 daily, Story 5.3 weekly) queue messages with idempotency keys, then call processMessageQueue() to immediately send pending messages. The processor handles Baileys integration, localization resolution, retry logic, and rate limiting.
+      </description>
+      <integration-flow>
+        <![CDATA[
+Daily/Weekly Job completes
+      ↓
+processMessageQueue() called
+      ↓
+┌─────────────────────────────────────┐
+│ 1. Query pending messages           │
+│    (status='pending', scheduled<=now)│
+│    Ordered by scheduled_for ASC      │
+│    Limit 100                         │
+└─────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────┐
+│ 2. For each message:                │
+│    - Resolve localization key        │
+│    - Send via Baileys                │
+│    - Mark sent/failed                │
+│    - Wait 500ms (rate limit)         │
+└─────────────────────────────────────┘
+      ↓
+┌─────────────────────────────────────┐
+│ 3. Handle failures:                 │
+│    - retry_count < 3: increment      │
+│    - retry_count >= 3: mark failed   │
+│    - Exponential backoff: 1s/2s/4s   │
+└─────────────────────────────────────┘
+      ↓
+Return ProcessResult with counts
+        ]]>
+      </integration-flow>
+    </system-design>
+
+    <adr-references>
+      <adr id="ADR-002" title="Database-Driven Scheduler">
+        Justifies database-driven message queue with retry capability. All messages queued to database before sending for idempotency and audit trail.
+      </adr>
+      <adr id="ADR-003" title="Message Queue Table">
+        Defines queue table schema with retry_count, status, error_message columns. This story implements the processor that updates these fields.
+      </adr>
+    </adr-references>
+
+    <nfr-alignment>
+      <requirement id="NFR3" title="Scheduler evaluation time">
+        Target: &lt; 60 seconds. Implementation: Process max 100 messages per run with 500ms delay = 50 seconds max.
+      </requirement>
+      <requirement id="NFR5" title="Message delivery confirmation">
+        Target: Retry on failure, max 3 attempts. Implementation: Exponential backoff 1s, 2s, 4s with retry_count tracking.
+      </requirement>
+    </nfr-alignment>
+  </architecture-context>
+
+  <existing-code>
+    <file path="whatsapp-bot/src/services/scheduler/message-sender.ts" status="exists-stub">
+      <description>
+        Contains stub processMessageQueue() function with TODO comments. Also has working queueMessage() and resolveDestinationJid() functions from Story 4.6. Need to implement the full processor logic.
+      </description>
+      <key-functions>
+        <function name="queueMessage" status="complete">
+          Queues messages with idempotency keys - used by Story 5.1 and 5.3.
+        </function>
+        <function name="resolveDestinationJid" status="complete">
+          Resolves user's preferred destination at send time (Story 4.6).
+        </function>
+        <function name="processMessageQueue" status="stub">
+          Currently returns empty result. THIS IS THE MAIN FUNCTION TO IMPLEMENT.
+        </function>
+        <function name="getIdempotencyKey" status="complete">
+          Generates idempotency keys in format {userId}:{eventType}:{date}.
+        </function>
+      </key-functions>
+      <key-interfaces>
+        <interface name="ProcessResult">
+          <field name="processed">Total messages attempted</field>
+          <field name="succeeded">Successfully sent</field>
+          <field name="failed">Terminal failures (retry_count >= 3)</field>
+          <field name="errors">Array of { messageId, error } objects</field>
+        </interface>
+        <interface name="QueuedMessage">
+          Fields: id, user_id, message_type, message_key, message_params, destination, destination_jid, retry_count, user_locale
+        </interface>
+      </key-interfaces>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts" status="complete">
+      <description>
+        Daily job (Story 5.1) that calls processMessageQueue() at the end. Currently no integration because processor is stub. Need to add await processMessageQueue() call after Step 3.
+      </description>
+      <integration-point>
+        After processRemindLaterDue() completes (line ~263), add:
+        ```typescript
+        // Step 4: Process queued messages (Story 5.4)
+        const queueResult = await processMessageQueue()
+        logger.info('Queue processing completed', queueResult)
+        ```
+      </integration-point>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/weekly-review-job.ts" status="complete">
+      <description>
+        Weekly job (Story 5.3) that calls queueMessage() for active users. Currently no processMessageQueue() call at the end. Need to add integration.
+      </description>
+      <integration-point>
+        After the for loop completes (line ~133), before the finally block, add:
+        ```typescript
+        // Step 3: Process queued messages (Story 5.4)
+        const queueResult = await processMessageQueue()
+        logger.info('Queue processing completed', queueResult)
+        ```
+      </integration-point>
+    </file>
+
+    <file path="whatsapp-bot/src/localization/pt-br.ts" status="complete">
+      <description>
+        Brazilian Portuguese localization with engagement messages. Has nested keys like engagement.goodbye.self_select and engagement.weekly.celebration.
+      </description>
+      <relevant-keys>
+        <key path="engagement.goodbye.self_select">Goodbye self-select message (3 options)</key>
+        <key path="engagement.weekly.celebration">Weekly review celebration</key>
+        <key path="engagement.reminder">Reminder message</key>
+        <key path="engagement.help.restart">Help flow restart (Tier 1)</key>
+      </relevant-keys>
+      <usage-pattern>
+        Keys can be strings or functions. Functions accept params object for variable substitution.
+        Example: engagement.weekly.celebration = (params) => `Parabéns! Você registrou ${params.count} transações.`
+      </usage-pattern>
+    </file>
+
+    <file path="whatsapp-bot/src/localization/en.ts" status="complete">
+      <description>
+        English localization mirroring pt-br.ts structure. Same engagement message keys.
+      </description>
+    </file>
+
+    <file path="whatsapp-bot/src/services/engagement/constants.ts" status="complete">
+      <description>
+        Engagement system configuration constants. Includes MAX_MESSAGE_RETRIES = 3 which is critical for retry logic.
+      </description>
+      <relevant-constants>
+        <constant name="MAX_MESSAGE_RETRIES" value="3">Maximum retry attempts before marking failed</constant>
+        <constant name="MESSAGE_TYPE_PREFIXES">Maps message types to localization key prefixes</constant>
+      </relevant-constants>
+    </file>
+  </existing-code>
+
+  <database-schema>
+    <table name="engagement_message_queue" migration="033_engagement_system.sql">
+      <description>
+        Queue table for proactive engagement messages with retry capability and status tracking. Created in Epic 1 migration.
+      </description>
+      <columns>
+        <column name="id" type="UUID" pk="true">Primary key</column>
+        <column name="user_id" type="UUID" fk="auth.users(id)">User receiving message</column>
+        <column name="message_type" type="TEXT" check="IN ('welcome', 'tier_unlock', 'goodbye', 'weekly_review', 'reminder', 'help_restart')">
+          Type of engagement message
+        </column>
+        <column name="message_key" type="TEXT">
+          Localization key (e.g., 'engagement.goodbye.self_select')
+        </column>
+        <column name="message_params" type="JSONB">
+          Variables for localization functions (e.g., {count: '5'})
+        </column>
+        <column name="destination" type="TEXT" check="IN ('individual', 'group')">
+          Destination type (resolved at send time via Story 4.6)
+        </column>
+        <column name="destination_jid" type="TEXT">
+          WhatsApp JID to send to (fallback if routing fails)
+        </column>
+        <column name="scheduled_for" type="TIMESTAMPTZ" default="NOW()">
+          When message should be sent (usually immediate)
+        </column>
+        <column name="sent_at" type="TIMESTAMPTZ" nullable="true">
+          When message was successfully sent (AC-5.4.1)
+        </column>
+        <column name="status" type="TEXT" check="IN ('pending', 'sent', 'failed', 'cancelled')" default="pending">
+          Message status - processor updates this field
+        </column>
+        <column name="retry_count" type="INTEGER" default="0">
+          Number of send attempts (AC-5.4.2, AC-5.4.3)
+        </column>
+        <column name="error_message" type="TEXT" nullable="true">
+          Error reason if status = 'failed' (AC-5.4.3)
+        </column>
+        <column name="idempotency_key" type="TEXT" unique="true">
+          Prevents duplicate messages (format: {userId}:{eventType}:{date})
+        </column>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()">
+          When message was queued
+        </column>
+      </columns>
+      <indexes>
+        <index name="idx_queue_status" columns="status" where="status = 'pending'">
+          Partial index for efficient pending message queries
+        </index>
+        <index name="idx_queue_scheduled" columns="scheduled_for" where="status = 'pending'">
+          Partial index for scheduled_for filtering
+        </index>
+      </indexes>
+      <query-pattern>
+        <![CDATA[
+-- Query pending messages (AC-5.4.1)
+SELECT emq.*, up.locale as user_locale
+FROM engagement_message_queue emq
+JOIN user_profiles up ON emq.user_id = up.id
+WHERE emq.status = 'pending'
+  AND emq.scheduled_for <= NOW()
+ORDER BY emq.scheduled_for ASC
+LIMIT 100;
+
+-- Mark message sent (AC-5.4.1)
+UPDATE engagement_message_queue
+SET status = 'sent', sent_at = NOW()
+WHERE id = $messageId;
+
+-- Increment retry count (AC-5.4.2)
+UPDATE engagement_message_queue
+SET retry_count = retry_count + 1
+WHERE id = $messageId;
+
+-- Mark message failed (AC-5.4.3)
+UPDATE engagement_message_queue
+SET status = 'failed', error_message = $error, retry_count = $retryCount
+WHERE id = $messageId;
+        ]]>
+      </query-pattern>
+    </table>
+
+    <table name="user_profiles" read-only="true">
+      <description>
+        User profile table with locale column needed for localization resolution.
+      </description>
+      <relevant-columns>
+        <column name="locale" type="TEXT" default="pt-BR">
+          User's preferred language (pt-BR or en)
+        </column>
+        <column name="whatsapp_jid" type="TEXT">
+          User's WhatsApp JID (fallback destination)
+        </column>
+        <column name="preferred_destination" type="TEXT">
+          User's preferred destination (individual or group)
+        </column>
+      </relevant-columns>
+    </table>
+  </database-schema>
+
+  <dependencies>
+    <internal-dependency story="1.6" title="Message Queue Service Foundation">
+      Provides engagement_message_queue table and queueMessage() function. Table must exist with correct schema and indexes.
+    </internal-dependency>
+    <internal-dependency story="4.6" title="Message Routing Service">
+      Provides resolveDestinationJid() function for send-time destination resolution. Already integrated in message-sender.ts.
+    </internal-dependency>
+    <internal-dependency story="5.1" title="Daily Engagement Job">
+      Will call processMessageQueue() at end of job. Need to add integration point after implementing processor.
+    </internal-dependency>
+    <internal-dependency story="5.3" title="Weekly Review Job">
+      Will call processMessageQueue() at end of job. Need to add integration point after implementing processor.
+    </internal-dependency>
+    <external-dependency package="@whiskeysockets/baileys" version="^6.7.9">
+      WhatsApp Web API for sending messages. Need to access sock.sendMessage(jid, { text: message }).
+    </external-dependency>
+    <external-dependency package="@supabase/supabase-js" version="^2.39.3">
+      Database client for queue queries and updates.
+    </external-dependency>
+    <external-dependency package="pino" version="^8.17.2">
+      Structured logging for processor events.
+    </external-dependency>
+  </dependencies>
+
+  <implementation-guidance>
+    <critical-patterns>
+      <pattern name="Failure Isolation">
+        <description>
+          Individual message failures must NOT fail entire queue processing. Use try-catch per message and continue to next.
+        </description>
+        <code-example>
+          <![CDATA[
+for (const message of messages) {
+  try {
+    await processMessage(message)
+    sent++
+  } catch (error) {
+    logger.error('Failed to send message', { messageId: message.id, error })
+    if (message.retry_count < 3) {
+      retried++
+    } else {
+      failed++
+      errors.push({ messageId: message.id, error: error.message })
+    }
+    // Continue to next message - don't fail entire batch
+  }
+}
+          ]]>
+        </code-example>
+      </pattern>
+
+      <pattern name="Rate Limiting">
+        <description>
+          500ms delay between ALL sends (success or failure) to comply with WhatsApp rate limits.
+        </description>
+        <code-example>
+          <![CDATA[
+for (const message of messages) {
+  try {
+    await sendMessage(message)
+  } catch (error) {
+    handleError(error)
+  }
+
+  // ALWAYS delay, regardless of success/failure
+  await sleep(500)
+}
+          ]]>
+        </code-example>
+      </pattern>
+
+      <pattern name="Localization Resolution">
+        <description>
+          Resolve message_key to actual text using user's locale. Support nested keys and function calls with params.
+        </description>
+        <code-example>
+          <![CDATA[
+function resolveMessageText(
+  messageKey: string,
+  messageParams: Record<string, string> | null,
+  locale: string
+): string {
+  const localization = locale === 'pt-BR' ? ptBR : en
+
+  // Parse nested key (e.g., 'engagement.goodbye.self_select')
+  const keys = messageKey.split('.')
+  let value: any = localization.messages
+
+  for (const key of keys) {
+    value = value[key]
+    if (!value) {
+      logger.warn('Localization key not found', { messageKey, locale })
+      return `[Missing translation: ${messageKey}]`
+    }
+  }
+
+  // If value is a function, call it with params
+  if (typeof value === 'function') {
+    return value(messageParams || {})
+  }
+
+  return value
+}
+          ]]>
+        </code-example>
+      </pattern>
+
+      <pattern name="Baileys Socket Integration">
+        <description>
+          Check socket connection status before processing. If disconnected, skip processing and messages remain pending for next run.
+        </description>
+        <code-example>
+          <![CDATA[
+// At start of processMessageQueue()
+const sock = getSocket()  // Or however sock is accessed
+if (!sock || !sock.user) {
+  logger.warn('Baileys socket not connected, skipping queue processing')
+  return {
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    errors: []
+  }
+}
+          ]]>
+        </code-example>
+        <open-question>
+          How is Baileys socket exported from index.ts? May need to add export function getSocket() or pass sock as parameter to processMessageQueue().
+        </open-question>
+      </pattern>
+
+      <pattern name="Exponential Backoff (Conceptual)">
+        <description>
+          AC mentions 1s, 2s, 4s backoff but in practice, the job frequency determines retry timing. Retry count tracking is the key mechanism. Immediate retry with sleep would block job completion (not recommended).
+        </description>
+        <implementation-note>
+          Keep messages pending with incremented retry_count. Next job run picks them up naturally. This is simpler and non-blocking. Job runs daily (Story 5.1) or weekly (Story 5.3).
+        </implementation-note>
+      </pattern>
+    </critical-patterns>
+
+    <task-breakdown>
+      <task id="1" title="Enhance message-sender.ts with queue processor">
+        <steps>
+          <step>1. Implement processMessageQueue() function signature</step>
+          <step>2. Add structured logging for start/completion</step>
+          <step>3. Return ProcessResult with counts and errors array</step>
+          <step>4. Add error handling with try-catch wrapper</step>
+        </steps>
+        <ac-coverage>AC-5.4.1, AC-5.4.2, AC-5.4.3, AC-5.4.4</ac-coverage>
+      </task>
+
+      <task id="2" title="Implement pending message query">
+        <steps>
+          <step>1. Query engagement_message_queue for status='pending' and scheduled_for &lt;= NOW()</step>
+          <step>2. ORDER BY scheduled_for ASC (FIFO processing)</step>
+          <step>3. LIMIT 100 (batch processing to prevent timeout)</step>
+          <step>4. JOIN user_profiles to get locale column</step>
+          <step>5. Handle query errors (throw if fails)</step>
+        </steps>
+        <ac-coverage>AC-5.4.1</ac-coverage>
+      </task>
+
+      <task id="3" title="Implement message sending logic">
+        <steps>
+          <step>1. For each message: Resolve localization key to text via resolveMessageText()</step>
+          <step>2. Check Baileys socket connection (skip if disconnected)</step>
+          <step>3. Send via sock.sendMessage(jid, { text: message })</step>
+          <step>4. Mark status='sent', set sent_at=NOW() via markMessageSent()</step>
+          <step>5. Track success count</step>
+          <step>6. Support both individual and group destinations</step>
+        </steps>
+        <ac-coverage>AC-5.4.1</ac-coverage>
+      </task>
+
+      <task id="4" title="Implement retry logic with exponential backoff">
+        <steps>
+          <step>1. On send failure: Increment retry_count</step>
+          <step>2. Check if retry_count &lt; 3</step>
+          <step>3. If retry available: Keep status='pending', call markMessageRetry()</step>
+          <step>4. Track retry count in result</step>
+          <step>5. If max retries exceeded (retry_count &gt;= 3): Set status='failed', call markMessageFailed()</step>
+          <step>6. Set error_message with failure reason</step>
+          <step>7. Log error with context</step>
+          <step>8. Track failed count</step>
+        </steps>
+        <ac-coverage>AC-5.4.2, AC-5.4.3</ac-coverage>
+      </task>
+
+      <task id="5" title="Implement rate limiting">
+        <steps>
+          <step>1. Add 500ms delay between message sends</step>
+          <step>2. Use await sleep(500) after each send attempt</step>
+          <step>3. Ensure rate limit applies regardless of success/failure</step>
+          <step>4. Implement sleep() helper if not already available</step>
+        </steps>
+        <ac-coverage>AC-5.4.4</ac-coverage>
+      </task>
+
+      <task id="6" title="Add message localization resolution">
+        <steps>
+          <step>1. Implement resolveMessageText(messageKey, messageParams, locale) helper</step>
+          <step>2. Import localization modules from pt-br.ts and en.ts</step>
+          <step>3. Parse nested keys by splitting on '.'</step>
+          <step>4. Navigate through localization.messages object</step>
+          <step>5. Support variable substitution using messageParams object</step>
+          <step>6. Handle missing keys gracefully (log warning, use fallback)</step>
+          <step>7. Return localized message text ready for sending</step>
+        </steps>
+        <ac-coverage>AC-5.4.1</ac-coverage>
+      </task>
+
+      <task id="7" title="Integrate with daily and weekly jobs">
+        <steps>
+          <step>1. Add await processMessageQueue() call to daily-engagement-job.ts after Step 3</step>
+          <step>2. Add await processMessageQueue() call to weekly-review-job.ts after Step 2</step>
+          <step>3. Ensure jobs log queue processing results</step>
+          <step>4. Handle queue processing errors without failing entire job (try-catch)</step>
+        </steps>
+        <ac-coverage>AC-5.4.1</ac-coverage>
+      </task>
+
+      <task id="8" title="Add database update functions">
+        <steps>
+          <step>1. Implement markMessageSent(messageId, sentAt) - UPDATE status='sent', sent_at</step>
+          <step>2. Implement markMessageRetry(messageId, retryCount) - INCREMENT retry_count</step>
+          <step>3. Implement markMessageFailed(messageId, error, retryCount) - SET status='failed', error_message</step>
+          <step>4. Use Supabase client for all updates</step>
+          <step>5. Log all state changes</step>
+          <step>6. Handle update errors (log and continue)</step>
+        </steps>
+        <ac-coverage>AC-5.4.1, AC-5.4.2, AC-5.4.3</ac-coverage>
+      </task>
+
+      <task id="9" title="Add Baileys socket integration">
+        <steps>
+          <step>1. Import or receive Baileys socket instance (check index.ts export)</step>
+          <step>2. Check socket connection status before processing (sock.user exists)</step>
+          <step>3. Handle socket disconnection gracefully (log warning, skip processing)</step>
+          <step>4. Messages remain pending for next run if socket unavailable</step>
+          <step>5. Validate JID format before sending (optional defensive check)</step>
+        </steps>
+        <ac-coverage>AC-5.4.1</ac-coverage>
+      </task>
+
+      <task id="10" title="Write unit tests">
+        <steps>
+          <step>1. Test: Pending message successfully sent and marked 'sent'</step>
+          <step>2. Test: Failed message with retry_count=0 increments to 1, stays pending</step>
+          <step>3. Test: Failed message with retry_count=2 increments to 3 and marks 'failed'</step>
+          <step>4. Test: Multiple messages processed with 500ms delay between each</step>
+          <step>5. Test: Socket disconnected - processing skipped gracefully, empty result returned</step>
+          <step>6. Test: Localization resolution for pt-BR and en locales</step>
+          <step>7. Test: Message params variable substitution (e.g., {count} in weekly review)</step>
+          <step>8. Test: Batch processing limit (100 messages)</step>
+          <step>9. Test: FIFO ordering (scheduled_for ASC)</step>
+          <step>10. Test: ProcessResult counts are accurate (processed, succeeded, failed, errors)</step>
+        </steps>
+        <files>whatsapp-bot/src/__tests__/scheduler/message-sender.test.ts</files>
+      </task>
+    </task-breakdown>
+
+    <edge-cases>
+      <case name="Socket Disconnection">
+        <scenario>Baileys socket not connected when processMessageQueue() runs</scenario>
+        <handling>Check sock.user at start. If null, log warning and return empty result. Messages remain pending for next run.</handling>
+      </case>
+
+      <case name="Empty Queue">
+        <scenario>No pending messages to process</scenario>
+        <handling>Log "No messages to process" and return result with all counts = 0. This is normal, not an error.</handling>
+      </case>
+
+      <case name="Query Failure">
+        <scenario>Database query for pending messages fails</scenario>
+        <handling>Log error and throw. Job should fail and retry on next schedule. Don't partially process.</handling>
+      </case>
+
+      <case name="Update Failure">
+        <scenario>Failed to update message status after send</scenario>
+        <handling>Log error but continue processing. Message may be re-sent on next run (idempotency at receiver level). Eventual consistency acceptable.</handling>
+      </case>
+
+      <case name="Missing Localization Key">
+        <scenario>message_key not found in localization files</scenario>
+        <handling>Log warning and return fallback: "[Missing translation: {key}]". Send anyway so user gets SOME message rather than silent failure.</handling>
+      </case>
+
+      <case name="Malformed Message Params">
+        <scenario>message_params JSONB is malformed or incompatible with localization function</scenario>
+        <handling>Try-catch around function call. On error, log and use empty params object {}. Localization functions should handle missing params gracefully.</handling>
+      </case>
+
+      <case name="Invalid JID">
+        <scenario>destination_jid is malformed or invalid</scenario>
+        <handling>Baileys will throw on sendMessage(). Catch error, increment retry_count. After 3 failures, mark failed with error message.</handling>
+      </case>
+    </edge-cases>
+
+    <testing-strategy>
+      <unit-tests>
+        <file path="whatsapp-bot/src/__tests__/scheduler/message-sender.test.ts">
+          <test-suite name="processMessageQueue">
+            <test>Successful send: message marked 'sent', sent_at populated, count accurate</test>
+            <test>Send failure with retry available: retry_count incremented, status stays 'pending'</test>
+            <test>Send failure max retries: status='failed', error_message set, count accurate</test>
+            <test>Multiple messages: 500ms delay verified between sends (use fake timers)</test>
+            <test>Socket disconnected: empty result returned, messages unchanged</test>
+            <test>Empty queue: processes 0 messages, returns all counts = 0</test>
+          </test-suite>
+          <test-suite name="resolveMessageText">
+            <test>Simple string key: returns correct text for pt-BR</test>
+            <test>Simple string key: returns correct text for en</test>
+            <test>Function key with params: variable substitution works (e.g., {count})</test>
+            <test>Missing key: returns fallback message with key name</test>
+            <test>Nested key: correctly navigates object path (e.g., engagement.weekly.celebration)</test>
+            <test>Malformed params: handles gracefully with empty object fallback</test>
+          </test-suite>
+          <test-suite name="markMessageSent">
+            <test>Updates status to 'sent' and sets sent_at timestamp</test>
+            <test>Handles database error gracefully (logs error, doesn't throw)</test>
+          </test-suite>
+          <test-suite name="markMessageRetry">
+            <test>Increments retry_count, keeps status 'pending'</test>
+          </test-suite>
+          <test-suite name="markMessageFailed">
+            <test>Sets status to 'failed', populates error_message and retry_count</test>
+          </test-suite>
+        </file>
+      </unit-tests>
+
+      <integration-tests>
+        <file path="whatsapp-bot/src/__tests__/scheduler/daily-engagement-job.test.ts">
+          <test>Daily job calls processMessageQueue() after state transitions</test>
+          <test>Queue processing errors don't fail entire daily job</test>
+        </file>
+        <file path="whatsapp-bot/src/__tests__/scheduler/weekly-review-job.test.ts">
+          <test>Weekly job calls processMessageQueue() after queuing reviews</test>
+          <test>Queue processing errors don't fail entire weekly job</test>
+        </file>
+      </integration-tests>
+
+      <mocking-strategy>
+        <mock target="Baileys socket">
+          Mock getSocket() to return object with sendMessage() spy. Control success/failure per test.
+        </mock>
+        <mock target="Supabase client">
+          Mock database queries and updates. Return controlled test data for pending messages.
+        </mock>
+        <mock target="Localization modules">
+          Mock messages object with test keys and functions. Verify correct key resolution.
+        </mock>
+        <mock target="Time">
+          Use Jest fake timers to verify rate limiting delays without actual waiting.
+        </mock>
+      </mocking-strategy>
+
+      <coverage-targets>
+        <metric name="Line Coverage">85% (scheduler logic is critical)</metric>
+        <metric name="Branch Coverage">80% (all retry paths covered)</metric>
+        <metric name="Function Coverage">90% (all exported functions tested)</metric>
+      </coverage-targets>
+    </testing-strategy>
+  </implementation-guidance>
+
+  <file-modifications>
+    <file path="whatsapp-bot/src/services/scheduler/message-sender.ts" action="modify">
+      <changes>
+        <change>Replace stub processMessageQueue() with full implementation</change>
+        <change>Add resolveMessageText() helper function</change>
+        <change>Add markMessageSent() database update function</change>
+        <change>Add markMessageRetry() database update function</change>
+        <change>Add markMessageFailed() database update function</change>
+        <change>Add sleep() helper if not already present</change>
+        <change>Import localization modules (pt-br.ts, en.ts)</change>
+        <change>Import Baileys socket accessor (getSocket or equivalent)</change>
+      </changes>
+      <estimated-loc>+250 lines (processor logic + helpers + update functions)</estimated-loc>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/daily-engagement-job.ts" action="modify">
+      <changes>
+        <change>Add import: processMessageQueue from message-sender.ts</change>
+        <change>Add Step 4 after processRemindLaterDue(): call processMessageQueue()</change>
+        <change>Log queue processing results</change>
+        <change>Wrap in try-catch to prevent job failure on queue errors</change>
+      </changes>
+      <estimated-loc>+10 lines</estimated-loc>
+    </file>
+
+    <file path="whatsapp-bot/src/services/scheduler/weekly-review-job.ts" action="modify">
+      <changes>
+        <change>Add import: processMessageQueue from message-sender.ts</change>
+        <change>Add Step 3 after user processing loop: call processMessageQueue()</change>
+        <change>Log queue processing results</change>
+        <change>Wrap in try-catch to prevent job failure on queue errors</change>
+      </changes>
+      <estimated-loc>+10 lines</estimated-loc>
+    </file>
+
+    <file path="whatsapp-bot/src/index.ts" action="check-and-maybe-modify">
+      <changes>
+        <change>Verify if Baileys sock instance is exported. If not, add export function getSocket()</change>
+        <change>Example: export function getSocket() { return sock }</change>
+      </changes>
+      <estimated-loc>+3 lines (if needed)</estimated-loc>
+    </file>
+
+    <file path="whatsapp-bot/src/__tests__/scheduler/message-sender.test.ts" action="create">
+      <changes>
+        <change>Create comprehensive unit test suite for message queue processor</change>
+        <change>Mock Baileys socket, Supabase client, localization modules</change>
+        <change>Test all success and failure paths</change>
+        <change>Test rate limiting with fake timers</change>
+      </changes>
+      <estimated-loc>~400 lines (comprehensive test coverage)</estimated-loc>
+    </file>
+  </file-modifications>
+
+  <learnings-from-previous-stories>
+    <learning story="5.1" title="Daily Engagement Job">
+      Jobs call processor at end to immediately send queued messages. Failure isolation pattern applies to message processing too. Return detailed result object with counts.
+    </learning>
+    <learning story="5.3" title="Weekly Review Job">
+      Messages already have user_locale resolved when queued. messageParams contains variables for localization functions. preferredDestination and destinationJid already determined.
+    </learning>
+    <learning story="4.6" title="Message Routing Service">
+      Destination is resolved at SEND TIME (not queue time) via resolveDestinationJid(). This ensures user's latest preference is used. Already integrated in message-sender.ts stub.
+    </learning>
+    <learning story="1.6" title="Message Queue Service Foundation">
+      Queue table has idempotency_key for duplicate prevention. Queue table has retry_count and error_message columns ready. Status enum: 'pending', 'sent', 'failed', 'cancelled'.
+    </learning>
+  </learnings-from-previous-stories>
+
+  <performance-expectations>
+    <requirement id="NFR3" description="Scheduler evaluation time">
+      <target>&lt; 60 seconds for full user base</target>
+      <implementation>
+        - Process max 100 messages per run (batch limit)
+        - 500ms per message = 50 seconds for 100 messages (within target)
+        - Single batch query with indexed columns (status, scheduled_for)
+        - LIMIT 100 prevents timeout on large queues
+      </implementation>
+    </requirement>
+    <requirement id="NFR5" description="Message delivery confirmation">
+      <target>Retry on failure, max 3 attempts</target>
+      <implementation>
+        - Exponential backoff: 1s, 2s, 4s (conceptual, job frequency determines actual timing)
+        - retry_count tracking is key mechanism
+        - After 3 failures, status='failed' with error_message
+        - Idempotency at receiver level handles duplicate sends if updates fail
+      </implementation>
+    </requirement>
+  </performance-expectations>
+
+  <references>
+    <document path="docs/sprint-artifacts/tech-spec-epic-5.md" section="Story 5.4">
+      Epic 5 technical specification with detailed AC and traceability mapping.
+    </document>
+    <document path="docs/architecture.md" section="ADR-003">
+      Message Queue Table decision - justifies retry capability and audit trail.
+    </document>
+    <document path="docs/architecture.md" section="Performance Considerations">
+      Scheduler efficiency requirements and database query optimization patterns.
+    </document>
+    <document path="docs/sprint-artifacts/5-4-message-queue-processor.md">
+      Story file with full task breakdown and dev notes (THIS IS THE SOURCE OF TRUTH).
+    </document>
+  </references>
+</story-context>

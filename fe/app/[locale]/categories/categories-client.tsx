@@ -209,7 +209,7 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
           <DialogHeader>
             <DialogTitle>{t('category.deleteTitle')}</DialogTitle>
             <DialogDescription>
-              {t('category.deleteConfirm')} "{categoryToDelete?.name}"?
+              {t('category.deleteConfirm')} &ldquo;{categoryToDelete?.name}&rdquo;?
             </DialogDescription>
           </DialogHeader>
 

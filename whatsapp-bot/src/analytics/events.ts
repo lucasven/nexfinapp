@@ -66,6 +66,13 @@ export enum WhatsAppAnalyticsEvent {
   WHATSAPP_ONBOARDING_STARTED = 'whatsapp_onboarding_started',
   WHATSAPP_TUTORIAL_MESSAGE_SENT = 'whatsapp_tutorial_message_sent',
   WHATSAPP_FIRST_TRANSACTION_CREATED = 'whatsapp_first_transaction_created',
+
+  // Engagement Events
+  ENGAGEMENT_STATE_TRANSITION = 'engagement_state_transition',
+  ENGAGEMENT_STATE_CHANGED = 'engagement_state_changed',
+  ENGAGEMENT_GOODBYE_RESPONSE = 'engagement_goodbye_response',
+  ENGAGEMENT_UNPROMPTED_RETURN = 'engagement_unprompted_return',
+  ENGAGEMENT_PREFERENCE_CHANGED = 'engagement_preference_changed', // Story 6.1
 }
 
 /**

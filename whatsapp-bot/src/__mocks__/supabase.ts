@@ -6,16 +6,31 @@ const createMockQueryBuilder = (resolveValue: any = { data: [], error: null }) =
     update: jest.fn().mockReturnThis(),
     delete: jest.fn().mockReturnThis(),
     eq: jest.fn().mockReturnThis(),
+    neq: jest.fn().mockReturnThis(),
+    is: jest.fn().mockReturnThis(),
+    in: jest.fn().mockReturnThis(),
     gte: jest.fn().mockReturnThis(),
+    gt: jest.fn().mockReturnThis(),
     lte: jest.fn().mockReturnThis(),
+    lt: jest.fn().mockReturnThis(),
+    or: jest.fn().mockReturnThis(),
+    and: jest.fn().mockReturnThis(),
+    not: jest.fn().mockReturnThis(),
+    filter: jest.fn().mockReturnThis(),
+    match: jest.fn().mockReturnThis(),
     order: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
+    range: jest.fn().mockReturnThis(),
     ilike: jest.fn().mockReturnThis(),
+    like: jest.fn().mockReturnThis(),
+    contains: jest.fn().mockReturnThis(),
+    containedBy: jest.fn().mockReturnThis(),
     upsert: jest.fn().mockReturnThis(),
     single: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockReturnThis(),
     then: jest.fn((resolve: any) => resolve(resolveValue))
   }
-  
+
   return builder
 }
 

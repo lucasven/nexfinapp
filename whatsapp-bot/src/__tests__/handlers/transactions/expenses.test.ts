@@ -199,11 +199,12 @@ describe('Expenses Handler', () => {
     it('should warn about medium confidence duplicates', async () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
-      jest.mocked(checkForDuplicate).mockResolvedValue({ 
-        isDuplicate: true, 
+      jest.mocked(checkForDuplicate).mockResolvedValue({
+        isDuplicate: true,
         confidence: 0.8,
         reason: 'Possível duplicata'
       })
+      jest.mocked(storePendingTransaction).mockReturnValue('ABC123')
 
       const intent = createMockParsedIntent({
         action: 'add_expense',
@@ -212,7 +213,7 @@ describe('Expenses Handler', () => {
 
       const result = await handleAddExpense('+5511999999999', intent)
 
-      expect(result).toBe('Aviso de duplicata: Possível duplicata (80%)')
+      expect(result).toBe('Aviso de duplicata: Possível duplicata (80%)\n🆔 Duplicate ID: ABC123')
       expect(storePendingTransaction).toHaveBeenCalledWith(
         '+5511999999999',
         session.userId,

@@ -1,0 +1,199 @@
+<story-context id="1-1-database-schema-migration" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.1</storyId>
+    <title>Database Schema Migration</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-1-database-schema-migration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>the engagement system database schema created via migration</iWant>
+    <soThat>all subsequent engagement features have proper data storage with appropriate indexes and security policies</soThat>
+    <tasks>
+      <task id="1">Create migration file fe/scripts/034_engagement_system.sql</task>
+      <task id="2">Create user_engagement_states table with indexes</task>
+      <task id="3">Create engagement_state_transitions table with indexes</task>
+      <task id="4">Create engagement_message_queue table with indexes</task>
+      <task id="5">Extend user_profiles table with 5 new columns</task>
+      <task id="6">Create RLS policies for all tables</task>
+      <task id="7">Test migration execution</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Migration file 034_engagement_system.sql exists in fe/scripts/</criterion>
+    <criterion id="2">Running migration creates user_engagement_states table with all specified columns</criterion>
+    <criterion id="3">Running migration creates engagement_state_transitions table with all specified columns</criterion>
+    <criterion id="4">Running migration creates engagement_message_queue table with all specified columns</criterion>
+    <criterion id="5">Running migration adds 5 columns to user_profiles</criterion>
+    <criterion id="6">All performance indexes are created for efficient scheduler queries</criterion>
+    <criterion id="7">RLS policies enforce user-level access control on all new tables</criterion>
+    <criterion id="8">CHECK constraints validate state values on state, message_type, status, destination columns</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Data Architecture - New Tables</section>
+        <snippet>Defines user_engagement_states, engagement_state_transitions, engagement_message_queue schemas with all columns and constraints.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>ADR-001: Separate Engagement State Table</section>
+        <snippet>Decision to use separate table vs extending user_profiles for cleaner queries and state machine isolation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>ADR-003: Message Queue Table</section>
+        <snippet>Database-backed queue for proactive messages with idempotency, retry logic, and audit trail.</snippet>
+      </doc>
+      <doc>
+        <path>docs/stories/tech-spec-epic-1.md</path>
+        <title>Epic 1 Tech Spec</title>
+        <section>Data Models and Contracts</section>
+        <snippet>Complete SQL schema definitions including columns, types, constraints, and indexes.</snippet>
+      </doc>
+      <doc>
+        <path>docs/prd.md</path>
+        <title>Product Requirements</title>
+        <section>NFR7: Data Integrity</section>
+        <snippet>No duplicate proactive messages ever - requires idempotency key with UNIQUE constraint.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>fe/scripts/005_user_profiles_and_permissions.sql</path>
+        <kind>migration</kind>
+        <symbol>user_profiles table</symbol>
+        <lines>5-11</lines>
+        <reason>Reference for user_profiles table structure - will add columns to this table</reason>
+      </file>
+      <file>
+        <path>fe/scripts/029_multi_identifier_support.sql</path>
+        <kind>migration</kind>
+        <symbol>RLS policies pattern</symbol>
+        <lines>35-117</lines>
+        <reason>Reference for RLS policy patterns and service role access</reason>
+      </file>
+      <file>
+        <path>fe/scripts/033_fix_deletion_fk_order.sql</path>
+        <kind>migration</kind>
+        <symbol>latest migration</symbol>
+        <reason>Latest migration - new file should be 034_engagement_system.sql</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <node>
+        <package>@supabase/supabase-js</package>
+        <version>^2.x</version>
+        <usage>Database client - migrations run via psql or Supabase dashboard</usage>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing migration naming: NNN_description.sql (034_engagement_system.sql)</constraint>
+    <constraint type="pattern">Use IF NOT EXISTS for idempotent migrations where possible</constraint>
+    <constraint type="pattern">Enable RLS on all new tables and create policies for user and service role</constraint>
+    <constraint type="pattern">Use TEXT with CHECK constraints instead of ENUM for easier migration</constraint>
+    <constraint type="pattern">Add comments with COMMENT ON for documentation</constraint>
+    <constraint type="security">Service role must have full access for scheduler operations</constraint>
+    <constraint type="security">Users can only read their own engagement state (SELECT)</constraint>
+    <constraint type="security">engagement_message_queue is service-role only (no user access)</constraint>
+    <constraint type="performance">Create partial indexes for nullable timestamp columns</constraint>
+    <constraint type="performance">Create partial indexes with WHERE status = 'pending' for queue optimization</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>user_engagement_states</name>
+      <kind>table</kind>
+      <signature>
+        id UUID PRIMARY KEY,
+        user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id),
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active', 'goodbye_sent', 'help_flow', 'remind_later', 'dormant')),
+        last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        goodbye_sent_at TIMESTAMPTZ,
+        goodbye_expires_at TIMESTAMPTZ,
+        remind_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      </signature>
+      <path>fe/scripts/034_engagement_system.sql</path>
+    </interface>
+    <interface>
+      <name>engagement_state_transitions</name>
+      <kind>table</kind>
+      <signature>
+        id UUID PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES auth.users(id),
+        from_state TEXT NOT NULL,
+        to_state TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      </signature>
+      <path>fe/scripts/034_engagement_system.sql</path>
+    </interface>
+    <interface>
+      <name>engagement_message_queue</name>
+      <kind>table</kind>
+      <signature>
+        id UUID PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES auth.users(id),
+        message_type TEXT NOT NULL CHECK (IN ('welcome', 'tier_unlock', 'goodbye', 'weekly_review', 'reminder', 'help_restart')),
+        message_key TEXT NOT NULL,
+        message_params JSONB,
+        destination TEXT NOT NULL CHECK (IN ('individual', 'group')),
+        destination_jid TEXT NOT NULL,
+        scheduled_for TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        sent_at TIMESTAMPTZ,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (IN ('pending', 'sent', 'failed', 'cancelled')),
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      </signature>
+      <path>fe/scripts/034_engagement_system.sql</path>
+    </interface>
+    <interface>
+      <name>user_profiles extensions</name>
+      <kind>alter table</kind>
+      <signature>
+        ADD COLUMN preferred_destination TEXT DEFAULT 'individual' CHECK (IN ('individual', 'group')),
+        ADD COLUMN reengagement_opt_out BOOLEAN DEFAULT false,
+        ADD COLUMN onboarding_tier INTEGER DEFAULT 0 CHECK (BETWEEN 0 AND 3),
+        ADD COLUMN onboarding_tier_progress JSONB DEFAULT '{}',
+        ADD COLUMN magic_moment_at TIMESTAMPTZ
+      </signature>
+      <path>fe/scripts/034_engagement_system.sql</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Follow existing migration testing pattern: run migration on local/staging Supabase instance, verify tables created with correct structure using Supabase dashboard or psql. Test RLS policies by attempting queries with both user token and service role key.
+    </standards>
+    <locations>
+      <location>Manual verification via Supabase dashboard</location>
+      <location>psql commands for schema inspection</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2,3,4,5">Run migration and verify all tables/columns created with \d command</idea>
+      <idea ac="6">Query pg_indexes to verify all indexes exist</idea>
+      <idea ac="7">Test SELECT with user token (should work for own state), test INSERT with user token (should fail)</idea>
+      <idea ac="7">Test all operations with service role key (should succeed)</idea>
+      <idea ac="8">Attempt INSERT with invalid state value (should fail with constraint violation)</idea>
+    </ideas>
+  </tests>
+</story-context>
