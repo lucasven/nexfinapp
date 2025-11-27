@@ -22,6 +22,9 @@ import {
 import { getMessageDestination } from '../../../services/engagement/message-router'
 import { getTestSupabaseClient, createTestUser } from '../../utils/test-database'
 
+// Helper to wait for database consistency in CI environments
+const waitForDbConsistency = () => new Promise(resolve => setTimeout(resolve, 100))
+
 // Unmock message-router since we want to test actual database behavior
 jest.unmock('../../../services/engagement/message-router')
 
@@ -253,6 +256,9 @@ describe('Message Queue Integration - resolveDestinationJid()', () => {
         auto_authorized: false,
       })
 
+      // Wait for database consistency (CI environments may have higher latency)
+      await waitForDbConsistency()
+
       // Second call - group (user switched)
       const result2 = await resolveDestinationJid(userId, fallbackJid)
 
@@ -302,6 +308,9 @@ describe('Message Routing End-to-End Flow', () => {
         auto_authorized: false,
       })
 
+      // Wait for database consistency (CI environments may have higher latency)
+      await waitForDbConsistency()
+
       routeResult = await getMessageDestination(userId)
       expect(routeResult!.destination).toBe('group')
       expect(routeResult!.destinationJid).toBe(groupJid)
@@ -350,6 +359,9 @@ describe('Message Routing End-to-End Flow', () => {
             .update({ is_active: false })
             .eq('user_id', userId)
         }
+
+        // Wait for database consistency (CI environments may have higher latency)
+        await waitForDbConsistency()
 
         const routeResult = await getMessageDestination(userId)
         expect(routeResult!.destination).toBe(dest)
