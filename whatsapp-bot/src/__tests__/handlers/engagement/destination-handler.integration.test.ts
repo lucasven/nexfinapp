@@ -23,7 +23,8 @@ import { getMessageDestination } from '../../../services/engagement/message-rout
 import { getTestSupabaseClient, createTestUser } from '../../utils/test-database'
 
 // Helper to wait for database consistency in CI environments
-const waitForDbConsistency = () => new Promise(resolve => setTimeout(resolve, 200))
+// Coverage runs add overhead, so we use a longer wait
+const waitForDbConsistency = () => new Promise(resolve => setTimeout(resolve, 300))
 
 // Helper to generate unique group JID per test to avoid constraint violations
 const generateUniqueGroupJid = (userId: string) => `120363${userId.substring(0, 8).replace(/-/g, '')}@g.us`
@@ -365,8 +366,9 @@ describe('Message Routing End-to-End Flow', () => {
         await waitForDbConsistency()
 
         const routeResult = await getMessageDestination(userId)
-        expect(routeResult!.destination).toBe(dest)
-        expect(routeResult!.destinationJid).toBe(expectedJid)
+        expect(routeResult).not.toBeNull()
+        expect(routeResult?.destination).toBe(dest)
+        expect(routeResult?.destinationJid).toBe(expectedJid)
       }
     })
   })
