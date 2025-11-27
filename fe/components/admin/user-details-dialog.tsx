@@ -386,7 +386,7 @@ export function UserDetailsDialog({ userId, open, onClose }: UserDetailsDialogPr
                 <div>👥 Authorized Groups: {details?.authorizedGroups?.length || 0}</div>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium">Type the user's email to confirm:</p>
+                <p className="text-sm font-medium">Type the user&apos;s email to confirm:</p>
                 <Input
                   type="email"
                   placeholder={details?.profile?.email}

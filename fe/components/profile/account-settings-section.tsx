@@ -23,38 +23,42 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { NotificationPreferences } from "@/components/settings/notification-preferences"
 
-export default function AccountSettingsPage() {
+interface AccountSettingsSectionProps {
+  userEmail?: string
+  userId?: string
+  userCreatedAt?: string
+}
+
+export function AccountSettingsSection({ userEmail, userId, userCreatedAt }: AccountSettingsSectionProps) {
   const t = useTranslations()
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
   const [dataSummary, setDataSummary] = useState<any>(null)
-  const [userProfile, setUserProfile] = useState<any>(null)
+  const [userProfile, setUserProfile] = useState<any>(undefined)
   const [loading, setLoading] = useState(true)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    loadUserAndData()
-  }, [])
+    loadData()
+  }, [userId])
 
-  const loadUserAndData = async () => {
+  const loadData = async () => {
+    if (!userId) {
+      setLoading(false)
+      return
+    }
+
     try {
       const supabase = getSupabaseBrowserClient()
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser()
-      setUser(currentUser)
 
       // Load user profile (for reengagement_opt_out)
-      if (currentUser) {
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("reengagement_opt_out")
-          .eq("user_id", currentUser.id)
-          .single()
-        setUserProfile(profile)
-      }
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("reengagement_opt_out")
+        .eq("user_id", userId)
+        .single()
+      setUserProfile(profile)
 
       // Load data summary
       const summary = await getMyDataSummary()
@@ -110,60 +114,21 @@ export default function AccountSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-8">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="container max-w-4xl py-8 space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          {t("settings.account.title", { defaultValue: "Account Settings" })}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          {t("settings.account.description", {
-            defaultValue: "Manage your account preferences and data",
-          })}
-        </p>
-      </div>
-
-      {/* Account Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {t("settings.account.info.title", { defaultValue: "Account Information" })}
-          </CardTitle>
-          <CardDescription>
-            {t("settings.account.info.description", {
-              defaultValue: "Your account details",
-            })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-sm font-medium text-muted-foreground">
-              {t("auth.email", { defaultValue: "Email" })}
-            </Label>
-            <div className="text-sm mt-1">{user?.email}</div>
-          </div>
-          <div>
-            <Label className="text-sm font-medium text-muted-foreground">
-              {t("settings.account.userId", { defaultValue: "User ID" })}
-            </Label>
-            <div className="font-mono text-xs mt-1 text-muted-foreground">{user?.id}</div>
-          </div>
-          <div>
-            <Label className="text-sm font-medium text-muted-foreground">
-              {t("settings.account.joinedDate", { defaultValue: "Member since" })}
-            </Label>
-            <div className="text-sm mt-1">
-              {user?.created_at && new Date(user.created_at).toLocaleDateString()}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-6">
+      {/* Notification Preferences */}
+      {userId && userProfile !== undefined && (
+        <NotificationPreferences
+          initialOptOut={userProfile?.reengagement_opt_out ?? false}
+          userId={userId}
+        />
+      )}
 
       {/* Your Data */}
       <Card>
@@ -224,14 +189,6 @@ export default function AccountSettingsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Notification Preferences */}
-      {user && userProfile !== null && (
-        <NotificationPreferences
-          initialOptOut={userProfile?.reengagement_opt_out ?? false}
-          userId={user.id}
-        />
-      )}
 
       {/* LGPD / Data Rights */}
       <Card className="border-blue-200 dark:border-blue-900">

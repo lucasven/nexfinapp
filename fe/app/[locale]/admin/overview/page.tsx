@@ -1,9 +1,10 @@
+import Link from "next/link"
 import { getSystemOverview } from "@/lib/actions/admin"
 import { StatCard } from "@/components/admin/stat-card"
-import { 
-  UsersIcon, 
-  ActivityIcon, 
-  DollarSignIcon, 
+import {
+  UsersIcon,
+  ActivityIcon,
+  DollarSignIcon,
   TrendingUpIcon,
   MailCheckIcon,
   ReceiptIcon,
@@ -78,41 +79,41 @@ export default async function AdminOverviewPage() {
       <div className="rounded-lg border bg-card p-6">
         <h3 className="text-lg font-semibold mb-2">Quick Actions</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <a
+          <Link
             href="/admin/ai-usage"
             className="block p-4 rounded-md bg-muted hover:bg-accent transition-colors"
           >
             <DollarSignIcon className="h-5 w-5 mb-2" />
             <div className="font-medium">Manage AI Costs</div>
             <div className="text-sm text-muted-foreground">Adjust user limits</div>
-          </a>
-          
-          <a
+          </Link>
+
+          <Link
             href="/admin/beta-signups"
             className="block p-4 rounded-md bg-muted hover:bg-accent transition-colors"
           >
             <MailCheckIcon className="h-5 w-5 mb-2" />
             <div className="font-medium">Review Signups</div>
             <div className="text-sm text-muted-foreground">Approve beta users</div>
-          </a>
-          
-          <a
+          </Link>
+
+          <Link
             href="/admin/users"
             className="block p-4 rounded-md bg-muted hover:bg-accent transition-colors"
           >
             <UsersIcon className="h-5 w-5 mb-2" />
             <div className="font-medium">User Management</div>
             <div className="text-sm text-muted-foreground">View user details</div>
-          </a>
-          
-          <a
+          </Link>
+
+          <Link
             href="/"
             className="block p-4 rounded-md bg-muted hover:bg-accent transition-colors"
           >
             <ActivityIcon className="h-5 w-5 mb-2" />
             <div className="font-medium">View App</div>
             <div className="text-sm text-muted-foreground">Return to main app</div>
-          </a>
+          </Link>
         </div>
       </div>
     </div>

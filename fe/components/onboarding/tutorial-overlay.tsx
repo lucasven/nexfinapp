@@ -88,9 +88,9 @@ export function TutorialOverlay({
     const tooltipMaxWidth = 448 // max-w-md = 28rem = 448px
 
     switch (position) {
-      case "bottom":
+      case "bottom": {
         // Calculate ideal centered position
-        let leftPos = rect.left + scrollLeft + rect.width / 2
+        const leftPos = rect.left + scrollLeft + rect.width / 2
 
         // Ensure tooltip doesn't overflow viewport
         const tooltipHalfWidth = tooltipMaxWidth / 2
@@ -116,6 +116,7 @@ export function TutorialOverlay({
           transform: "translateX(-50%) rotate(180deg)",
         }
         break
+      }
       case "top":
         tooltipStyle = {
           position: "absolute",

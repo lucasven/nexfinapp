@@ -157,7 +157,7 @@ export function SynonymManagement({ synonyms, categories }: SynonymManagementPro
                               <AlertDialogTitle>Delete Synonym?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 Are you sure you want to delete the synonym{" "}
-                                <strong>"{synonym.synonym}"</strong>? This action cannot be
+                                <strong>&ldquo;{synonym.synonym}&rdquo;</strong>? This action cannot be
                                 undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
