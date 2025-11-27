@@ -1,18 +1,26 @@
 /**
  * Centralized Cron Scheduler
  *
- * Runs scheduled jobs within the main bot process using child processes.
+ * Runs scheduled jobs within the main bot process.
+ * - Jobs that need the WhatsApp socket run IN-PROCESS (engagement jobs)
+ * - Jobs that don't need the socket run as CHILD PROCESSES
+ *
  * This replaces the railway.cron.yml which Railway doesn't support as a config file.
  */
 
 import cron from 'node-cron'
 import { spawn } from 'child_process'
 import { logger } from './services/monitoring/logger.js'
+import { runDailyEngagementJob } from './services/scheduler/daily-engagement-job.js'
+import { runWeeklyReviewJob } from './services/scheduler/weekly-review-job.js'
+import { runAutoPaymentsJob } from './services/scheduler/auto-payments-job.js'
+import { runPaymentRemindersJob } from './services/scheduler/payment-reminders-job.js'
 
 interface ScheduledJob {
   name: string
   schedule: string
-  command: string
+  command?: string  // For child process jobs
+  handler?: () => Promise<unknown>  // For in-process jobs
   description: string
 }
 
@@ -38,25 +46,25 @@ const jobs: ScheduledJob[] = [
   {
     name: 'engagement-daily',
     schedule: '0 6 * * *', // Daily at 6 AM UTC
-    command: 'npx tsx src/cron/run-engagement-daily.ts',
+    handler: runDailyEngagementJob,  // Run in-process to share WhatsApp connection
     description: 'Daily engagement: inactivity, timeouts, remind-later expiration',
   },
   {
     name: 'engagement-weekly',
     schedule: '0 9 * * 1', // Weekly on Monday at 9 AM UTC
-    command: 'npx tsx src/cron/run-engagement-weekly.ts',
+    handler: runWeeklyReviewJob,  // Run in-process to share WhatsApp connection
     description: 'Weekly review: celebratory messages to active users',
   },
   {
     name: 'execute-auto-payments',
     schedule: '0 6 * * *', // Daily at 6 AM UTC
-    command: 'npm run cron:execute-auto-pay',
+    handler: runAutoPaymentsJob,  // Run in-process to share WhatsApp connection
     description: 'Daily execution of auto-pay recurring payments',
   },
   {
     name: 'send-payment-reminders',
     schedule: '0 8 * * *', // Daily at 8 AM UTC
-    command: 'npm run cron:send-reminders',
+    handler: runPaymentRemindersJob,  // Run in-process to share WhatsApp connection
     description: 'Daily WhatsApp reminders for upcoming payments',
   },
 ]
@@ -64,12 +72,11 @@ const jobs: ScheduledJob[] = [
 /**
  * Run a command as a child process
  */
-function runCommand(job: ScheduledJob): Promise<{ exitCode: number; output: string }> {
+function runCommand(command: string): Promise<{ exitCode: number; output: string }> {
   return new Promise((resolve) => {
-    const startTime = Date.now()
     let output = ''
 
-    const [cmd, ...args] = job.command.split(' ')
+    const [cmd, ...args] = command.split(' ')
     const child = spawn(cmd, args, {
       shell: true,
       cwd: process.cwd(),
@@ -85,7 +92,6 @@ function runCommand(job: ScheduledJob): Promise<{ exitCode: number; output: stri
     })
 
     child.on('close', (code) => {
-      const duration = Date.now() - startTime
       resolve({ exitCode: code ?? 1, output })
     })
 
@@ -94,6 +100,21 @@ function runCommand(job: ScheduledJob): Promise<{ exitCode: number; output: stri
       resolve({ exitCode: 1, output })
     })
   })
+}
+
+/**
+ * Run an in-process handler function
+ */
+async function runHandler(handler: () => Promise<unknown>): Promise<{ success: boolean; error?: string }> {
+  try {
+    await handler()
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
 }
 
 /**
@@ -110,23 +131,41 @@ export function startScheduler(): void {
 
     cron.schedule(job.schedule, async () => {
       const startTime = Date.now()
+      const isInProcess = !!job.handler
+
       logger.info(`Starting scheduled job: ${job.name}`, {
         description: job.description,
-        command: job.command,
+        mode: isInProcess ? 'in-process' : 'child-process',
       })
 
       try {
-        const { exitCode, output } = await runCommand(job)
-        const duration = Date.now() - startTime
+        if (job.handler) {
+          // Run in-process (for jobs that need the WhatsApp socket)
+          const result = await runHandler(job.handler)
+          const duration = Date.now() - startTime
 
-        if (exitCode === 0) {
-          logger.info(`Completed scheduled job: ${job.name}`, { durationMs: duration })
-        } else {
-          logger.error(`Failed scheduled job: ${job.name}`, {
-            durationMs: duration,
-            exitCode,
-            output: output.slice(-1000), // Last 1000 chars of output
-          })
+          if (result.success) {
+            logger.info(`Completed scheduled job: ${job.name}`, { durationMs: duration })
+          } else {
+            logger.error(`Failed scheduled job: ${job.name}`, {
+              durationMs: duration,
+              error: result.error,
+            })
+          }
+        } else if (job.command) {
+          // Run as child process
+          const { exitCode, output } = await runCommand(job.command)
+          const duration = Date.now() - startTime
+
+          if (exitCode === 0) {
+            logger.info(`Completed scheduled job: ${job.name}`, { durationMs: duration })
+          } else {
+            logger.error(`Failed scheduled job: ${job.name}`, {
+              durationMs: duration,
+              exitCode,
+              output: output.slice(-1000), // Last 1000 chars of output
+            })
+          }
         }
       } catch (error) {
         const duration = Date.now() - startTime

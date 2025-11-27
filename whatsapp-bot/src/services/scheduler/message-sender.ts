@@ -208,7 +208,9 @@ function resolveMessageText(
   messageParams: Record<string, unknown> | null,
   locale: string
 ): string {
-  const localization = locale === 'pt-BR' ? ptBRMessages : enMessages
+  // Normalize locale comparison (database stores 'pt-br', code expects 'pt-BR')
+  const normalizedLocale = locale?.toLowerCase()
+  const localization = normalizedLocale === 'pt-br' ? ptBRMessages : enMessages
 
   try {
     // Navigate through nested keys (e.g., 'engagement.goodbye.self_select')
@@ -370,6 +372,7 @@ export async function processMessageQueue(): Promise<ProcessResult> {
 
     // Query pending messages (AC-5.4.1)
     // Ordered by scheduled_for ASC (FIFO), limited to 100 for performance
+    // Use left join to user_profiles so messages are still processed even if profile is missing
     const { data: messages, error: queryError } = await supabase
       .from('engagement_message_queue')
       .select(`
@@ -381,7 +384,7 @@ export async function processMessageQueue(): Promise<ProcessResult> {
         destination,
         destination_jid,
         retry_count,
-        user_profiles!inner(locale)
+        user_profiles(locale)
       `)
       .eq('status', 'pending')
       .lte('scheduled_for', new Date().toISOString())
@@ -418,6 +421,13 @@ export async function processMessageQueue(): Promise<ProcessResult> {
           message.message_params as Record<string, unknown> | null,
           userLocale
         )
+
+        logger.debug('Resolved message text', {
+          message_id: message.id,
+          message_key: message.message_key,
+          locale: userLocale,
+          text_preview: messageText.substring(0, 100),
+        })
 
         // Send via Baileys (AC-5.4.1)
         await sock.sendMessage(resolvedJid, { text: messageText })
