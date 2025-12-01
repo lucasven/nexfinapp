@@ -38,7 +38,7 @@ workflow_status:
     note: "Optional workflows - include as needed"
     workflows:
       - id: "brainstorm-project"
-        status: "optional"
+        status: "docs/brainstorming-session-results-2025-11-27.md"
         agent: "analyst"
         command: "/bmad:bmm:workflows:brainstorm-project"
 

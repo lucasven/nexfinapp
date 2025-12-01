@@ -1,4 +1,4 @@
-# generated: 2025-11-27
+# generated: 2025-11-28
 # project: NexFinApp
 # project_key: nexfinapp
 # tracking_system: file-system
@@ -28,5 +28,45 @@
 # - SM typically drafts next story ONLY after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
+generated: 2025-11-28
+project: NexFinApp
+project_key: nexfinapp
+tracking_system: file-system
+story_location: docs/sprint-artifacts
+
 development_status:
-  # Ready for next epic - use /bmad:bmm:workflows:workflow-init to start
+  epic-a: backlog
+  a-1-opt-in-credit-card-mode-vs-simple-mode: backlog
+  a-2-user-defined-monthly-budget: backlog
+  a-3-statement-closing-reminder: backlog
+  a-4-due-date-reminder-with-auto-expense: backlog
+  a-5-installment-tracker-parcelamento: backlog
+  a-6-awareness-first-language: backlog
+  a-7-guilt-free-catch-up-mode: backlog
+  a-8-weekly-category-spotlight: backlog
+  a-9-pre-statement-summary: backlog
+  a-10-real-available-credit-calculation: backlog
+  a-11-spending-personality-insights: backlog
+  a-12-three-rings-visualization: backlog
+  a-13-predictive-spending-projections: backlog
+  a-14-streak-shields-with-planned-splurge-days: backlog
+  a-15-ai-powered-anomaly-detection: backlog
+  epic-a-retrospective: optional
+
+  epic-b: backlog
+  b-1-feature-flag-infrastructure: backlog
+  b-2-base-helper-architecture: backlog
+  b-3-helper-router: backlog
+  b-4-credit-card-helper: backlog
+  b-5-category-helper: backlog
+  b-6-transaction-helper: backlog
+  b-7-income-helper: backlog
+  b-8-recurring-helper: backlog
+  b-9-budget-helper: backlog
+  b-10-reports-helper: backlog
+  b-11-ai-integration-test-framework: backlog
+  b-12-conversational-freedom-architecture: backlog
+  b-13-gradual-rollout-strategy: backlog
+  b-14-ocr-helper: backlog
+  b-15-help-helper: backlog
+  epic-b-retrospective: optional
