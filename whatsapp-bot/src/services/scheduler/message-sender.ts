@@ -372,7 +372,6 @@ export async function processMessageQueue(): Promise<ProcessResult> {
 
     // Query pending messages (AC-5.4.1)
     // Ordered by scheduled_for ASC (FIFO), limited to 100 for performance
-    // Use left join to user_profiles so messages are still processed even if profile is missing
     const { data: messages, error: queryError } = await supabase
       .from('engagement_message_queue')
       .select(`
@@ -383,8 +382,7 @@ export async function processMessageQueue(): Promise<ProcessResult> {
         message_params,
         destination,
         destination_jid,
-        retry_count,
-        user_profiles(locale)
+        retry_count
       `)
       .eq('status', 'pending')
       .lte('scheduled_for', new Date().toISOString())
@@ -403,13 +401,22 @@ export async function processMessageQueue(): Promise<ProcessResult> {
 
     logger.info('Messages to process', { count: messages.length })
 
+    // Fetch user locales separately (no FK relationship between tables)
+    const userIds = [...new Set(messages.map(m => m.user_id))]
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('user_id, locale')
+      .in('user_id', userIds)
+
+    const localeMap = new Map(profiles?.map(p => [p.user_id, p.locale]) || [])
+
     // Process each message (AC-5.4.1, AC-5.4.2, AC-5.4.3, AC-5.4.4)
     for (const message of messages) {
       result.processed++
 
       try {
-        // Get user locale from joined user_profiles
-        const userLocale = (message.user_profiles as any)?.locale || 'pt-BR'
+        // Get user locale from localeMap
+        const userLocale = localeMap.get(message.user_id) || 'pt-BR'
 
         // Resolve destination JID at send time (Story 4.6)
         const { jid: resolvedJid, destination: resolvedDest, fallbackUsed } =

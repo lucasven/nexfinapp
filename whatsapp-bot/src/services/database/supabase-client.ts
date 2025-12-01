@@ -5,6 +5,64 @@ dotenv.config()
 
 let supabase: SupabaseClient | null = null
 
+/**
+ * Retry wrapper for transient network failures
+ * Implements exponential backoff with jitter
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: { retries?: number; baseDelayMs?: number; operationName?: string } = {}
+): Promise<T> {
+  const { retries = 3, baseDelayMs = 1000, operationName = 'operation' } = options
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      const isLastAttempt = attempt === retries - 1
+      const isTransientError = isTransientNetworkError(error)
+
+      if (isLastAttempt || !isTransientError) {
+        throw error
+      }
+
+      // Exponential backoff with jitter
+      const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500
+      console.warn(
+        `[Retry] ${operationName} failed (attempt ${attempt + 1}/${retries}): ${error.message}. Retrying in ${Math.round(delay)}ms...`
+      )
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw new Error(`${operationName} failed after ${retries} attempts`)
+}
+
+/**
+ * Checks if an error is a transient network error that should be retried
+ */
+function isTransientNetworkError(error: any): boolean {
+  const message = error?.message?.toLowerCase() || ''
+  const code = error?.code?.toLowerCase() || ''
+
+  const transientPatterns = [
+    'network',
+    'connection',
+    'timeout',
+    'econnreset',
+    'econnrefused',
+    'enotfound',
+    'gateway',
+    'socket',
+    'etimedout',
+    'epipe',
+  ]
+
+  return transientPatterns.some(pattern =>
+    message.includes(pattern) || code.includes(pattern)
+  )
+}
+
 export function getSupabaseClient(): SupabaseClient {
   if (!supabase) {
     const supabaseUrl = process.env.SUPABASE_URL

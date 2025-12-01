@@ -26,12 +26,6 @@ interface ScheduledJob {
 
 const jobs: ScheduledJob[] = [
   {
-    name: 'cleanup-parsers',
-    schedule: '0 3 * * *', // Daily at 3 AM UTC
-    command: 'npm run cleanup-parsers',
-    description: 'Daily cleanup of learned patterns',
-  },
-  {
     name: 'data-retention-cleanup',
     schedule: '0 2 * * *', // Daily at 2 AM UTC
     command: 'npm run data-retention-cleanup',
