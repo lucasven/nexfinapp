@@ -1,5 +1,5 @@
 import type { WASocket } from '@whiskeysockets/baileys'
-import { getSupabaseClient } from '../database/supabase-client.js'
+import { getSupabaseClient, withRetry } from '../database/supabase-client.js'
 import { getUserLocale, getMessages } from '../../localization/i18n.js'
 
 export interface OnboardingMessage {
@@ -50,14 +50,18 @@ export async function processOnboardingMessages(sock: WASocket | null): Promise<
   const supabase = getSupabaseClient()
 
   try {
-    // Fetch pending messages
-    const { data: messages, error: fetchError } = await supabase
-      .from('onboarding_messages')
-      .select('*')
-      .eq('status', 'pending')
-      .lt('retry_count', 3) // Max 3 retries
-      .order('created_at', { ascending: true })
-      .limit(10)
+    // Fetch pending messages with retry for transient network errors
+    const { data: messages, error: fetchError } = await withRetry(
+      async () =>
+        supabase
+          .from('onboarding_messages')
+          .select('*')
+          .eq('status', 'pending')
+          .lt('retry_count', 3) // Max 3 retries
+          .order('created_at', { ascending: true })
+          .limit(10),
+      { operationName: 'Onboarding fetch messages' }
+    )
 
     if (fetchError) {
       console.error('[Onboarding] Error fetching messages:', fetchError)
