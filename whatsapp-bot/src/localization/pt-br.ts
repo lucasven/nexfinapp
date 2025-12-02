@@ -405,8 +405,8 @@ Tenta mandar uma despesa agora.`,
     `Oi! Você registrou ${summary.totalTransactions} despesa${summary.totalTransactions > 1 ? 's' : ''} essa semana, totalizando R$ ${summary.totalAmount.toFixed(2).replace('.', ',')}.
 Tá mandando bem! Quer ver o relatório completo? Só mandar "relatório".`,
 
-  engagementWeeklyReviewCelebration: (count: number) =>
-    `Parabéns! 🎉 Você registrou ${count} transaç${count === 1 ? 'ão' : 'ões'} esta semana. Continue assim!`,
+  engagementWeeklyReviewCelebration: (params: { count: number }) =>
+    `Parabéns! 🎉 Você registrou ${params.count} transaç${params.count === 1 ? 'ão' : 'ões'} esta semana. Continue assim!`,
 
   // Engagement: Opt-Out
   engagementOptOutConfirm: `Entendido! Não vou mais mandar lembretes.
