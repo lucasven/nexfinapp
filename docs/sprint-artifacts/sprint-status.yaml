@@ -1,4 +1,4 @@
-# generated: 2025-11-28
+# generated: 2025-12-02
 # project: NexFinApp
 # project_key: nexfinapp
 # tracking_system: file-system
@@ -28,45 +28,66 @@
 # - SM typically drafts next story ONLY after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
-generated: 2025-11-28
+generated: 2025-12-02
 project: NexFinApp
 project_key: nexfinapp
 tracking_system: file-system
 story_location: docs/sprint-artifacts
 
 development_status:
-  epic-a: backlog
-  a-1-opt-in-credit-card-mode-vs-simple-mode: backlog
-  a-2-user-defined-monthly-budget: backlog
-  a-3-statement-closing-reminder: backlog
-  a-4-due-date-reminder-with-auto-expense: backlog
-  a-5-installment-tracker-parcelamento: backlog
-  a-6-awareness-first-language: backlog
-  a-7-guilt-free-catch-up-mode: backlog
-  a-8-weekly-category-spotlight: backlog
-  a-9-pre-statement-summary: backlog
-  a-10-real-available-credit-calculation: backlog
-  a-11-spending-personality-insights: backlog
-  a-12-three-rings-visualization: backlog
-  a-13-predictive-spending-projections: backlog
-  a-14-streak-shields-with-planned-splurge-days: backlog
-  a-15-ai-powered-anomaly-detection: backlog
-  epic-a-retrospective: optional
+  epic-1: contexted
+  1-1-database-schema-migration-for-credit-card-features: backlog
+  1-2-first-credit-card-transaction-detection: backlog
+  1-3-credit-mode-vs-simple-mode-selection-whatsapp: backlog
+  1-4-credit-mode-selection-web-frontend: backlog
+  1-5-mode-switching-with-data-implications-warning: backlog
+  1-6-simple-mode-backward-compatibility: backlog
+  epic-1-retrospective: optional
 
-  epic-b: backlog
-  b-1-feature-flag-infrastructure: backlog
-  b-2-base-helper-architecture: backlog
-  b-3-helper-router: backlog
-  b-4-credit-card-helper: backlog
-  b-5-category-helper: backlog
-  b-6-transaction-helper: backlog
-  b-7-income-helper: backlog
-  b-8-recurring-helper: backlog
-  b-9-budget-helper: backlog
-  b-10-reports-helper: backlog
-  b-11-ai-integration-test-framework: backlog
-  b-12-conversational-freedom-architecture: backlog
-  b-13-gradual-rollout-strategy: backlog
-  b-14-ocr-helper: backlog
-  b-15-help-helper: backlog
-  epic-b-retrospective: optional
+  epic-2: backlog
+  2-1-add-installment-purchase-whatsapp: backlog
+  2-2-add-installment-purchase-web-frontend: backlog
+  2-3-future-commitments-dashboard: backlog
+  2-4-view-all-installments-active-and-history: backlog
+  2-5-mark-installment-as-paid-off-early: backlog
+  2-6-edit-installment-plan: backlog
+  2-7-delete-installment-plan: backlog
+  2-8-installment-impact-on-budget-tracking: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-set-statement-closing-date: backlog
+  3-2-set-user-defined-monthly-budget: backlog
+  3-3-budget-progress-dashboard-statement-period: backlog
+  3-4-statement-closing-reminder-whatsapp: backlog
+  3-5-pre-statement-summary-with-category-breakdown: backlog
+  3-6-current-vs-next-statement-distinction: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-set-payment-due-date: backlog
+  4-2-payment-due-reminder-whatsapp: backlog
+  4-3-auto-create-payment-transaction: backlog
+  4-4-edit-or-delete-auto-generated-payment: backlog
+  4-5-system-category-for-credit-card-payments: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-posthog-feature-flag-integration: backlog
+  5-2-basehelper-abstract-class: backlog
+  5-3-helper-router-llm-based-domain-detection: backlog
+  5-4-credit-card-helper-system-prompt-and-functions: backlog
+  5-5-credit-card-helper-conversational-examples: backlog
+  5-6-ai-integration-test-framework: backlog
+  5-7-helper-usage-logging-and-monitoring: backlog
+  5-8-gradual-rollout-strategy-4-phase: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-transaction-helper-system-prompt-and-functions: backlog
+  6-2-transaction-helper-add-expense-flow: backlog
+  6-3-transaction-helper-view-recent-transactions: backlog
+  6-4-transaction-helper-edit-transaction-flow: backlog
+  6-5-transaction-helper-delete-transaction: backlog
+  6-6-income-vs-expense-differentiation: backlog
+  epic-6-retrospective: optional

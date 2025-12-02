@@ -1,7 +1,7 @@
 # NexFinApp - Epic Breakdown
 
 **Author:** Lucas
-**Date:** 2025-11-21
+**Date:** 2025-12-02
 **Project Level:** Brownfield Enhancement
 **Target Scale:** 10,000 users
 
@@ -9,119 +9,196 @@
 
 ## Overview
 
-This document provides the complete epic and story breakdown for NexFinApp's Smart Onboarding & Engagement System, decomposing the requirements from the [PRD](./prd.md) into implementable stories.
+This document provides the complete epic and story breakdown for NexFinApp's Credit Card Management & AI Helper System, decomposing the requirements from the [PRD](./prd.md) into implementable stories.
 
-**Living Document Notice:** This is the initial version. It will be updated after UX Design workflow adds interaction details to stories.
+**Living Document Notice:** This is the initial version created from PRD + Architecture. Can be enhanced with UX Design details later.
 
 **Context Incorporated:**
-- ✅ PRD requirements (53 FRs)
+- ✅ PRD requirements (95 FRs)
 - ✅ Architecture technical decisions
 - ℹ️ No UX Design (basic structure, can enhance later)
-
-## Epic Summary
-
-| Epic | Title | User Value | FRs Covered |
-|------|-------|------------|-------------|
-| **1** | Foundation & Message Infrastructure | Enables all subsequent functionality | FR33-FR37 + infrastructure |
-| **2** | Conversation-First Welcome | New users experience the "magic" immediately | FR1-FR3, FR9, FR24-FR25, FR39 |
-| **3** | Progressive Tier Journey | Users feel accomplishment as they master features | FR4-FR8, FR10, FR38 |
-| **4** | Engagement State Machine | Inactive users get respectful goodbye, not spam | FR11-FR19, FR26-FR27, FR40-FR42 |
-| **5** | Scheduled Jobs & Weekly Reviews | Active users get celebration; inactive get silence | FR20-FR23, FR44-FR48 |
-| **6** | User Preferences & Web Integration | Users control their experience from both channels | FR28-FR32, FR43 |
-| **7** | Testing & Quality Assurance | Reliable, bug-free system (indirect user value) | FR49-FR53 |
 
 ---
 
 ## Functional Requirements Inventory
 
-### Onboarding & Discovery (FR1-FR10)
-| FR | Description |
-|----|-------------|
-| FR1 | System detects first WhatsApp message after account connection |
-| FR2 | System responds conversationally to first message before guidance |
-| FR3 | System guides toward first expense with natural language example |
-| FR4 | System tracks 3-tier onboarding progress (Tier 1, 2, 3) |
-| FR5 | System detects tier action completion |
-| FR6 | System sends tier completion celebration |
-| FR7 | System unlocks next tier guidance after completion |
-| FR8 | Users can perform any action regardless of tier (no hard gating) |
-| FR9 | System provides contextual hints after relevant actions |
-| FR10 | Users can skip onboarding guidance ("stop tips") |
+### Epic A: Credit Card Management (FR1-FR42)
 
-### Engagement State Management (FR11-FR19)
+#### Mental Model & Opt-In (FR1-FR7)
 | FR | Description |
 |----|-------------|
-| FR11 | System maintains 5 engagement states (ACTIVE, GOODBYE_SENT, HELP_FLOW, REMIND_LATER, DORMANT) |
-| FR12 | Auto-transition to GOODBYE_SENT after 14 days inactive |
-| FR13 | Send self-select goodbye message on state transition |
-| FR14 | Process goodbye responses (options 1, 2, 3) |
-| FR15 | Response "1" → HELP_FLOW + restart Tier 1 |
-| FR16 | Response "2" → REMIND_LATER + 2-week timer |
-| FR17 | Response "3" or 48h timeout → DORMANT |
-| FR18 | Any message from DORMANT → ACTIVE |
-| FR19 | Idempotent scheduler (no duplicate messages) |
+| FR1 | System detects when user adds first credit card transaction |
+| FR2 | System prompts user to choose between Credit Mode and Simple Mode |
+| FR3 | System stores user's credit card mode preference (credit/simple) per payment method |
+| FR4 | Users can switch between Credit Mode and Simple Mode at any time |
+| FR5 | System warns user about data implications when switching modes (installments affected) |
+| FR6 | Simple Mode users see credit cards treated as regular expenses (existing behavior) |
+| FR7 | Credit Mode users access credit-specific features (budgets, installments, statements) |
 
-### Weekly Engagement (FR20-FR23)
+#### User-Defined Budgets (FR8-FR12)
 | FR | Description |
 |----|-------------|
-| FR20 | Track weekly activity (had activity vs. no activity) |
-| FR21 | Send weekly review if user had activity |
-| FR22 | No weekly review if no activity (silence by design) |
-| FR23 | Weekly review celebrates and checks in conversationally |
+| FR8 | Credit Mode users can set a personal monthly credit card budget (separate from bank limit) |
+| FR9 | System tracks spending against user-defined budget, not credit limit |
+| FR10 | Users can edit monthly budget at any time |
+| FR11 | System displays budget progress: spent amount, remaining, and percentage |
+| FR12 | System uses awareness-first language when budget is exceeded (no judgment) |
 
-### Message Destination (FR24-FR27)
+#### Installment Tracking - Parcelamento (FR13-FR23)
 | FR | Description |
 |----|-------------|
-| FR24 | Store preferred destination per user (individual/group) |
-| FR25 | Auto-detect preferred destination from first interaction |
-| FR26 | Send proactive messages to preferred destination |
-| FR27 | Users can change preferred destination via command |
+| FR13 | Users can add expenses with installment information (total amount + number of installments) |
+| FR14 | System creates parent installment record with full amount and duration |
+| FR15 | System automatically creates monthly expense entries for each installment payment |
+| FR16 | System distributes installment payments across correct months from purchase date |
+| FR17 | System displays "future commitments" showing total upcoming installment obligations per month |
+| FR18 | Only the monthly installment payment counts against monthly budget (not full amount) |
+| FR19 | Users can view all active installments with remaining payments |
+| FR20 | Users can mark installments as "paid off early" |
+| FR21 | Early payoff recalculates future commitment totals |
+| FR22 | Users can edit or delete installment records |
+| FR23 | Deleting installment removes all future monthly payments |
 
-### User Preferences & Opt-Out (FR28-FR32)
+#### Statement Awareness (FR24-FR29)
 | FR | Description |
 |----|-------------|
-| FR28 | WhatsApp opt-out command ("stop reminders") |
-| FR29 | Web settings opt-out toggle |
-| FR30 | Sync opt-out between WhatsApp and web |
-| FR31 | Respect opt-out for re-engagement, allow onboarding tips |
-| FR32 | Users can opt back in via either channel |
+| FR24 | Credit Mode users can set their credit card statement closing date |
+| FR25 | System sends WhatsApp reminder 3 days before statement closing date |
+| FR26 | Statement reminder includes current statement total |
+| FR27 | System distinguishes expenses on current statement vs next statement |
+| FR28 | Users can view pre-statement summary with category breakdown |
+| FR29 | Statement reminders use neutral, awareness-first tone |
 
-### Message Content & Tone (FR33-FR37)
+#### Payment Due Date (FR30-FR36)
 | FR | Description |
 |----|-------------|
-| FR33 | Follow tone guidelines (curiosity, celebration, dignity, empowerment) |
-| FR34 | Never send guilt, pressure, judgment, manipulation |
-| FR35 | Appropriate message length by context |
-| FR36 | Maximum one emoji per message |
-| FR37 | Messages in user's preferred language (pt-BR/en) |
+| FR30 | Credit Mode users can set credit card payment due date |
+| FR31 | System sends WhatsApp reminder 2 days before payment due date |
+| FR32 | Payment reminder includes total amount due |
+| FR33 | System auto-creates "Credit Card Payment" expense transaction in next month |
+| FR34 | Payment expense uses system category "Pagamento Cartão de Crédito" |
+| FR35 | Payment transaction separates current month usage from actual payment |
+| FR36 | Users can edit or delete auto-generated payment transactions |
 
-### Analytics & Learning (FR38-FR43)
+#### Awareness-First Language & UX (FR37-FR42)
 | FR | Description |
 |----|-------------|
-| FR38 | Track tier completion events with timestamps |
-| FR39 | Track "magic moment" (first NLP-parsed expense) |
-| FR40 | Track goodbye response distribution |
-| FR41 | Track unprompted returns (3+ days without prompt) |
-| FR42 | Track engagement state transitions with timestamps |
-| FR43 | Analytics accessible via admin dashboard/queries |
+| FR37 | All credit card features use awareness-first language (no judgment terminology) |
+| FR38 | System replaces "overspent" with "spent more than planned" |
+| FR39 | System replaces "warning" with "heads up" |
+| FR40 | Budget visualizations use neutral colors (no red for overspending) |
+| FR41 | System celebrates staying within budget with positive reinforcement |
+| FR42 | All error messages maintain dignity-first tone |
 
-### Scheduler & Background (FR44-FR48)
-| FR | Description |
-|----|-------------|
-| FR44 | Daily evaluation of engagement states |
-| FR45 | Process REMIND_LATER reminders after 2 weeks |
-| FR46 | Weekly review evaluation (identify users with activity) |
-| FR47 | Idempotent scheduler operations |
-| FR48 | Scheduler state persisted in database |
+### Epic B: AI Helper System (FR43-FR73)
 
-### Testing Infrastructure (FR49-FR53)
+#### Platform Infrastructure (FR43-FR46)
 | FR | Description |
 |----|-------------|
-| FR49 | E2E testing for WhatsApp flows (mock client) |
-| FR50 | Integration tests for 30-day journey scenarios |
-| FR51 | Unit tests for scheduler timing logic |
-| FR52 | Test coverage for all state transitions |
-| FR53 | Idempotency verification tests |
+| FR43 | System integrates with PostHog feature flags for helper system control |
+| FR44 | Feature flags support gradual rollout (5%, 25%, 50%, 100%) |
+| FR45 | System supports instant feature flag rollback |
+| FR46 | Environment variable fallback enables/disables helper system |
+
+#### Helper Architecture (FR47-FR52)
+| FR | Description |
+|----|-------------|
+| FR47 | System implements base helper architecture with shared conversational logic |
+| FR48 | System routes user messages to appropriate domain helper based on keywords |
+| FR49 | Helper system coexists with existing 3-layer NLP system |
+| FR50 | Helpers can ask clarifying questions before executing actions |
+| FR51 | Helpers prioritize education over immediate execution |
+| FR52 | Helper conversations support multi-turn interactions |
+
+#### Domain Helpers - MVP (FR53-FR62)
+| FR | Description |
+|----|-------------|
+| FR53 | Credit Card Helper responds to "ajuda cartão" and variations |
+| FR54 | Credit Card Helper explains Credit Mode vs Simple Mode |
+| FR55 | Credit Card Helper teaches installment tracking syntax |
+| FR56 | Credit Card Helper shows user's statement dates and budget status |
+| FR57 | Credit Card Helper guides users through first credit card expense |
+| FR58 | Transaction Helper responds to "ajuda gastos", "ajuda transações" and variations |
+| FR59 | Transaction Helper explains CRUD operations (add, edit, delete) |
+| FR60 | Transaction Helper shows recent transactions |
+| FR61 | Transaction Helper guides category changes |
+| FR62 | Transaction Helper differentiates between income and expenses |
+
+#### Testing & Quality (FR63-FR67)
+| FR | Description |
+|----|-------------|
+| FR63 | System supports AI integration testing with structured scenarios |
+| FR64 | Test framework validates conversational quality (not just correctness) |
+| FR65 | Tests cover multi-turn conversation flows |
+| FR66 | Tests verify education-first behavior (explain before execute) |
+| FR67 | Test results prevent regression on prompt/tool changes |
+
+#### Rollout & Monitoring (FR68-FR73)
+| FR | Description |
+|----|-------------|
+| FR68 | System logs all helper interactions with user ID and timestamp |
+| FR69 | System tracks helper usage metrics (invocations, conversation depth, success rate) |
+| FR70 | System monitors error rates per helper domain |
+| FR71 | System supports gradual user rollout with cohort tracking |
+| FR72 | Old AI system remains accessible during helper system rollout |
+| FR73 | System deprecates old AI system 2 months after 100% rollout |
+
+### Growth Features (FR74-FR86)
+
+#### Catch-Up Mode (FR74-FR76)
+| FR | Description |
+|----|-------------|
+| FR74 | System detects multi-day gaps in expense entry |
+| FR75 | System offers guilt-free catch-up flow with "Welcome back" messaging |
+| FR76 | Catch-up mode optimizes bulk entry workflow |
+
+#### Enhanced Awareness (FR77-FR81)
+| FR | Description |
+|----|-------------|
+| FR77 | System calculates "real available credit" (limit minus future installments) |
+| FR78 | System displays future installment obligations on dashboard |
+| FR79 | System sends pre-statement category breakdown summary |
+| FR80 | System identifies spending personality patterns (weekend spender, etc.) |
+| FR81 | Spending patterns use neutral archetypes (no judgment) |
+
+#### Additional Domain Helpers (FR82-FR86)
+| FR | Description |
+|----|-------------|
+| FR82 | Budget Helper responds to "ajuda orçamento" |
+| FR83 | Reports Helper responds to "ajuda relatórios", "ajuda saldo" |
+| FR84 | Recurring Helper responds to "ajuda recorrentes", "ajuda assinaturas" |
+| FR85 | Category Helper responds to "ajuda categorias" |
+| FR86 | Income Helper responds to "ajuda receitas", "ajuda renda" |
+
+### Analytics & Learning (FR87-FR95)
+| FR | Description |
+|----|-------------|
+| FR87 | System tracks Credit Mode vs Simple Mode adoption rates |
+| FR88 | System tracks installment creation and editing patterns |
+| FR89 | System tracks manual entry frequency before/after credit features |
+| FR90 | System tracks helper usage rates per domain |
+| FR91 | System tracks conversation depth (single-turn vs multi-turn) |
+| FR92 | System tracks mode switching (Credit ↔ Simple) |
+| FR93 | System tracks statement reminder open rates |
+| FR94 | System tracks budget vs limit preference (user-defined vs bank limit) |
+| FR95 | Analytics data accessible via PostHog dashboards |
+
+---
+
+## Epic Summary
+
+| Epic | Title | User Value | FRs Covered |
+|------|-------|------------|-------------|
+| **1** | Credit Mode Foundation | Users choose their credit card mental model (Credit Mode vs Simple Mode) | FR1-FR7 |
+| **2** | Parcelamento Intelligence | Brazilian users track installment purchases and see future commitments | FR13-FR23 |
+| **3** | Statement-Aware Budgets | Users track personal budgets aligned with credit card statement periods | FR8-FR12, FR24-FR29 |
+| **4** | Payment Reminders & Auto-Accounting | Users receive timely payment reminders and automatic accounting separation | FR30-FR36 |
+| **5** | AI Helper Platform Foundation | Users learn credit features through conversation ("ajuda cartão") | FR43-FR57, FR63-FR67, FR68-FR73 |
+| **6** | Transaction Helper & Platform Validation | Users get conversational help with all expense operations | FR58-FR62 |
+
+**Note:** FR37-FR42 (Awareness-First Language & UX) are cross-cutting quality requirements applied to ALL epics, not a separate epic. Every story will implement dignity-first tone and neutral language.
+
+**Growth Features:** FR74-FR95 (Catch-Up Mode, Enhanced Awareness, Additional Helpers, Analytics) deferred to post-MVP.
 
 ---
 
@@ -129,1139 +206,1791 @@ This document provides the complete epic and story breakdown for NexFinApp's Sma
 
 | FR Range | Epic | Coverage Description |
 |----------|------|---------------------|
-| FR1-FR3 | Epic 2 | First message detection, conversational response, guide to first expense |
-| FR4-FR8 | Epic 3 | Tier tracking, completion detection, celebrations, unlocks, no hard gating |
-| FR9 | Epic 2 | Contextual hints after actions |
-| FR10 | Epic 3 | Skip onboarding command |
-| FR11-FR19 | Epic 4 | 5-state engagement machine, transitions, idempotency |
-| FR20-FR23 | Epic 5 | Weekly activity tracking, weekly review messages |
-| FR24-FR25 | Epic 2 | Preferred destination storage and auto-detection |
-| FR26-FR27 | Epic 4 | Message routing to preferred destination, change command |
-| FR28-FR32 | Epic 6 | Opt-out via WhatsApp/web, sync, respect, opt-back-in |
-| FR33-FR37 | Epic 1 | Tone guidelines, message length, emoji limits, localization |
-| FR38 | Epic 3 | Tier completion analytics |
-| FR39 | Epic 2 | Magic moment tracking |
-| FR40-FR42 | Epic 4 | Goodbye response, unprompted returns, state transition analytics |
-| FR43 | Epic 6 | Analytics dashboard access |
-| FR44-FR48 | Epic 5 | Daily/weekly jobs, scheduler idempotency, persistence |
-| FR49-FR53 | Epic 7 | E2E tests, integration tests, unit tests, coverage |
+| FR1-FR7 | Epic 1 | Credit Mode opt-in, mode switching, Simple Mode backward compatibility |
+| FR8-FR12 | Epic 3 | User-defined monthly budgets (statement period basis) |
+| FR13-FR23 | Epic 2 | Parcelamento tracking: plans, payments, future commitments, early payoff |
+| FR24-FR29 | Epic 3 | Statement closing dates, reminders, period-aware spending totals |
+| FR30-FR36 | Epic 4 | Payment due reminders, auto-generated payment transactions |
+| FR37-FR42 | All Epics | Awareness-first language applied across all features (cross-cutting) |
+| FR43-FR46 | Epic 5 | PostHog feature flags, gradual rollout infrastructure |
+| FR47-FR52 | Epic 5 | BaseHelper architecture, LLM routing, multi-turn conversations |
+| FR53-FR57 | Epic 5 | Credit Card Helper domain implementation |
+| FR58-FR62 | Epic 6 | Transaction Helper domain implementation |
+| FR63-FR67 | Epic 5 | AI integration testing framework |
+| FR68-FR73 | Epic 5 | Helper monitoring, logging, rollout management |
+| FR74-FR95 | Post-MVP | Growth features deferred (22 FRs) |
 
-**Coverage validation:** All 53 FRs mapped to epics. No gaps.
+**Coverage validation:** All MVP FRs (FR1-FR73, minus FR37-FR42 as cross-cutting) mapped to epics. Growth features (FR74-FR95) explicitly deferred.
 
 ---
 
-## Epic 1: Foundation & Message Infrastructure
+## Epic 1: Credit Mode Foundation
 
-**Goal:** Establish the database schema, service structure, and localization messages that enable all engagement functionality.
+**Goal:** Enable users to choose their credit card mental model—Credit Mode (installments, statements, budgets) or Simple Mode (treat as debit)—respecting different relationships with credit cards.
 
-**FRs Covered:** FR33-FR37 (tone, length, emoji, language) + infrastructure for all other FRs
+**FRs Covered:** FR1-FR7
+
+**User Value:** Users aren't forced into credit-specific features if they pay cards in full monthly. Foundation for all credit features.
 
 ---
 
-### Story 1.1: Database Schema Migration
+### Story 1.1: Database Schema Migration for Credit Card Features
 
 **As a** developer,
-**I want** the engagement system database schema created,
-**So that** all subsequent features have proper data storage.
+**I want** the credit card management database schema created,
+**So that** all credit features have proper storage and the mode preference system works.
 
 **Acceptance Criteria:**
 
-**Given** the existing database schema
-**When** migration `033_engagement_system.sql` is applied
-**Then** the following tables are created:
-- `user_engagement_states` with columns: id, user_id, state, last_activity_at, goodbye_sent_at, goodbye_expires_at, remind_at, created_at, updated_at
-- `engagement_state_transitions` with columns: id, user_id, from_state, to_state, trigger, metadata, created_at
-- `engagement_message_queue` with columns: id, user_id, message_type, message_key, message_params, destination, destination_jid, scheduled_for, sent_at, status, retry_count, error_message, idempotency_key, created_at
+**Given** the existing NexFinApp database schema
+**When** migration `034_credit_card_management.sql` is applied
+**Then** the following schema changes are created:
 
-**And** the following columns are added to `user_profiles`:
-- `preferred_destination` TEXT DEFAULT 'individual'
-- `reengagement_opt_out` BOOLEAN DEFAULT false
-- `onboarding_tier` INTEGER DEFAULT 0
-- `onboarding_tier_progress` JSONB DEFAULT '{}'
-- `magic_moment_at` TIMESTAMPTZ
+**Payment Methods Extended:**
+```sql
+ALTER TABLE payment_methods
+  ADD COLUMN statement_closing_day INTEGER CHECK (statement_closing_day BETWEEN 1 AND 31),
+  ADD COLUMN payment_due_day INTEGER CHECK (payment_due_day > 0),
+  ADD COLUMN credit_mode BOOLEAN DEFAULT false,
+  ADD COLUMN monthly_budget DECIMAL(10,2);
+```
 
-**And** indexes are created for efficient scheduler queries
-**And** RLS policies enforce user-level access control
+**Installment Plans Table:**
+```sql
+CREATE TABLE installment_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id),
+  description TEXT NOT NULL,
+  total_amount DECIMAL(10,2) NOT NULL,
+  total_installments INTEGER NOT NULL CHECK (total_installments > 0),
+  status TEXT NOT NULL CHECK (status IN ('active', 'paid_off', 'cancelled')),
+  merchant TEXT,
+  category_id UUID REFERENCES categories(id),
+  payment_method_id UUID REFERENCES payment_methods(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Installment Payments Table:**
+```sql
+CREATE TABLE installment_payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES installment_plans(id) ON DELETE CASCADE,
+  transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL,
+  installment_number INTEGER NOT NULL CHECK (installment_number > 0),
+  amount DECIMAL(10,2) NOT NULL,
+  due_date DATE NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'paid', 'cancelled')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**And** proper indexes are created for performance:
+- `idx_installment_plans_user_status` on `installment_plans(user_id, status)`
+- `idx_installment_payments_plan` on `installment_payments(plan_id)`
+- `idx_installment_payments_due_date_status` on `installment_payments(due_date, status)`
+
+**And** RLS policies are enabled for user-level security
+
+**And** migration rolls back cleanly if needed
 
 **Prerequisites:** None (first story)
 
 **Technical Notes:**
-- Migration file: `fe/scripts/033_engagement_system.sql`
-- CHECK constraints on state, message_type, status, destination columns
-- UNIQUE constraint on idempotency_key
-- See Architecture doc for full schema
+- Location: `fe/scripts/034_credit_card_management.sql`
+- Reference: Architecture ADR-001 for complete schema
+- Edge case handling: `statement_closing_day` validates 1-31, application layer handles Feb 31 → Feb 28/29
+- Default `credit_mode = false` ensures backward compatibility for existing credit cards
 
 ---
 
-### Story 1.2: Engagement Handler Directory Structure
-
-**As a** developer,
-**I want** the engagement handler directory structure created,
-**So that** handler implementations have a consistent home.
-
-**Acceptance Criteria:**
-
-**Given** the existing `whatsapp-bot/src/handlers/` directory
-**When** the engagement handler structure is created
-**Then** the following files exist:
-- `handlers/engagement/index.ts` (exports all handlers)
-- `handlers/engagement/goodbye-handler.ts` (placeholder)
-- `handlers/engagement/first-message-handler.ts` (placeholder)
-- `handlers/engagement/tier-progress-handler.ts` (placeholder)
-- `handlers/engagement/opt-out-handler.ts` (placeholder)
-
-**And** all files pass TypeScript compilation
-
-**Prerequisites:** None
-
-**Technical Notes:**
-- Follow existing handler patterns from `handlers/transactions/`
-- Use kebab-case files, camelCase exports
-
----
-
-### Story 1.3: Engagement Service Directory Structure
-
-**As a** developer,
-**I want** the engagement and scheduler service directories created with types,
-**So that** service implementations have proper structure and type safety.
-
-**Acceptance Criteria:**
-
-**Given** the existing `whatsapp-bot/src/services/` directory
-**When** the engagement service structure is created
-**Then** the following files exist:
-- `services/engagement/index.ts`, `state-machine.ts`, `activity-tracker.ts`, `message-router.ts`, `constants.ts`, `types.ts`
-- `services/scheduler/index.ts`, `daily-engagement-job.ts`, `weekly-review-job.ts`, `message-sender.ts`
-
-**And** `types.ts` defines: `EngagementState`, `TransitionTrigger`, `MessageType`, `TierProgress`
-**And** `constants.ts` defines: `INACTIVITY_THRESHOLD_DAYS: 14`, `GOODBYE_TIMEOUT_HOURS: 48`, `REMIND_LATER_DAYS: 14`, tier action arrays
-
-**Prerequisites:** Story 1.1 (types reference DB schema)
-
-**Technical Notes:**
-- Constants align with PRD specifications
-- Types align with architecture document
-
----
-
-### Story 1.4: Engagement Localization - Portuguese (pt-BR)
-
-**As a** user who speaks Portuguese,
-**I want** all engagement messages in natural Brazilian Portuguese,
-**So that** the bot feels like a supportive friend, not a robot.
-
-**Acceptance Criteria:**
-
-**Given** the existing `localization/pt-br.ts` file
-**When** engagement messages are added
-**Then** message categories exist for: welcome, tier unlocks, goodbye/self-select, weekly review, opt-out
-
-**And** all messages follow tone guidelines:
-- Use curiosity, celebration, dignity, empowerment
-- NO guilt, pressure, judgment, manipulation
-- Maximum ONE emoji per message
-- Casual register ("você" not "o senhor")
-
-**Prerequisites:** Story 1.3 (message types defined)
-
-**Technical Notes:**
-- Reference PRD "Critical Interaction Flows" for exact copy
-- Support variable interpolation: `{user_name}`, `{expense_amount}`, `{category}`
-
----
-
-### Story 1.5: Engagement Localization - English
-
-**As a** user who speaks English,
-**I want** all engagement messages in natural English,
-**So that** I receive the same supportive experience as Portuguese users.
-
-**Acceptance Criteria:**
-
-**Given** the existing `localization/en.ts` file
-**When** engagement messages are added
-**Then** all message keys from Story 1.4 have English equivalents
-**And** messages are natural English (not direct translations)
-**And** tone guidelines are followed
-
-**Prerequisites:** Story 1.4 (pt-BR defines all keys)
-
-**Technical Notes:**
-- Adapt idioms appropriately
-
----
-
-### Story 1.6: Message Queue Service Foundation
+### Story 1.2: First Credit Card Transaction Detection
 
 **As a** system,
-**I want** a message queue service for proactive messages,
-**So that** messages have retry capability, audit trail, and idempotency.
+**I want** to detect when a user adds their first transaction with a credit card payment method,
+**So that** I can trigger the Credit Mode vs Simple Mode choice dialog.
 
 **Acceptance Criteria:**
 
-**Given** the `engagement_message_queue` table exists
-**When** `queueMessage()` is called with valid params
-**Then** a queue entry is created with `status = 'pending'`, `retry_count = 0`, unique `idempotency_key`
+**Given** a user has a payment method with `type = 'credit'`
+**And** the payment method has `credit_mode = NULL` (not yet chosen)
+**When** user adds an expense using this credit card for the first time
+**Then** transaction is saved but NOT confirmed yet
+**And** system sets flag `needs_credit_mode_selection = true`
+**And** response includes prompt for mode selection
 
-**And** duplicate idempotency_keys are silently ignored (upsert)
+**Given** user already has `credit_mode` set (true or false)
+**When** user adds expense with that credit card
+**Then** transaction processes normally with NO mode prompt
 
-**Given** `getIdempotencyKey(userId, eventType, date)` is called
-**Then** returns format: `{userId}:{eventType}:{YYYY-MM-DD}`
+**Given** user has multiple credit cards
+**When** adding expense with NEW credit card (no mode set)
+**Then** mode prompt shown for THAT specific card only
 
-**Given** a message fails to send
-**When** retry logic executes
-**Then** `retry_count` increments, and after 3 failures status becomes 'failed'
-
-**Prerequisites:** Story 1.1 (database), Story 1.3 (types)
+**Prerequisites:** Story 1.1 (database schema)
 
 **Technical Notes:**
-- Exponential backoff: 1s, 2s, 4s
-- `processMessageQueue()` completed in Epic 5
+- WhatsApp Bot: `handlers/transactions/transactions.ts`
+- Frontend: `lib/actions/transactions.ts`
+- Check: `payment_method.credit_mode IS NULL AND payment_method.type = 'credit'`
+- Detection happens BEFORE transaction confirmation
+- Mode selection required to complete transaction
 
 ---
 
-## Epic 2: Conversation-First Welcome
+### Story 1.3: Credit Mode vs Simple Mode Selection (WhatsApp)
 
-**Goal:** New users experience the conversational "magic" immediately upon first WhatsApp interaction—proving NexFinApp is different.
-
-**FRs Covered:** FR1, FR2, FR3, FR9, FR24, FR25, FR39
-
----
-
-### Story 2.1: First Message Detection
-
-**As a** system,
-**I want** to detect when a user sends their first WhatsApp message after account connection,
-**So that** I can trigger the special welcome flow.
+**As a** WhatsApp user adding my first credit card expense,
+**I want** to choose between Credit Mode and Simple Mode with clear explanations,
+**So that** I understand what each option means before committing.
 
 **Acceptance Criteria:**
 
-**Given** a user has connected their WhatsApp and never sent a message before
-**When** they send any message
-**Then** `is_first_message = true` and a new `user_engagement_states` record is created
+**Given** first credit card transaction triggers mode selection
+**When** user receives mode choice prompt
+**Then** message explains both options:
 
-**Given** a user has previously sent messages
-**When** they send another message
-**Then** `is_first_message = false`
+**Portuguese (pt-BR):**
+```
+Como você quer acompanhar este cartão?
 
-**Prerequisites:** Epic 1 complete
+1️⃣ Modo Crédito
+- Acompanhe parcelamentos (3x, 12x, etc)
+- Orçamento mensal personalizado
+- Lembrete de fechamento da fatura
+- Ideal para quem parcela compras
+
+2️⃣ Modo Simples
+- Trata como débito
+- Sem recursos de cartão de crédito
+- Ideal para quem paga a fatura em dia
+
+Responda 1 ou 2
+```
+
+**English (en):**
+```
+How would you like to track this card?
+
+1️⃣ Credit Mode
+- Track installments (3x, 12x, etc)
+- Personal monthly budget
+- Statement closing reminders
+- Ideal for installment purchases
+
+2️⃣ Simple Mode
+- Treat as debit
+- No credit card features
+- Ideal if you pay in full monthly
+
+Reply 1 or 2
+```
+
+**And** response "1" sets `credit_mode = true`, confirms transaction, welcomes to Credit Mode
+**And** response "2" sets `credit_mode = false`, confirms transaction, continues as normal expense
+**And** invalid response prompts again with clarification
+
+**Prerequisites:** Story 1.2 (detection)
 
 **Technical Notes:**
-- Check `user_engagement_states` for existing record
-- Location: `handlers/engagement/first-message-handler.ts`
+- Location: `whatsapp-bot/src/handlers/credit-card/mode-selection.ts`
+- Localization: `localization/pt-br.ts`, `localization/en.ts`
+- Tone: Awareness-first, neutral (FR37-FR42)
+- Store conversation state for follow-up response
+- One emoji max per message (FR36 from original PRD)
 
 ---
 
-### Story 2.2: Conversational First Response
+### Story 1.4: Credit Mode Selection (Web Frontend)
 
-**As a** new user,
-**I want** the bot to respond conversationally to whatever I said,
-**So that** I feel heard before receiving onboarding instructions.
+**As a** web user adding my first credit card expense,
+**I want** to choose my credit card mode through a clear dialog,
+**So that** I can select the right tracking approach for my needs.
 
 **Acceptance Criteria:**
 
-**Given** a user sends their first message with parseable content
-**When** the first-message handler processes it
-**Then** the response acknowledges their message contextually before guiding
-**And** includes user's name if available from `push_name`
+**Given** user adding expense via web with new credit card
+**When** transaction form is submitted
+**Then** modal dialog appears with mode selection
 
-**Given** unparseable content
-**When** processed
-**Then** response is warm and gently guides toward an example
+**Given** mode selection modal is displayed
+**Then** shows two clear options with icons:
+- **Credit Mode**: Icon, benefits list (installments, budgets, statements), "Choose Credit Mode" button
+- **Simple Mode**: Icon, benefits list (simple tracking, no extra features), "Choose Simple Mode" button
 
-**Example:** User: "oi" → Bot: "Oi {name}! Que bom ter você aqui 😊 Experimenta mandar algo tipo 'gastei 50 no almoço'..."
+**And** modal has "What's the difference?" expandable section with detailed comparison
 
-**Prerequisites:** Story 2.1, Story 1.4
+**Given** user clicks "Choose Credit Mode"
+**Then** `payment_method.credit_mode = true`, modal closes, transaction confirmed, success toast shown
+
+**Given** user clicks "Choose Simple Mode"
+**Then** `payment_method.credit_mode = false`, modal closes, transaction confirmed, success toast shown
+
+**Given** user closes modal without selecting
+**Then** transaction NOT saved, returns to form
+
+**Prerequisites:** Story 1.2 (detection)
 
 **Technical Notes:**
-- Response time target: < 3 seconds (NFR1)
+- Component: `fe/components/transactions/credit-mode-selection-dialog.tsx`
+- Server Action: `fe/lib/actions/payment-methods.ts` → `setCreditMode()`
+- UI: Radix Dialog, neutral colors (no pressure), mobile-responsive
+- Localization: next-intl for pt-BR/en
+- Analytics: Track mode selection with PostHog event
 
 ---
 
-### Story 2.3: Guide to First Expense
+### Story 1.5: Mode Switching with Data Implications Warning
 
-**As a** new user,
-**I want** to be guided toward logging my first expense with a natural example,
-**So that** I understand the conversational interface.
+**As a** user who wants to change my credit card mode,
+**I want** to understand what happens to my existing data,
+**So that** I can make an informed decision about switching modes.
 
 **Acceptance Criteria:**
 
-**Given** welcome message sent and no expense logged yet
-**When** welcome flow completes
-**Then** message includes natural language example in user's locale
+**Given** user with Credit Mode enabled and active installments
+**When** user requests to switch to Simple Mode
+**Then** system shows warning:
 
-**Given** first message IS an expense
-**When** processed
-**Then** expense logged, celebration sent, no redundant guidance
+**Portuguese:**
+```
+⚠️ Atenção: Modo de Mudança
 
-**Prerequisites:** Story 2.2
+Você tem 3 parcelamentos ativos. O que deseja fazer?
+
+1️⃣ Manter parcelamentos ativos
+   - Próximas parcelas continuam aparecendo
+   - Pode voltar para Modo Crédito depois
+
+2️⃣ Quitar todos agora
+   - Marca todos como "pagos antecipadamente"
+   - Remove parcelas futuras
+
+3️⃣ Cancelar mudança
+```
+
+**Given** user chooses option 1 (keep installments)
+**Then** `credit_mode = false` but installments remain `status = 'active'`
+**And** future installment payments still auto-created
+**And** confirmation: "Modo alterado. Parcelamentos ativos continuam."
+
+**Given** user chooses option 2 (pay off all)
+**Then** `credit_mode = false` AND all active installments set to `status = 'paid_off'`
+**And** future pending installment_payments cancelled
+**And** confirmation: "Modo alterado. 3 parcelamentos marcados como quitados."
+
+**Given** user chooses option 3
+**Then** no changes made, returns to previous screen
+
+**Given** user with NO active installments
+**When** switching modes
+**Then** simple confirmation dialog (no data implications warning)
+
+**Prerequisites:** Story 1.1 (schema), Story 1.3 (mode set initially)
 
 **Technical Notes:**
-- Integrate with existing transaction handlers
-- Conditional guidance based on what user accomplished
+- WhatsApp: `handlers/credit-card/mode-switch.ts`
+- Frontend: Dialog component with clear options
+- ADR-004: Non-destructive mode switching with user choice
+- Query active installments: `WHERE status = 'active'`
+- Atomic operation: Update payment_method + installments in transaction
 
 ---
 
-### Story 2.4: Preferred Destination Auto-Detection
+### Story 1.6: Simple Mode Backward Compatibility
 
-**As a** user who interacts via WhatsApp group,
-**I want** the system to remember my preferred context,
-**So that** all bot messages come to the right place.
+**As a** Simple Mode user,
+**I want** my credit card to work exactly like existing expense tracking,
+**So that** I'm not forced into credit features I don't need.
 
 **Acceptance Criteria:**
 
-**Given** first message from individual chat
-**When** processed
-**Then** `preferred_destination = 'individual'`
+**Given** payment method with `credit_mode = false`
+**When** user adds expense with this credit card
+**Then** transaction created normally (no installment prompt, no statement period tracking)
 
-**Given** first message from group chat
-**When** processed
-**Then** `preferred_destination = 'group'` and group JID stored
+**Given** Simple Mode credit card
+**When** viewing dashboard or reports
+**Then** credit card transactions appear alongside debit/cash (no special treatment)
 
-**Given** existing preferred_destination
-**When** message from different context
-**Then** preference NOT auto-changed (requires explicit command)
+**Given** Simple Mode credit card
+**When** budgets calculated
+**Then** uses calendar month (not statement period)
 
-**Prerequisites:** Story 2.1, Story 1.1
+**Given** existing credit card users (pre-migration)
+**When** database migrated
+**Then** `credit_mode = NULL` (not false) to trigger selection on next transaction
+
+**Given** user never wants to see Credit Mode features
+**When** they choose Simple Mode
+**Then** no prompts for installments, statements, or credit budgets
+
+**Prerequisites:** Story 1.1 (schema)
 
 **Technical Notes:**
-- Group JIDs end with `@g.us`
-- 66% of users use groups (per PRD)
+- Conditional rendering: All credit features check `credit_mode = true`
+- Existing transaction flow unchanged for Simple Mode
+- No performance impact: Feature checks are boolean (fast)
+- NFR32: Backward compatibility ensures existing users unaffected
 
 ---
 
-### Story 2.5: Magic Moment Tracking
+## Epic 2: Parcelamento Intelligence
 
-**As a** product team,
-**I want** to track when users experience their first successful NLP-parsed expense,
-**So that** we can measure onboarding effectiveness.
+**Goal:** Brazilian users can track installment purchases (parcelamento), see future payment commitments, and manage installment plans—the killer feature generic expense trackers don't offer.
+
+**FRs Covered:** FR13-FR23
+
+**User Value:** Users understand their future credit card obligations across all installment purchases, can track "compra parcelada em 12x" naturally, and see real purchasing power.
+
+---
+
+### Story 2.1: Add Installment Purchase (WhatsApp)
+
+**As a** WhatsApp user,
+**I want** to log an installment purchase using natural language,
+**So that** I can track "comprei 600 em 3x" without learning complex syntax.
 
 **Acceptance Criteria:**
 
-**Given** user has never logged an NLP expense
-**When** they successfully log one via natural language
-**Then** `magic_moment_at = now()` and PostHog event `onboarding_magic_moment` fired
+**Given** Credit Mode enabled user sends message "gastei 600 em 3x no celular"
+**When** AI processes the message
+**Then** extracts: amount=600, installments=3, description="celular"
+**And** prompts for payment method if ambiguous
+**And** creates installment plan with confirmation
 
-**Given** user already has magic_moment_at set
-**When** they log another NLP expense
-**Then** timestamp NOT updated, no duplicate event
+**Given** installment creation succeeds
+**Then** response shows:
+```
+✅ Parcelamento criado: Celular
+💰 Total: R$ 600,00 em 3x de R$ 200,00
+📅 Primeira parcela: Hoje
+📅 Última parcela: Março 2025
 
-**Given** expense logged via explicit command
-**Then** does NOT count as magic moment
+Suas próximas parcelas aparecem automaticamente todo mês.
+```
 
-**Prerequisites:** Story 2.3
+**Given** user specifies "gastei 1200 parcelado em 12 vezes"
+**Then** creates 12 monthly installments starting from today
+
+**Given** installment variations in Portuguese:
+- "comprei 450 em 9x"
+- "gastei 800 parcelado 4x"
+- "900 dividido em 6 parcelas"
+**Then** all correctly parsed and created
+
+**Prerequisites:** Epic 1 complete (Credit Mode enabled), Story 1.1 (database)
 
 **Technical Notes:**
-- Distinguish NLP path vs explicit command path
+- Location: `whatsapp-bot/src/handlers/credit-card/installment-handler.ts`
+- AI function: `add_installment(amount, installments, description, category, payment_method_id)`
+- Installment calculation: `monthly_amount = total_amount / total_installments` (rounded to 2 decimals)
+- Due dates: First installment = today, subsequent = same day next months
+- Transaction creation: Create monthly transactions for each installment
+- NFR3: Installment calculation < 500ms
 
 ---
 
-### Story 2.6: Contextual Hints After Actions
+### Story 2.2: Add Installment Purchase (Web Frontend)
 
-**As a** new user,
-**I want** to receive relevant suggestions after I complete actions,
-**So that** I discover features naturally.
+**As a** web user,
+**I want** to add an installment purchase through a clear form,
+**So that** I can enter all installment details accurately.
 
 **Acceptance Criteria:**
 
-**Given** user logged first expense
-**When** confirmation sent
-**Then** contextual hint included: "Quer criar categorias personalizadas?"
+**Given** user on transaction form with Credit Mode credit card selected
+**When** user clicks "This is an installment purchase" toggle
+**Then** form reveals installment fields:
+- Total Amount (R$)
+- Number of Installments (1-48, dropdown)
+- Monthly Payment (auto-calculated, read-only)
+- First Payment Date (date picker, defaults to today)
 
-**Given** user logged 3+ expenses in same category
-**When** third confirmed
-**Then** budget hint included
+**Given** total amount = R$ 1,200 and installments = 12
+**Then** monthly payment displays: R$ 100,00 (auto-calculated)
 
-**Given** user opted out of tips OR is Tier 2+
-**When** action completed
-**Then** no hints sent
+**Given** user submits installment form
+**When** validation passes
+**Then** creates `installment_plan` + 12 `installment_payments` + 12 linked `transactions`
+**And** shows success message: "Installment created: 12 payments of R$ 100"
+**And** redirects to installments dashboard
 
-**Prerequisites:** Story 2.5, Story 1.4
+**Given** user changes number of installments
+**Then** monthly payment recalculates in real-time
+
+**Prerequisites:** Epic 1 complete, Story 1.1 (database)
 
 **Technical Notes:**
-- Check `onboarding_tier` to avoid regressive hints
-- Hints are non-blocking
+- Component: `fe/components/transactions/installment-form.tsx`
+- Server Action: `fe/lib/actions/installments.ts` → `createInstallment()`
+- Validation: Installments 1-48, amount > 0, first payment date required
+- Responsive: Mobile-friendly form layout
+- Analytics: Track installment creation with PostHog
 
 ---
 
-## Epic 3: Progressive Tier Journey
+### Story 2.3: Future Commitments Dashboard
 
-**Goal:** Users feel accomplishment as they master features through a 3-tier progressive disclosure system.
-
-**FRs Covered:** FR4, FR5, FR6, FR7, FR8, FR10, FR38
-
----
-
-### Story 3.1: Tier Progress Tracking Service
-
-**As a** system,
-**I want** a service to track user progress through onboarding tiers,
-**So that** I can detect completions and send appropriate messages.
+**As a** Credit Mode user,
+**I want** to see my upcoming installment obligations by month,
+**So that** I understand my future credit card commitments.
 
 **Acceptance Criteria:**
 
-**Given** a user completes an action
-**When** `recordAction(userId, actionName)` is called
-**Then** `onboarding_tier_progress` JSONB is updated atomically
+**Given** user has 3 active installment plans:
+- Plan A: R$ 200/month for 5 more months
+- Plan B: R$ 150/month for 3 more months
+- Plan C: R$ 100/month for 8 more months
 
-**Given** all actions in a tier are complete
-**When** `checkTierCompletion()` is called
-**Then** returns `true` and sets `tier.completed_at`
+**When** user views Future Commitments dashboard
+**Then** displays monthly breakdown:
+```
+📅 Janeiro 2025: R$ 450 (3 parcelas)
+📅 Fevereiro 2025: R$ 450 (3 parcelas)
+📅 Março 2025: R$ 300 (2 parcelas)
+📅 Abril-Junho 2025: R$ 300/mês (2 parcelas)
+📅 Julho-Agosto 2025: R$ 100/mês (1 parcela)
+```
 
-**Prerequisites:** Epic 1, Epic 2
+**Given** user clicks on month
+**Then** expands to show which installments are due:
+- "Celular - 3/12 - R$ 200"
+- "Sofá - 1/3 - R$ 150"
+- "Notebook - 5/8 - R$ 100"
+
+**Given** no active installments
+**Then** shows friendly empty state: "Sem parcelamentos ativos"
+
+**Given** user on WhatsApp sends "parcelamentos" or "próximas parcelas"
+**Then** receives text summary of future commitments
+
+**Prerequisites:** Story 2.1 or 2.2 (installments created)
 
 **Technical Notes:**
-- Location: `services/onboarding/tier-tracker.ts`
-- Tier 1: add_expense, edit_category, delete_expense, add_category
-- Tier 2: set_budget, add_recurring, list_categories
-- Tier 3: edit_category, view_report
+- Frontend: `fe/components/dashboard/future-commitments-widget.tsx`
+- Query: Architecture ADR-001 Future Commitments query
+- Cache: React Query with 5-minute stale time
+- WhatsApp: `handlers/credit-card/view-installments.ts`
+- Performance: Indexed query on `due_date`, `status = 'pending'`
 
 ---
 
-### Story 3.2: Tier Action Detection Hooks
-
-**As a** system,
-**I want** existing handlers to report tier-relevant actions,
-**So that** tier progress is tracked automatically.
-
-**Acceptance Criteria:**
-
-**Given** user performs any tier-tracked action (add expense, set budget, view report, etc.)
-**When** handler completes successfully
-**Then** `recordAction()` is called with appropriate action name
-
-**Prerequisites:** Story 3.1
-
-**Technical Notes:**
-- Add hook calls to: transactions/, categories/, budgets/, recurring/, reports/
-- Non-blocking: tier tracking shouldn't slow primary actions
-
----
-
-### Story 3.3: Tier Completion Detection & Celebrations
+### Story 2.4: View All Installments (Active & History)
 
 **As a** user,
-**I want** to receive a celebration message when I complete a tier,
-**So that** I feel accomplished and motivated.
+**I want** to see all my installment plans with payment status,
+**So that** I can track progress and review past purchases.
 
 **Acceptance Criteria:**
 
-**Given** user completes last Tier 1 action
-**When** completion detected
-**Then** celebration + Tier 2 guidance sent, `onboarding_tier = 1`
+**Given** user views Installments page
+**Then** shows tabs: "Active" (default), "Paid Off", "Cancelled"
 
-**Given** user completes last Tier 2 action
-**Then** celebration + Tier 3 guidance sent, `onboarding_tier = 2`
+**Given** Active tab selected
+**Then** lists all plans with `status = 'active'`:
+- Plan description
+- Total amount
+- Monthly payment
+- Progress: "3/12 paid" with progress bar
+- Remaining amount
+- Next payment date
+- Actions: View Details, Pay Off Early, Edit, Delete
 
-**Given** user completes last Tier 3 action
-**Then** final "pro" celebration sent, `onboarding_tier = 3`
+**Given** user clicks "View Details" on installment
+**Then** modal shows:
+- Complete payment schedule (all 12 payments)
+- Payment status for each (paid/pending)
+- Transaction links for each payment
+- Total paid vs remaining
 
-**Given** user opted out of tips
-**Then** NO celebration sent, but progress still tracked
+**Given** Paid Off tab
+**Then** shows completed installments with completion date
 
-**Prerequisites:** Story 3.2, Story 1.4
+**Prerequisites:** Story 2.1 or 2.2
 
 **Technical Notes:**
-- Queue via message queue service
-- One emoji max in celebration
+- Page: `fe/app/[locale]/installments/page.tsx`
+- Component: `fe/components/installments/installment-list.tsx`
+- Status badges: Active (blue), Paid Off (green), Cancelled (gray)
+- Pagination: 20 per page
+- Sort: Newest first, then by next payment date
 
 ---
 
-### Story 3.4: No Hard Gating Policy
+### Story 2.5: Mark Installment as Paid Off Early
 
-**As a** user,
-**I want** to perform any action at any time regardless of tier,
-**So that** I'm not blocked from features I need.
+**As a** user who paid off an installment plan early,
+**I want** to mark it as "paid off" and remove future payments,
+**So that** my future commitments dashboard stays accurate.
 
 **Acceptance Criteria:**
 
-**Given** Tier 0 user wants to perform Tier 2/3 action
-**When** they attempt it
-**Then** action succeeds, progress recorded, no blocking
+**Given** active installment with 5 remaining payments
+**When** user clicks "Pay Off Early"
+**Then** confirmation dialog shows:
+```
+Quitar parcelamento antecipadamente?
 
-**Given** actions completed out of order
-**When** tiers evaluated
-**Then** each tier celebrates independently when complete
+Notebook - 7/12 pagas
+💰 Valor restante: R$ 500 (5x de R$ 100)
+
+Isso irá:
+✓ Marcar como "quitado"
+✓ Remover 5 parcelas futuras
+✓ Atualizar seus compromissos futuros
+
+[Confirmar Quitação] [Cancelar]
+```
+
+**Given** user confirms payoff
+**Then** `installment_plan.status = 'paid_off'`
+**And** all `installment_payments` with `status = 'pending'` set to `status = 'cancelled'`
+**And** linked future `transactions` deleted
+**And** success message: "Parcelamento quitado! 5 parcelas futuras removidas."
+**And** future commitments dashboard updates immediately
+
+**Given** user on WhatsApp sends "quitar parcelamento [description]"
+**Then** same flow via conversational confirmation
+
+**Prerequisites:** Story 2.1 or 2.2, Story 2.4
+
+**Technical Notes:**
+- Action: `fe/lib/actions/installments.ts` → `payOffInstallment(planId)`
+- Atomic transaction: Update plan + cancel payments + delete transactions
+- NFR21: Early payoff recalculation atomic operation
+- Audit: Log event with user_id, plan_id, remaining_amount
+- WhatsApp: `handlers/credit-card/payoff-installment.ts`
+
+---
+
+### Story 2.6: Edit Installment Plan
+
+**As a** user who made a mistake or needs to adjust an installment,
+**I want** to edit installment details,
+**So that** my tracking stays accurate.
+
+**Acceptance Criteria:**
+
+**Given** user clicks "Edit" on active installment
+**Then** form pre-populates with current values:
+- Description (editable)
+- Category (editable)
+- Total amount (editable, recalculates monthly)
+- Number of installments (editable, recalculates monthly)
+- Merchant (editable)
+
+**Given** user changes total amount from R$ 1,200 to R$ 1,320
+**And** 12 installments remain
+**When** saved
+**Then** monthly payment recalculates: R$ 110 per month
+**And** all pending installment_payments updated to new amount
+**And** linked pending transactions updated
+
+**Given** user changes number of installments from 12 to 10
+**Then** warning: "This will add/remove future payments"
+**And** on confirm, recalculates schedule
+
+**Given** payments already made
+**Then** past payments NOT changed (only pending payments updated)
+
+**Given** user changes description from "Celular" to "iPhone 14"
+**Then** updates plan description and all linked transaction descriptions
+
+**Prerequisites:** Story 2.1 or 2.2
+
+**Technical Notes:**
+- Component: `fe/components/installments/edit-installment-dialog.tsx`
+- Server Action: `updateInstallment(planId, updates)`
+- Validation: Cannot edit `status = 'paid_off'` or `status = 'cancelled'`
+- Recalculation logic: Only updates `status = 'pending'` payments
+- Audit trail: Log edit with old/new values
+
+---
+
+### Story 2.7: Delete Installment Plan
+
+**As a** user who created an installment by mistake,
+**I want** to delete the entire installment plan,
+**So that** I can remove incorrect data completely.
+
+**Acceptance Criteria:**
+
+**Given** user clicks "Delete" on installment
+**Then** confirmation dialog warns:
+```
+⚠️ Deletar parcelamento?
+
+Isso irá remover permanentemente:
+❌ O plano de parcelamento
+❌ Todas as 12 parcelas (3 pagas, 9 pendentes)
+❌ Transações vinculadas (9 futuras)
+
+✓ As 3 transações já pagas permanecem (mas sem vínculo)
+
+Esta ação não pode ser desfeita.
+
+[Deletar] [Cancelar]
+```
+
+**Given** user confirms deletion
+**Then** `installment_plan` deleted (CASCADE deletes all `installment_payments`)
+**And** future `transactions` with `status = 'pending'` deleted
+**And** past `transactions` remain but `transaction.installment_payment_id = NULL`
+**And** success: "Parcelamento deletado. 9 parcelas futuras removidas."
+
+**Given** WhatsApp user sends "deletar parcelamento [description]"
+**Then** same confirmation flow
+
+**Prerequisites:** Story 2.1 or 2.2
+
+**Technical Notes:**
+- Action: `deleteInstallment(planId)`
+- ON DELETE CASCADE handles `installment_payments` deletion
+- Keep paid transactions: Users need historical record of what they spent
+- Orphaned transactions: Set `installment_payment_id = NULL`, keep description with suffix " (parcelamento removido)"
+- FR23: Deleting installment removes all future monthly payments
+
+---
+
+### Story 2.8: Installment Impact on Budget Tracking
+
+**As a** Credit Mode user,
+**I want** only the monthly installment payment to count against my budget,
+**So that** I'm not penalized for the full purchase amount in one month.
+
+**Acceptance Criteria:**
+
+**Given** user has monthly credit card budget of R$ 2,000
+**And** user purchases R$ 1,200 item in 12x of R$ 100 each
+**When** budget calculated for current statement period
+**Then** only R$ 100 counts toward budget (not R$ 1,200)
+
+**Given** statement period with 3 installment payments due:
+- R$ 100 (Celular 3/12)
+- R$ 150 (Sofá 1/3)
+- R$ 200 (Notebook 5/8)
+**When** budget progress displayed
+**Then** shows R$ 450 from installments toward monthly budget
+
+**Given** user views budget breakdown by category
+**Then** installment payments categorized by their plan's category
+**And** shows: "Electronics: R$ 100 (Celular 3/12) + R$ 200 (Notebook 5/8) = R$ 300"
+
+**Prerequisites:** Epic 3 (budgets), Story 2.1
+
+**Technical Notes:**
+- Budget queries: Include `transactions` linked to `installment_payments` where `due_date` in period
+- FR18: Only monthly installment payment counts, not total amount
+- Dashboard: Show budget impact clearly: "Parcelas: R$ 450 de R$ 2,000"
+- Category budgets: Each installment payment counts toward its category
+
+---
+
+## Epic 3: Statement-Aware Budgets
+
+**Goal:** Users track personal spending budgets aligned with credit card statement periods (not calendar months), see pre-statement summaries, and receive awareness-first reminders.
+
+**FRs Covered:** FR8-FR12, FR24-FR29
+
+**User Value:** Users budget based on billing cycle (what matters for credit cards), not arbitrary calendar months. Clarity on "what's on this statement."
+
+---
+
+### Story 3.1: Set Statement Closing Date
+
+**As a** Credit Mode user,
+**I want** to set my credit card statement closing date,
+**So that** budgets and spending totals align with my billing cycle.
+
+**Acceptance Criteria:**
+
+**Given** user in Credit Mode settings for a credit card
+**When** user clicks "Set Statement Closing Date"
+**Then** form shows:
+- Closing Day (1-31, dropdown)
+- Explanation: "Dia em que sua fatura fecha. Exemplo: Se fecha dia 5, gastos de 6-5 aparecem na mesma fatura."
+- Preview: "Período atual: 6 Nov - 5 Dez"
+
+**Given** user selects closing day = 15
+**And** today = Dec 3, 2025
+**When** saved
+**Then** `payment_method.statement_closing_day = 15`
+**And** current period calculated: Nov 16 - Dec 15
+**And** next closing date: Dec 15
+
+**Given** edge case: closing day = 31 and current month is February
+**Then** system uses last day of month (Feb 28 or 29)
+**And** shows note: "Como fevereiro não tem 31 dias, usamos o último dia do mês."
+
+**Given** WhatsApp user sends "definir fechamento dia 10"
+**Then** updates closing day with confirmation
+
+**Prerequisites:** Epic 1 (Credit Mode enabled)
+
+**Technical Notes:**
+- Component: `fe/components/settings/statement-settings.tsx`
+- Server Action: `updateStatementSettings(paymentMethodId, closingDay, dueDay)`
+- Calculation: Architecture ADR-001 Statement Period Calculation
+- ADR-006: Edge case handling for Feb 31 → Feb 28/29
+- Validation: 1 ≤ closingDay ≤ 31
+
+---
+
+### Story 3.2: Set User-Defined Monthly Budget
+
+**As a** Credit Mode user,
+**I want** to set a personal monthly budget for my credit card,
+**So that** I track my intention (not bank's credit limit).
+
+**Acceptance Criteria:**
+
+**Given** user in credit card settings
+**When** user clicks "Set Monthly Budget"
+**Then** form shows:
+- Budget Amount (R$, decimal input)
+- Explanation: "Quanto você quer gastar por mês neste cartão (independente do limite do banco)"
+- Current limit reference: "Limite do cartão: R$ 10,000" (if known)
+
+**Given** user has R$ 10,000 credit limit
+**And** sets budget = R$ 2,000
+**When** saved
+**Then** `payment_method.monthly_budget = 2000.00`
+**And** dashboard tracks against R$ 2,000 (NOT R$ 10,000)
+
+**Given** user changes budget mid-period
+**Then** new budget applies immediately to current statement period
+**And** shows: "Orçamento atualizado para R$ 2,500"
+
+**Given** WhatsApp user sends "definir orçamento 3000"
+**Then** sets budget with confirmation
+
+**Prerequisites:** Story 3.1 (statement period defined)
+
+**Technical Notes:**
+- Action: `setMonthlyBudget(paymentMethodId, amount)`
+- Budget applies to statement period (not calendar month)
+- FR8-FR10: User-defined budget separate from credit limit
+- No judgement if exceeded: Awareness-first language
+
+---
+
+### Story 3.3: Budget Progress Dashboard (Statement Period)
+
+**As a** Credit Mode user,
+**I want** to see my budget progress for the current statement period,
+**So that** I know where I stand before the statement closes.
+
+**Acceptance Criteria:**
+
+**Given** user has:
+- Statement closing day: 5th
+- Monthly budget: R$ 2,000
+- Current period: Dec 6 - Jan 5
+- Spent so far: R$ 1,450
+
+**When** user views dashboard
+**Then** budget widget shows:
+```
+💳 Cartão Nubank - Fatura atual
+📅 Fecha em 3 dias (5 de Janeiro)
+
+💰 R$ 1,450 de R$ 2,000
+72% do orçamento
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░
+
+✓ Sobraram R$ 550
+```
+
+**Given** spent = R$ 2,200 (exceeds budget by R$ 200)
+**Then** shows:
+```
+💰 R$ 2,200 de R$ 2,000
+110% do orçamento
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+
+💡 R$ 200 acima do planejado
+```
+
+**Note:** Uses awareness language "acima do planejado" NOT "EXCEDEU!" or red colors
+
+**Given** statement period changes
+**Then** budget progress resets for new period
+**And** previous period moves to history
+
+**Prerequisites:** Story 3.1, Story 3.2
+
+**Technical Notes:**
+- Component: `fe/components/dashboard/statement-budget-widget.tsx`
+- Query: Sum transactions WHERE `payment_method_id = X` AND `date` in statement period
+- Real-time: NFR5 budget calculation < 200ms
+- Colors: Neutral blues/grays (FR40), no red
+- Progress bar: Linear gradient, not judgmental colors
+
+---
+
+### Story 3.4: Statement Closing Reminder (WhatsApp)
+
+**As a** Credit Mode user,
+**I want** a WhatsApp reminder 3 days before my statement closes,
+**So that** I'm aware of my current spending before the billing cycle ends.
+
+**Acceptance Criteria:**
+
+**Given** user has statement_closing_day = 5
+**And** today = Jan 2 (3 days before closing)
+**When** daily reminder job runs
+**Then** sends WhatsApp message:
+```
+📅 Lembrete: Fatura fecha em 3 dias
+
+💳 Cartão Nubank
+📊 Total até agora: R$ 1,450
+💰 Orçamento: R$ 2,000 (72%)
+
+✓ No caminho certo! Sobraram R$ 550 para os próximos 3 dias.
+```
+
+**Given** exceeded budget (R$ 2,200 spent, R$ 2,000 budget)
+**Then** message uses awareness language:
+```
+📊 Total até agora: R$ 2,200
+💰 Orçamento: R$ 2,000 (110%)
+
+💡 R$ 200 acima do planejado neste período.
+```
+
+**Given** user opted out of reminders OR credit_mode = false
+**Then** NO reminder sent
+
+**Given** multiple credit cards with different closing dates
+**Then** each gets separate reminder 3 days before its closing date
+
+**Prerequisites:** Story 3.1, Story 3.2, Story 3.3
+
+**Technical Notes:**
+- Scheduler: `whatsapp-bot/src/scheduler/statement-reminders.ts`
+- Job: Daily at 9 AM local time
+- Query: Users WHERE `statement_closing_day - 3 = CURRENT_DAY` AND `credit_mode = true`
+- FR25-FR26: Reminder 3 days before with current total
+- FR29: Awareness-first tone
+- NFR8: 99.5% delivery success rate
+
+---
+
+### Story 3.5: Pre-Statement Summary with Category Breakdown
+
+**As a** Credit Mode user,
+**I want** to see a category breakdown before my statement closes,
+**So that** I understand where my money went this billing period.
+
+**Acceptance Criteria:**
+
+**Given** user requests "resumo da fatura" via WhatsApp
+**Or** clicks "Statement Summary" on dashboard
+**When** current statement period has transactions
+**Then** shows breakdown:
+```
+📊 Resumo da Fatura Atual
+📅 Período: 6 Dez - 5 Jan
+💳 Cartão Nubank
+
+Por categoria:
+🍽️ Alimentação: R$ 680 (47%)
+🚗 Transporte: R$ 320 (22%)
+🎮 Lazer: R$ 280 (19%)
+💊 Saúde: R$ 170 (12%)
+
+💰 Total: R$ 1,450
+💵 Orçamento: R$ 2,000 (72%)
+```
+
+**Given** statement includes installment payments
+**Then** installments appear with context:
+```
+📱 Eletrônicos: R$ 400
+  - Celular (3/12): R$ 200
+  - Notebook (5/8): R$ 200
+```
+
+**Given** no transactions in current period
+**Then** shows: "Nenhum gasto nesta fatura ainda."
 
 **Prerequisites:** Story 3.3
 
 **Technical Notes:**
-- No conditional checks blocking actions based on tier
-- Tier tracking is informational, not gatekeeping
+- Component: `fe/components/dashboard/statement-summary.tsx`
+- WhatsApp: `handlers/credit-card/statement-summary.ts`
+- Query: Group by category, sum amounts, calculate percentages
+- Installments: Join with `installment_payments` to show context
+- FR28: Pre-statement summary with category breakdown
 
 ---
 
-### Story 3.5: Skip Onboarding Command
+### Story 3.6: Current vs Next Statement Distinction
 
-**As a** user,
-**I want** to stop receiving onboarding tips,
-**So that** I can use the app without tutorial interruptions.
+**As a** Credit Mode user,
+**I want** to know which expenses are on the current statement vs next statement,
+**So that** I understand what I'm paying this month vs next month.
 
 **Acceptance Criteria:**
 
-**Given** user sends "parar dicas" or "stop tips"
-**When** processed
-**Then** tips disabled, confirmation sent
+**Given** statement closes on Jan 5
+**And** today is Jan 3
+**And** transactions:
+- Dec 28: R$ 50 (on CURRENT statement: Dec 6 - Jan 5)
+- Jan 3: R$ 80 (on CURRENT statement)
+- Jan 6: R$ 100 (on NEXT statement: Jan 6 - Feb 5)
 
-**Given** tips disabled
-**When** tier actions completed
-**Then** NO celebrations/hints, progress tracked silently
+**When** user views transaction list
+**Then** each transaction shows badge:
+- "Fatura atual" (blue badge)
+- "Próxima fatura" (gray badge)
 
-**Given** user sends "ativar dicas" or "enable tips"
-**Then** tips re-enabled
+**Given** user on dashboard
+**Then** widget shows split:
+```
+💳 Cartão Nubank
 
-**Prerequisites:** Story 1.4, Story 1.3
+📊 Fatura atual (fecha em 2 dias)
+R$ 1,450
+
+📅 Próxima fatura (6 Jan - 5 Fev)
+R$ 230
+```
+
+**Given** user adds expense today (Jan 3)
+**Then** defaults to current statement
+**And** user can manually assign to next statement if needed
+
+**Prerequisites:** Story 3.1, Story 3.3
 
 **Technical Notes:**
-- Distinct from re-engagement opt-out (this is tips only)
-- Handler: `handlers/engagement/opt-out-handler.ts`
+- Badge component: `fe/components/transactions/statement-badge.tsx`
+- Calculation: Compare `transaction.date` to statement period boundaries
+- FR27: System distinguishes current vs next statement
+- Mobile: Show badges clearly without clutter
 
 ---
 
-### Story 3.6: Tier Completion Analytics
+## Epic 4: Payment Reminders & Auto-Accounting
 
-**As a** product team,
-**I want** tier completion events tracked with timestamps,
-**So that** I can measure onboarding funnel effectiveness.
+**Goal:** Users receive timely payment reminders before due dates and benefit from automatic payment transaction creation that separates usage from payment accounting.
+
+**FRs Covered:** FR30-FR36
+
+**User Value:** Never miss payment due dates; clean monthly accounting that separates "what I spent" from "what I paid."
+
+---
+
+### Story 4.1: Set Payment Due Date
+
+**As a** Credit Mode user,
+**I want** to set when my credit card payment is due each month,
+**So that** I receive reminders at the right time.
 
 **Acceptance Criteria:**
 
-**Given** tier completion
-**When** recorded
-**Then** PostHog event `onboarding_tier_completed` fired with tier, time_to_complete, days_since_signup
+**Given** user in credit card settings
+**When** user sets payment due date
+**Then** form shows:
+- Due Day (days after closing, e.g., "10 days after closing")
+- Or specific day of month (1-31)
+- Example: "Se fatura fecha dia 5, e vencimento é 10 dias depois, vence dia 15"
 
-**Given** analytics query
-**Then** can calculate T1→T2 conversion, T2→T3 conversion, avg time per tier
+**Given** statement closes on 5th and payment due 10 days later
+**When** saved
+**Then** `payment_method.payment_due_day = 10` (days after closing)
+**And** next due date calculated: Jan 15 (if statement closes Jan 5)
 
-**Prerequisites:** Story 3.3
+**Given** edge case: closing = 25th, due = +10 days = 5th of next month
+**Then** correctly calculates cross-month due dates
+
+**Given** WhatsApp user sends "vencimento 10 dias após fechamento"
+**Then** sets due day with confirmation
+
+**Prerequisites:** Story 3.1 (statement closing date set)
 
 **Technical Notes:**
-- Store `completed_at` in JSONB per tier
-- Aligns with PRD success metrics
+- Component: `fe/components/settings/payment-due-settings.tsx`
+- Action: `setPaymentDueDay(paymentMethodId, daysAfterClosing)`
+- Calculation: `due_date = closing_date + payment_due_day`
+- FR30: Credit Mode users can set payment due date
 
 ---
 
-## Epic 4: Engagement State Machine
+### Story 4.2: Payment Due Reminder (WhatsApp)
 
-**Goal:** Inactive users receive respectful re-engagement—a dignified goodbye with options, not spam.
-
-**FRs Covered:** FR11-FR19, FR26-FR27, FR40-FR42
-
----
-
-### Story 4.1: State Machine Service Core
-
-**As a** system,
-**I want** a state machine service with validated transitions,
-**So that** engagement states change predictably and correctly.
+**As a** Credit Mode user,
+**I want** a WhatsApp reminder 2 days before my payment is due,
+**So that** I don't forget to pay my credit card bill.
 
 **Acceptance Criteria:**
 
-**Given** the 5 valid states and transition triggers
-**When** `transitionState(userId, trigger)` is called
-**Then** only valid transitions execute per the architecture transition map
-**And** invalid transitions are logged and rejected
-**And** transition record created in `engagement_state_transitions`
+**Given** payment due on Jan 15
+**And** today is Jan 13 (2 days before)
+**When** daily reminder job runs
+**Then** sends WhatsApp message:
+```
+💳 Lembrete: Pagamento do cartão
 
-**Prerequisites:** Epic 1
+📅 Vence em 2 dias (15 de Janeiro)
+💰 Valor: R$ 1,450
+
+Cartão Nubank
+Período: 6 Dez - 5 Jan
+```
+
+**Given** user opted out of reminders
+**Then** NO reminder sent
+
+**Given** multiple credit cards with different due dates
+**Then** each gets separate reminder 2 days before its due date
+
+**Given** user clicks reminder message
+**Then** can mark as paid (creates payment transaction) or dismiss
+
+**Prerequisites:** Story 4.1, Story 3.3 (knows statement total)
 
 **Technical Notes:**
-- Location: `services/engagement/state-machine.ts`
-- All state changes go through this service—never update DB directly
+- Scheduler: `whatsapp-bot/src/scheduler/payment-reminders.ts`
+- Job: Daily at 9 AM local time
+- Query: Users WHERE `payment_due_date - 2 = CURRENT_DATE` AND `credit_mode = true`
+- Statement total: Sum of current statement period transactions
+- FR31-FR32: Reminder 2 days before with total amount
+- NFR8: 99.5% delivery success rate
 
 ---
 
-### Story 4.2: Activity Tracking & Auto-Reactivation
+### Story 4.3: Auto-Create Payment Transaction
 
-**As a** system,
-**I want** to track user activity and auto-reactivate dormant users,
-**So that** any user message immediately brings them back to active.
+**As a** Credit Mode user,
+**I want** the system to automatically create a payment transaction in next month,
+**So that** my monthly accounting clearly separates usage from payment.
 
 **Acceptance Criteria:**
 
-**Given** any user sends a message
-**When** processed
-**Then** `last_activity_at = now()` updated
+**Given** statement closes on Jan 5 with total R$ 1,450
+**And** payment due on Jan 15
+**When** statement closing date passes (Jan 5)
+**Then** system auto-creates transaction:
+- Date: Jan 15 (due date)
+- Amount: R$ 1,450 (statement total)
+- Description: "Pagamento Cartão Nubank - Fatura Jan/2025"
+- Category: "Pagamento Cartão de Crédito" (system category)
+- Payment Method: Bank account (user's default) or prompt to select
+- Type: Expense (outgoing payment)
+- Status: Pending (not yet paid)
 
-**Given** user in `dormant` or `goodbye_sent` sends non-response message
-**When** activity tracked
-**Then** auto-transition to `active`
+**Given** payment transaction auto-created
+**Then** appears in January budget/reports (payment month)
+**And** does NOT appear in December (usage month)
+**And** shows badge: "Auto-gerado" or "Pagamento automático"
 
-**Prerequisites:** Story 4.1, Epic 2
+**Given** user has no bank account payment method
+**Then** prompts to select payment source before creating transaction
+
+**Prerequisites:** Story 3.1, Story 4.1
 
 **Technical Notes:**
-- Location: `services/engagement/activity-tracker.ts`
-- Must be fast—runs on every message
+- Scheduler: `whatsapp-bot/src/scheduler/auto-payment-transactions.ts`
+- Job: Daily, checks if `closing_date = YESTERDAY` for any cards
+- FR33: Auto-creates payment expense in next month
+- FR34: Uses system category "Pagamento Cartão de Crédito"
+- FR35: Separates usage month from payment month
+- ADR-010: Use recurring payment's saved category (simple approach)
 
 ---
 
-### Story 4.3: Self-Select Goodbye Message
+### Story 4.4: Edit or Delete Auto-Generated Payment
 
-**As a** user who has been inactive,
-**I want** a respectful goodbye message with options,
-**So that** I can choose how to proceed without pressure.
+**As a** user who paid a different amount or wants to adjust,
+**I want** to edit or delete the auto-generated payment transaction,
+**So that** my records match reality.
 
 **Acceptance Criteria:**
 
-**Given** user transitions to `goodbye_sent`
-**When** transition completes
-**Then** goodbye message queued with 3 options (confused/busy/all good)
-**And** `goodbye_sent_at = now()`, `goodbye_expires_at = now() + 48h`
-**And** routed to preferred destination
+**Given** auto-generated payment transaction R$ 1,450
+**And** user actually paid R$ 1,500 (paid extra)
+**When** user edits transaction amount to R$ 1,500
+**Then** transaction updated, marked as manually edited
+**And** retains "Pagamento Cartão" tag
 
-**Given** goodbye already sent this period
-**Then** duplicate NOT sent (idempotency)
+**Given** user paid early or used different method
+**When** user edits date or payment method
+**Then** changes saved without restrictions
 
-**Prerequisites:** Story 4.1, Story 1.4, Story 1.6
+**Given** user clicks "Delete" on auto-payment transaction
+**Then** confirmation: "Deletar pagamento automático? Você pode recriá-lo depois se precisar."
+**And** on confirm, transaction deleted (no cascade effects)
+
+**Given** user deletes auto-payment
+**And** next statement closes
+**Then** new auto-payment created normally (deletion doesn't affect future auto-creation)
+
+**Prerequisites:** Story 4.3
 
 **Technical Notes:**
-- Idempotency key: `{userId}:goodbye_sent:{date}`
-- Tone: dignity, no guilt
+- Edits: Standard transaction edit flow applies
+- FR36: Users can edit or delete auto-generated payments
+- No special restrictions on auto-generated transactions
+- Audit: Track if auto-payment was edited/deleted for analytics
 
 ---
 
-### Story 4.4: Goodbye Response Processing
+### Story 4.5: System Category for Credit Card Payments
 
-**As a** user who received a goodbye message,
-**I want** my response processed correctly,
-**So that** the system respects my choice.
+**As a** system administrator,
+**I want** a dedicated system category for credit card payments,
+**So that** payment transactions are properly categorized by default.
 
 **Acceptance Criteria:**
 
-**Given** response "1" (confused)
-**Then** → `help_flow` → help message → restart Tier 1 hints → `active`
+**Given** database migration
+**When** credit card features installed
+**Then** system category created:
+- Name (pt-BR): "Pagamento Cartão de Crédito"
+- Name (en): "Credit Card Payment"
+- Type: Expense
+- System: true (cannot be deleted by users)
+- Icon: Credit card icon
+- Color: Neutral gray
 
-**Given** response "2" (busy)
-**Then** → `remind_later`, `remind_at = now() + 14 days`, confirmation sent
+**Given** user views category list
+**Then** system category appears in list but marked as "Sistema" or "System"
+**And** cannot be deleted (grayed out delete button)
 
-**Given** response "3" (all good)
-**Then** → `dormant`, confirmation sent
+**Given** user can edit system category name/icon if desired
+**Then** customization allowed (helps with personalization)
 
-**Given** other response
-**Then** → `active`, process normally
-
-**Prerequisites:** Story 4.3, Story 4.1
+**Prerequisites:** Story 1.1 (database)
 
 **Technical Notes:**
-- Handler: `handlers/engagement/goodbye-handler.ts`
-- Simple regex matching (no NLP needed)
+- Migration: Create in `034_credit_card_management.sql`
+- Mark as system: Add `is_system` boolean to categories table
+- FR34: System category for payments
+- Localization: Support pt-BR and English names
 
 ---
 
-### Story 4.5: 48h Timeout to Dormant
+## Epic 5: AI Helper Platform Foundation
 
-**As a** system,
-**I want** auto-transition to dormant after 48h no response,
-**So that** we stop waiting and respect implicit choice.
+**Goal:** Users learn credit card features through conversational education ("ajuda cartão") with a fully feature-flagged, gradually rolled-out AI helper platform.
+
+**FRs Covered:** FR43-FR57, FR63-FR67, FR68-FR73
+
+**User Value:** Instead of rigid commands, users ask for help and get patient, educational responses that teach them how to use features.
+
+---
+
+### Story 5.1: PostHog Feature Flag Integration
+
+**As a** developer,
+**I want** PostHog feature flags integrated in both frontend and WhatsApp bot,
+**So that** helper system can be gradually rolled out with instant rollback capability.
 
 **Acceptance Criteria:**
 
-**Given** `goodbye_sent` state and `goodbye_expires_at < now()`
-**When** daily scheduler checks
-**Then** transition to `dormant` (trigger: `goodbye_timeout`)
-**And** NO message sent (silence is design)
+**Given** PostHog SDK already installed (brownfield)
+**When** feature flag code added
+**Then** helper system checks flag before routing:
 
-**Prerequisites:** Story 4.4, Story 4.1
+```typescript
+const helpersEnabled = await posthog.isFeatureEnabled('ai-helpers', userId)
+if (helpersEnabled && message.startsWith('ajuda')) {
+  return helperRouter.route(message, userId)
+}
+```
+
+**Given** feature flag `ai-helpers` set to 0%
+**Then** all users see old system only
+
+**Given** flag set to 5%
+**Then** 5% of users randomly assigned to helpers
+**And** assignment persists (same user always gets same variant)
+
+**Given** flag set to 100%
+**Then** all users access helper system
+
+**Given** emergency issues detected
+**When** admin sets flag to 0%
+**Then** rollback completes within 1 minute (PostHog cache TTL)
+
+**Prerequisites:** None (foundation)
 
 **Technical Notes:**
-- Logic in `services/scheduler/daily-engagement-job.ts`
-- Precision not critical (48h vs 49h acceptable)
+- Service: `whatsapp-bot/src/services/feature-flags.ts`
+- Frontend: Use existing PostHog hook `usePostHog()`
+- FR43-FR45: PostHog integration, gradual rollout, instant rollback
+- NFR9: Feature flag response < 100ms
+- ADR-002: Pure PostHog, no environment variable fallback
 
 ---
 
-### Story 4.6: Message Routing Service
+### Story 5.2: BaseHelper Abstract Class
 
-**As a** system,
-**I want** proactive messages routed to preferred destination,
-**So that** messages arrive where users expect.
+**As a** developer,
+**I want** a reusable BaseHelper class with shared conversational logic,
+**So that** all domain helpers benefit from common patterns (clarification, cost tracking, formatting).
 
 **Acceptance Criteria:**
 
-**Given** `preferred_destination = 'individual'`
-**Then** proactive messages go to individual JID
+**Given** BaseHelper abstract class implemented
+**Then** provides methods:
+- `handle(message, userId, locale)`: Main entry point
+- `loadUserContext(userId)`: Abstract, each helper implements
+- `callOpenAI(message, systemPrompt, functions)`: Shared AI call
+- `trackAICost(userId, domain, usage)`: Cost tracking
+- `formatClarification(question, locale)`: Format follow-up questions
+- `formatSuccessResponse(result, locale)`: Format success messages
+- `executeFunction(functionCall, userId)`: Abstract, execute domain actions
 
-**Given** `preferred_destination = 'group'`
-**Then** proactive messages go to stored group JID
+**Given** helper needs to ask clarifying question
+**When** AI response indicates `requiresClarification = true`
+**Then** BaseHelper formats question and stores conversation state
 
-**Given** user sends "mudar para grupo/individual" or "switch to group/individual"
-**Then** preference updated, confirmation sent
-
-**Prerequisites:** Story 2.4, Story 1.6
-
-**Technical Notes:**
-- Location: `services/engagement/message-router.ts`
-
----
-
-### Story 4.7: State Transition Logging & Analytics
-
-**As a** product team,
-**I want** all state transitions logged with context,
-**So that** I can analyze engagement patterns.
-
-**Acceptance Criteria:**
-
-**Given** any state transition
-**When** completed
-**Then** record in `engagement_state_transitions` with from_state, to_state, trigger, metadata
-**And** PostHog event `engagement_state_changed` fired
-
-**Given** dormant via goodbye response
-**Then** `metadata.response_type` tracks confused/busy/all_good/timeout (FR40)
-
-**Given** dormant user returns after 3+ days unprompted
-**Then** `metadata.unprompted_return = true` (FR41)
-
-**Prerequisites:** Story 4.1
-
-**Technical Notes:**
-- All analytics derive from transition logs
-- DB for historical, PostHog for real-time
-
----
-
-## Epic 5: Scheduled Jobs & Weekly Reviews
-
-**Goal:** Active users get timely celebration; inactive users get silence. Reliable, idempotent background processing.
-
-**FRs Covered:** FR20-FR23, FR44-FR48
-
----
-
-### Story 5.1: Daily Engagement Job
-
-**As a** system,
-**I want** a daily job evaluating all user engagement states,
-**So that** inactive users receive goodbyes and timeouts are processed.
-
-**Acceptance Criteria:**
-
-**Given** daily job runs (6 AM UTC)
-**When** evaluating users
-**Then** performs:
-- Check 1: 14-day inactive `active` users → `goodbye_sent` + queue message
-- Check 2: Expired `goodbye_sent` (48h) → `dormant` (no message)
-- Check 3: Due `remind_later` → `dormant` (no message)
-
-**Given** job runs multiple times
-**Then** no duplicate transitions/messages (idempotent)
-
-**Prerequisites:** Epic 4, Story 1.6
-
-**Technical Notes:**
-- Location: `services/scheduler/daily-engagement-job.ts`
-- Target: < 60 seconds for full user base
-
----
-
-### Story 5.2: Weekly Activity Detection
-
-**As a** system,
-**I want** to detect which users had activity last week,
-**So that** only active users receive weekly reviews.
-
-**Acceptance Criteria:**
-
-**Given** `getActiveUsersLastWeek()` called
-**Then** returns users with transactions OR bot interactions in past 7 days
-
-**Given** no activity, opt-out, or dormant state
-**Then** user excluded from weekly review list
+**Given** helper executes action
+**Then** BaseHelper tracks tokens used, updates user's daily AI spend
 
 **Prerequisites:** Story 5.1
 
 **Technical Notes:**
-- Query `transactions` + `last_activity_at`
-- Efficient indexed queries
+- Location: `whatsapp-bot/src/services/helpers/base-helper.ts`
+- FR47: Base architecture with shared logic
+- FR50-FR52: Clarifying questions, education-first, multi-turn conversations
+- Architecture ADR-003: Class-based helper architecture
+- TypeScript: Use abstract class with protected methods
 
 ---
 
-### Story 5.3: Weekly Review Job & Message
-
-**As an** active user,
-**I want** a weekly celebration message,
-**So that** I feel acknowledged for tracking expenses.
-
-**Acceptance Criteria:**
-
-**Given** weekly job runs (9 AM UTC Monday)
-**When** user had activity last week
-**Then** weekly review message queued
-
-**Given** no activity last week
-**Then** NO message (silence is design)
-
-**Given** review already sent this week
-**Then** duplicate NOT sent (idempotency)
-
-**Prerequisites:** Story 5.2, Story 1.4
-
-**Technical Notes:**
-- Idempotency key: `{userId}:weekly_review:{week_start}`
-- Tone: celebration, not pressure
-
----
-
-### Story 5.4: Message Queue Processor
+### Story 5.3: Helper Router (LLM-Based Domain Detection)
 
 **As a** system,
-**I want** to process queued messages via WhatsApp,
-**So that** proactive messages reach users.
+**I want** to route user "ajuda" messages to the appropriate domain helper using LLM,
+**So that** routing is flexible and doesn't rely on rigid keywords.
 
 **Acceptance Criteria:**
 
-**Given** pending messages in queue
-**When** `processMessageQueue()` runs
-**Then** each sent via Baileys, marked `sent`
+**Given** user sends "ajuda com parcelamentos"
+**When** helper router processes message
+**Then** LLM determines domain = "credit-card"
+**And** routes to CreditCardHelper
 
-**Given** send fails
-**Then** `retry_count++`, stays `pending`
+**Given** user sends "ajuda gastos"
+**Then** LLM determines domain = "transactions"
+**And** routes to TransactionHelper
 
-**Given** `retry_count >= 3`
-**Then** `status = 'failed'`
+**Given** user sends "ajuda" (ambiguous)
+**Then** LLM asks: "Posso ajudar com: 1) Cartão de crédito, 2) Gastos e transações. Qual você prefere?"
 
-**Given** multiple messages
-**Then** 500ms delay between (rate limiting)
+**Given** unsupported domain detected
+**Then** responds: "Ainda não tenho um assistente para isso, mas posso ajudar com cartões e gastos."
+**And** falls back to old system
 
-**Prerequisites:** Story 1.6, Story 4.6
+**Given** routing LLM call fails
+**Then** gracefully degrades to old system
+**And** logs error for monitoring
+
+**Prerequisites:** Story 5.2
 
 **Technical Notes:**
-- Exponential backoff: 1s, 2s, 4s
-- NFR5: Max 3 retries
+- Location: `whatsapp-bot/src/services/helpers/helper-router.ts`
+- LLM: GPT-4o-mini with function calling
+- Function: `route_to_helper(domain: 'credit-card' | 'transactions' | 'unknown')`
+- FR48: Routes based on LLM, not keywords
+- NFR10: Graceful degradation to old NLP
+- Cost: Routing call ~500 tokens (~$0.0001 per route)
 
 ---
 
-### Story 5.5: Railway Cron Integration
+### Story 5.4: Credit Card Helper - System Prompt & Functions
 
-**As a** system,
-**I want** jobs configured in Railway cron,
-**So that** they run reliably.
+**As a** developer,
+**I want** the Credit Card Helper with domain-specific prompts and functions,
+**So that** users can learn about Credit Mode, installments, budgets, and statements conversationally.
 
 **Acceptance Criteria:**
 
-**Given** Railway deployment
-**Then** cron jobs configured:
-- Daily: `0 6 * * *` → `run-engagement-daily.js`
-- Weekly: `0 9 * * 1` → `run-engagement-weekly.js`
+**Given** CreditCardHelper class extends BaseHelper
+**Then** implements system prompt:
+```
+You are a credit card management assistant for Brazilian expense tracker.
+Help users understand and use:
+- Credit Mode vs Simple Mode
+- Parcelamento (installment tracking)
+- Statement-aware budgets
+- Payment reminders
 
-**Given** job completes
-**Then** exit 0 on success, non-zero on failure, structured logs
+Always:
+- Use awareness-first language (never judgmental)
+- Ask clarifying questions if details missing
+- Explain what you're doing and why
+- Teach users how features work
+```
 
-**Prerequisites:** Story 5.1, Story 5.3, Story 5.4
+**And** defines OpenAI functions:
+- `explain_credit_mode()`: Explains Credit vs Simple Mode
+- `show_installments()`: Lists active installments
+- `add_installment(amount, installments, description)`: Creates installment
+- `show_statement_summary()`: Shows current statement breakdown
+- `set_budget(amount)`: Sets monthly budget
+- `explain_parcelamento()`: Teaches installment syntax
+
+**Given** CreditCardHelper instantiated
+**Then** passes domain-specific context to OpenAI:
+- User's credit cards (name, mode, budget, statement dates)
+- Active installments count
+- Current statement total
+
+**Prerequisites:** Story 5.2, Story 5.3
 
 **Technical Notes:**
-- Add to `railway.cron.yml`
-- NFR4: 99.9% success rate
+- Location: `whatsapp-bot/src/services/helpers/credit-card-helper.ts`
+- FR53-FR57: Credit Card Helper capabilities
+- ADR-003: Helper architecture details
+- Context: Load user's credit cards, installments for personalized help
 
 ---
 
-### Story 5.6: Scheduler Idempotency Guarantees
+### Story 5.5: Credit Card Helper - Conversational Examples
 
-**As a** system operator,
-**I want** scheduler operations safely re-runnable,
-**So that** re-runs don't cause duplicates.
+**As a** Credit Mode user,
+**I want** to ask the helper about credit features and get educational responses,
+**So that** I learn how to use installments, budgets, and statements.
 
 **Acceptance Criteria:**
 
-**Given** goodbye/review already sent
-**When** job re-runs
-**Then** no duplicate (idempotency key)
+**Given** user sends "ajuda cartão"
+**When** CreditCardHelper responds
+**Then** message explains:
+```
+Posso ajudar com seu cartão de crédito! 😊
 
-**Given** service restarts mid-job
-**When** re-runs
-**Then** already-processed skipped, partial completes
+Você pode:
+• Ver seus parcelamentos ativos
+• Adicionar uma compra parcelada
+• Conferir o resumo da fatura atual
+• Definir orçamento mensal
+• Entender a diferença entre Modo Crédito e Modo Simples
 
-**Prerequisites:** All Epic 5 stories
+O que você gostaria de fazer?
+```
+
+**Given** user asks "como funciona parcelamento?"
+**Then** explains with examples:
+```
+Parcelamento é quando você divide uma compra em várias vezes.
+
+Exemplo: Você comprou um celular de R$ 1.200 em 12x
+
+Eu crio:
+✓ Um plano de 12 parcelas de R$ 100
+✓ As parcelas aparecem automaticamente todo mês
+✓ Você vê quanto vai pagar nos próximos meses
+
+Quer adicionar um parcelamento agora?
+```
+
+**Given** user says "quero adicionar parcelamento"
+**Then** asks clarifying questions:
+- "Qual foi o valor total da compra?"
+- "Em quantas vezes você parcelou?"
+- "O que você comprou?"
+- (optionally) "Em qual cartão?"
+
+**Given** details collected
+**Then** executes `add_installment()` and confirms success
+
+**Prerequisites:** Story 5.4
 
 **Technical Notes:**
-- Multi-level idempotency: state machine, message queue keys, timestamps
-- NFR7: No duplicate messages ever
+- Multi-turn: Store conversation state for follow-ups
+- Education-first: Explain before executing
+- FR51: Prioritize education over execution
+- Localization: Support pt-BR and English
 
 ---
 
-## Epic 6: User Preferences & Web Integration
+### Story 5.6: AI Integration Test Framework
 
-**Goal:** Users control notification preferences from both WhatsApp and web, with seamless sync.
-
-**FRs Covered:** FR28-FR32, FR43
-
----
-
-### Story 6.1: WhatsApp Opt-Out/Opt-In Commands
-
-**As a** user,
-**I want** to control re-engagement messages via WhatsApp commands,
-**So that** I can opt out without opening the web app.
+**As a** developer,
+**I want** a structured test framework for AI helper quality,
+**So that** prompt/tool changes don't regress conversational quality.
 
 **Acceptance Criteria:**
 
-**Given** "parar lembretes" or "stop reminders"
-**When** processed
-**Then** `reengagement_opt_out = true`, confirmation sent
+**Given** test framework implemented
+**Then** supports test scenarios with:
+- Input message
+- Expected domain detection
+- Expected clarification questions (if any)
+- Expected function calls
+- Expected response tone/content
 
-**Given** "ativar lembretes" or "start reminders"
-**When** processed
-**Then** `reengagement_opt_out = false`, confirmation sent
+**Given** test scenario: "quero ver meus parcelamentos"
+**Then** asserts:
+- Domain: credit-card ✓
+- Function called: `show_installments()` ✓
+- Response includes installment list ✓
+- Tone: friendly, educational ✓
 
-**Given** variations in phrasing
-**Then** intent recognized (generous matching)
+**Given** test scenario: "adicionar 600 em 3x celular"
+**Then** asserts:
+- Function: `add_installment(600, 3, "celular")` ✓
+- NO clarifying questions (all details provided) ✓
+- Confirmation message mentions R$ 200/month ✓
 
-**Prerequisites:** Story 1.3, Story 1.4
+**Given** test scenario: "ajuda parcelamento" (ambiguous)
+**Then** asserts:
+- Asks clarifying question before executing ✓
+- Does NOT execute prematurely ✓
+
+**Prerequisites:** Story 5.4, Story 5.5
 
 **Technical Notes:**
-- Handler: `handlers/engagement/opt-out-handler.ts`
-- Distinct from "stop tips" (Story 3.5)
+- Location: `whatsapp-bot/src/__tests__/helpers/ai-integration-tests.ts`
+- NOT in CI: Manual execution before deployment
+- FR63-FR67: AI testing, quality validation, conversation flows
+- Test real OpenAI calls (not mocked) for quality validation
+- Cost: ~$0.10 per full test suite run
 
 ---
 
-### Story 6.2: Web Settings Opt-Out Toggle
-
-**As a** user,
-**I want** to control re-engagement from web settings,
-**So that** I can manage preferences without WhatsApp.
-
-**Acceptance Criteria:**
-
-**Given** user on `/[locale]/settings`
-**Then** "Notification Preferences" section visible with toggle
-
-**Given** toggle changed
-**When** clicked
-**Then** server action updates preference, UI shows success
-
-**Prerequisites:** Story 1.1
-
-**Technical Notes:**
-- Component: `fe/components/settings/notification-preferences.tsx`
-- Server action: `fe/lib/actions/engagement.ts`
-
----
-
-### Story 6.3: Cross-Channel Preference Sync
-
-**As a** user,
-**I want** opt-out preference synced between channels,
-**So that** my choice is respected everywhere.
-
-**Acceptance Criteria:**
-
-**Given** opt-out via WhatsApp
-**When** checking web within 5 seconds
-**Then** toggle shows opted-out
-
-**Given** opt-out via web
-**When** scheduler runs
-**Then** opt-out respected
-
-**Prerequisites:** Story 6.1, Story 6.2
-
-**Technical Notes:**
-- Single source of truth: `user_profiles.reengagement_opt_out`
-- NFR10: < 5s sync (achieved via shared DB)
-
----
-
-### Story 6.4: Opt-Out Respect in Engagement System
-
-**As a** user who opted out,
-**I want** the system to respect my preference,
-**So that** I don't receive unwanted messages.
-
-**Acceptance Criteria:**
-
-**Given** `reengagement_opt_out = true`
-**When** daily scheduler evaluates
-**Then** user SKIPPED (no goodbye)
-
-**Given** opted out
-**When** weekly review runs
-**Then** user SKIPPED
-
-**Given** opted out of re-engagement only
-**When** tier action completed
-**Then** onboarding tips STILL sent (different preference)
-
-**Prerequisites:** Story 6.3, Epic 5
-
-**Technical Notes:**
-- Check opt-out in scheduler jobs
-- LGPD compliance: easy opt-out mandatory
-
----
-
-### Story 6.5: Analytics Dashboard Access
+### Story 5.7: Helper Usage Logging & Monitoring
 
 **As a** product team,
-**I want** engagement analytics accessible,
-**So that** I can measure system effectiveness.
+**I want** complete logging of all helper interactions,
+**So that** I can debug issues, improve prompts, and measure success.
 
 **Acceptance Criteria:**
 
-**Given** engagement system running
-**Then** accessible via:
-- PostHog: state_changed, tier_completed, magic_moment, goodbye_response events
-- Database queries: response distribution, tier conversion, unprompted returns
+**Given** user invokes helper
+**When** interaction completes
+**Then** logs to database table `helper_interactions`:
+- id, user_id, domain, timestamp
+- input_message
+- detected_intent
+- clarification_questions (array)
+- function_calls (array)
+- response_message
+- conversation_turns (count)
+- tokens_used, cost
+- success (boolean)
+- error_message (if failed)
 
-**Prerequisites:** Story 4.7, Story 3.6
+**Given** helper interaction fails
+**Then** logs error with full context for debugging
+
+**Given** PostHog analytics configured
+**Then** fires events:
+- `ai_helper_invoked`
+- `ai_helper_clarified`
+- `ai_helper_executed`
+- `ai_helper_completed`
+- `ai_helper_error`
+
+**Prerequisites:** Story 5.4
 
 **Technical Notes:**
-- No new UI for MVP (queries + PostHog)
-- All data captured by previous stories
+- Table: Create `helper_interactions` in migration
+- FR68-FR70: Logging, metrics tracking, error monitoring
+- PostHog dashboard: ADR-002 analytics events
+- Retention: Keep logs for 90 days
+- Privacy: Redact sensitive data (amounts okay, personal info no)
 
 ---
 
-## Epic 7: Testing & Quality Assurance
+### Story 5.8: Gradual Rollout Strategy (4-Phase)
 
-**Goal:** Comprehensive test coverage ensuring reliability, with focus on scheduler timing and idempotency.
+**As a** product team,
+**I want** a structured 4-phase rollout plan,
+**So that** helper system launches safely with data-driven progression.
 
-**FRs Covered:** FR49-FR53
+**Acceptance Criteria:**
+
+**Phase 0: Internal Testing (Week 1-2)**
+- Feature flag: 0% general, user ID filter for Lucas
+- Test all scenarios manually
+- Validate helper quality, cost per interaction
+- Success criteria: No critical bugs, cost < $0.05/interaction
+
+**Phase 1: 5% Rollout (Week 3)**
+- Set flag to 5%
+- Monitor: Error rate, conversation quality, usage rate
+- Success criteria: Error rate < 5%, helper usage > 20% of enabled users
+
+**Phase 2: 25% Rollout (Week 4-5)**
+- Set flag to 25%
+- A/B test: Compare helpers vs old system (satisfaction, completion rate)
+- Success criteria: Error rate < 5%, positive feedback signals
+
+**Phase 3: 50% Rollout (Week 6-7)**
+- Set flag to 50%
+- Monitor scale: Cost projections, server load
+- Success criteria: Performance stable, cost per user acceptable
+
+**Phase 4: 100% Rollout (Week 8+)**
+- Set flag to 100% if all metrics healthy
+- Maintain old system for 2 months as safety net
+- Success criteria: 30%+ helper usage, sustained quality
+
+**Rollback Plan:**
+- Any phase: If error rate > 10%, rollback to previous %
+- Emergency: Set flag to 0%, instant rollback
+
+**Prerequisites:** Story 5.1, Story 5.7 (monitoring)
+
+**Technical Notes:**
+- FR71-FR73: Gradual rollout, old system coexistence, deprecation timeline
+- ADR-002: Rollout strategy details
+- Monitor PostHog dashboard daily during rollout
+- Document lessons learned after each phase
 
 ---
 
-### Story 7.1: E2E Testing Framework Setup
+## Epic 6: Transaction Helper & Platform Validation
+
+**Goal:** Users get conversational help with all expense operations ("ajuda gastos"), proving the helper platform is extensible and valuable beyond credit cards.
+
+**FRs Covered:** FR58-FR62
+
+**User Value:** Users learn how to add, edit, delete, and categorize expenses through patient conversation instead of memorizing commands.
+
+---
+
+### Story 6.1: Transaction Helper - System Prompt & Functions
 
 **As a** developer,
-**I want** an E2E testing framework for WhatsApp bot flows,
-**So that** I can test without real WhatsApp connection.
+**I want** the Transaction Helper with CRUD operation support,
+**So that** users can manage expenses conversationally.
 
 **Acceptance Criteria:**
 
-**Given** test framework set up
-**Then** Baileys mocked to simulate incoming/outgoing messages
+**Given** TransactionHelper class extends BaseHelper
+**Then** implements system prompt:
+```
+You are a transaction management assistant for Brazilian expense tracker.
+Help users:
+- Add expenses and income
+- Edit existing transactions
+- Delete transactions
+- Change categories
+- View recent transactions
 
-**Given** test utilities
-**Then** helpers available: `createMockUser()`, `mockIncomingMessage()`, `getQueuedMessages()`, `advanceTime()`
+Always:
+- Ask clarifying questions if details missing
+- Explain what changes you're making
+- Confirm destructive actions (delete)
+```
 
-**Given** CI run
-**Then** all tests pass without external dependencies
+**And** defines OpenAI functions:
+- `add_expense(amount, description, category, date, payment_method)`
+- `add_income(amount, description, category, date)`
+- `show_recent_transactions(limit, type)`
+- `edit_transaction(id, updates)`
+- `delete_transaction(id)`
+- `change_category(transaction_id, new_category)`
+- `explain_transaction_operations()`
 
-**Prerequisites:** Epic 1
+**Given** TransactionHelper instantiated
+**Then** loads user context:
+- Recent 20 transactions (for reference)
+- User's categories
+- Default payment methods
+
+**Prerequisites:** Story 5.2, Story 5.3
 
 **Technical Notes:**
-- Location: `__tests__/engagement/`
-- ADR-004: Jest + mocks covers 95% of logic
+- Location: `whatsapp-bot/src/services/helpers/transaction-helper.ts`
+- FR58-FR62: Transaction Helper capabilities
+- Reuses BaseHelper infrastructure
+- Cost per interaction: ~1000 tokens (~$0.002)
 
 ---
 
-### Story 7.2: State Machine Unit Tests
+### Story 6.2: Transaction Helper - Add Expense Flow
 
-**As a** developer,
-**I want** comprehensive unit tests for state machine,
-**So that** I can trust transitions work correctly.
+**As a** user,
+**I want** to add expenses through conversation,
+**So that** I can log spending without memorizing exact syntax.
 
 **Acceptance Criteria:**
 
-**Given** state machine tests
-**Then** coverage includes:
-- All 10 valid transitions
-- Invalid transitions rejected
-- Edge cases (already in state, rapid transitions, missing user)
+**Given** user sends "ajuda adicionar gasto"
+**When** TransactionHelper responds
+**Then** asks: "Quanto você gastou?"
 
-**Prerequisites:** Story 4.1
+**Given** user responds "50"
+**Then** asks: "O que você comprou?"
+
+**Given** user responds "almoço"
+**Then** asks: "Em qual categoria? (Sugestão: Alimentação)"
+
+**Given** user confirms category
+**Then** asks: "Qual forma de pagamento?"
+
+**Given** all details collected
+**Then** executes `add_expense(50, "almoço", "Alimentação", today, user_default_card)`
+**And** confirms: "✅ Gasto adicionado: R$ 50 em Alimentação (Almoço)"
+
+**Given** user provides all details at once: "gastei 50 no almoço com cartão"
+**Then** extracts all details, NO clarifying questions needed
+**And** immediately creates expense
+
+**Prerequisites:** Story 6.1
 
 **Technical Notes:**
-- Location: `__tests__/engagement/state-machine.test.ts`
-- FR52: Test coverage for all state transitions
+- Multi-turn conversation state management
+- FR59: Explains CRUD operations
+- Smart defaults: Today's date, user's most recent payment method
+- Validation: Amount > 0, category exists
 
 ---
 
-### Story 7.3: Scheduler Unit Tests
+### Story 6.3: Transaction Helper - View Recent Transactions
 
-**As a** developer,
-**I want** unit tests for scheduler timing logic,
-**So that** I can trust jobs run correctly.
+**As a** user,
+**I want** to see my recent transactions through conversation,
+**So that** I can review what I've spent.
 
 **Acceptance Criteria:**
 
-**Given** daily job tests
-**Then** coverage: 13-day (no action), 14-day (action), 15-day (no duplicate), opted-out (skip)
+**Given** user sends "ajuda ver gastos" or "mostrar gastos recentes"
+**When** TransactionHelper responds
+**Then** shows recent 10 transactions:
+```
+Seus gastos recentes:
 
-**Given** timeout tests
-**Then** coverage: 47h (no action), 48h+ (dormant)
+1. Hoje - R$ 50 - Almoço (Alimentação)
+2. Hoje - R$ 120 - Uber (Transporte)
+3. Ontem - R$ 35 - Café (Alimentação)
+4. 28 Nov - R$ 200 - Celular 3/12 (Eletrônicos)
+...
 
-**Given** weekly job tests
-**Then** coverage: with activity (send), no activity (skip), opted out (skip), dormant (skip)
+Quer editar ou deletar algum? Me diga o número.
+```
 
-**Prerequisites:** Story 5.1, Story 5.3
+**Given** user asks "só alimentação"
+**Then** filters: `show_recent_transactions(limit=10, category="Alimentação")`
+
+**Given** user asks "gastos de novembro"
+**Then** filters by month
+
+**Given** user says "editar número 3"
+**Then** loads transaction details and enters edit flow
+
+**Prerequisites:** Story 6.1
 
 **Technical Notes:**
-- Location: `__tests__/engagement/daily-job.test.ts`, `weekly-job.test.ts`
-- FR51: Unit tests for scheduler timing logic
+- FR60: Shows recent transactions
+- Formatting: Localized dates, currency
+- Interactive: User can reference by number for editing
 
 ---
 
-### Story 7.4: Goodbye Handler Tests
+### Story 6.4: Transaction Helper - Edit Transaction Flow
 
-**As a** developer,
-**I want** tests for goodbye response parsing,
-**So that** responses are correctly interpreted.
+**As a** user,
+**I want** to edit transactions conversationally,
+**So that** I can fix mistakes without complex commands.
 
 **Acceptance Criteria:**
 
-**Given** goodbye handler tests
-**Then** coverage:
-- Exact matches: "1", "2", "3"
-- Emoji: "1️⃣", "2️⃣", "3️⃣"
-- Keywords pt-BR: "confuso", "ocupado", "tudo certo"
-- Keywords en: "confused", "busy", "all good"
-- Non-responses → active
+**Given** user says "quero editar o almoço de hoje"
+**Then** helper identifies transaction
+**And** asks: "O que você quer mudar? (valor, descrição, categoria, data, forma de pagamento)"
 
-**Prerequisites:** Story 4.4
+**Given** user responds "mudar valor para 55"
+**Then** executes `edit_transaction(id, { amount: 55 })`
+**And** confirms: "✅ Atualizado: Almoço agora é R$ 55"
+
+**Given** user says "mudar categoria para Lazer"
+**Then** executes `change_category(id, "Lazer")`
+
+**Given** user says "editar #EXP-1234" (references expense by ID)
+**Then** helper loads that specific transaction
+
+**Given** ambiguous reference
+**Then** asks clarifying question: "Encontrei 3 transações com 'almoço'. Qual delas?"
+
+**Prerequisites:** Story 6.1, Story 6.3
 
 **Technical Notes:**
-- Location: `__tests__/engagement/goodbye-handler.test.ts`
+- FR61: Guides category changes
+- Smart matching: Fuzzy search on description
+- Undo support: Stores previous values for reversal
 
 ---
 
-### Story 7.5: 30-Day Journey Integration Test
+### Story 6.5: Transaction Helper - Delete Transaction
 
-**As a** developer,
-**I want** integration test simulating full 30-day journey,
-**So that** complete lifecycle is verified.
+**As a** user,
+**I want** to delete transactions with confirmation,
+**So that** I can remove mistakes safely.
 
 **Acceptance Criteria:**
 
-**Given** 30-day journey test
-**Then** simulates 5 scenarios:
-1. Happy path (active user through all tiers)
-2. Inactive → Goodbye → Help (response "1")
-3. Inactive → Goodbye → Remind Later (response "2")
-4. Inactive → Goodbye → Dormant (timeout)
-5. Opt-out user (no proactive messages)
+**Given** user says "deletar o almoço de hoje"
+**When** helper identifies transaction
+**Then** asks confirmation:
+```
+⚠️ Tem certeza que quer deletar?
 
-**Prerequisites:** All previous epics
+R$ 50 - Almoço (Alimentação) - Hoje
+
+Essa ação não pode ser desfeita.
+
+Responda "sim" para confirmar ou "não" para cancelar.
+```
+
+**Given** user confirms "sim"
+**Then** executes `delete_transaction(id)`
+**And** confirms: "✅ Transação deletada: Almoço (R$ 50)"
+
+**Given** user cancels "não"
+**Then** responds: "Ok, nada foi deletado."
+
+**Given** transaction is part of installment
+**Then** warns: "Esta é uma parcela de parcelamento. Deletar só esta parcela ou todo o parcelamento?"
+
+**Prerequisites:** Story 6.1, Story 6.3
 
 **Technical Notes:**
-- Location: `__tests__/engagement/30-day-journey.test.ts`
-- FR50: Integration tests for 30-day journey scenarios
-- Critical integration test
+- FR59: Delete operation with confirmation
+- Safety: Always confirm destructive actions
+- Special handling: Installment payments require extra warning
 
 ---
 
-### Story 7.6: Idempotency Verification Tests
+### Story 6.6: Income vs Expense Differentiation
 
-**As a** developer,
-**I want** tests verifying idempotency guarantees,
-**So that** re-runs never cause duplicates.
+**As a** user,
+**I want** the helper to differentiate between income and expenses,
+**So that** I can track both types correctly.
 
 **Acceptance Criteria:**
 
-**Given** idempotency tests
-**Then** coverage:
-- Scheduler: daily/weekly twice → no duplicates
-- Message queue: same key → one entry
-- State machine: same transition twice → no error
-- Database: upsert behavior
+**Given** user says "ajuda adicionar receita"
+**Then** helper enters income flow (not expense)
 
-**Given** tests pass
-**Then** NFR7 (no duplicates ever) verified
+**Given** user says "recebi 3000 de salário"
+**Then** executes `add_income(3000, "Salário", "Renda", today)`
 
-**Prerequisites:** Story 5.6
+**Given** user asks "mostrar receitas do mês"
+**Then** filters transactions by `type = 'income'`
+
+**Given** user accidentally logs income as expense
+**And** later says "isso era receita, não gasto"
+**Then** helper offers to convert: "Quer mudar de despesa para receita?"
+
+**Prerequisites:** Story 6.1
 
 **Technical Notes:**
-- Location: `__tests__/engagement/idempotency.test.ts`
-- FR53: Idempotency verification tests
+- FR62: Differentiates income vs expenses
+- Type conversion: Edit transaction type field
+- Different categories: Income categories vs expense categories
 
 ---
 
@@ -1269,288 +1998,76 @@ This document provides the complete epic and story breakdown for NexFinApp's Sma
 
 | FR | Description | Epic | Story |
 |----|-------------|------|-------|
-| FR1 | Detect first WhatsApp message | Epic 2 | 2.1 |
-| FR2 | Respond conversationally to first message | Epic 2 | 2.2 |
-| FR3 | Guide toward first expense | Epic 2 | 2.3 |
-| FR4 | Track 3-tier onboarding progress | Epic 3 | 3.1 |
-| FR5 | Detect tier action completion | Epic 3 | 3.2 |
-| FR6 | Send tier completion celebration | Epic 3 | 3.3 |
-| FR7 | Unlock next tier guidance | Epic 3 | 3.3 |
-| FR8 | No hard gating on actions | Epic 3 | 3.4 |
-| FR9 | Contextual hints after actions | Epic 2 | 2.6 |
-| FR10 | Skip onboarding command | Epic 3 | 3.5 |
-| FR11 | Maintain 5 engagement states | Epic 4 | 4.1 |
-| FR12 | Auto-transition after 14 days | Epic 4 | 4.1, 5.1 |
-| FR13 | Send self-select goodbye | Epic 4 | 4.3 |
-| FR14 | Process goodbye responses | Epic 4 | 4.4 |
-| FR15 | Response "1" → help flow | Epic 4 | 4.4 |
-| FR16 | Response "2" → remind later | Epic 4 | 4.4 |
-| FR17 | Response "3" / timeout → dormant | Epic 4 | 4.4, 4.5 |
-| FR18 | Any message from dormant → active | Epic 4 | 4.2 |
-| FR19 | Idempotent scheduler | Epic 5 | 5.6 |
-| FR20 | Track weekly activity | Epic 5 | 5.2 |
-| FR21 | Send weekly review if active | Epic 5 | 5.3 |
-| FR22 | No weekly review if inactive | Epic 5 | 5.3 |
-| FR23 | Weekly review tone | Epic 5 | 5.3 |
-| FR24 | Store preferred destination | Epic 2 | 2.4 |
-| FR25 | Auto-detect destination | Epic 2 | 2.4 |
-| FR26 | Route to preferred destination | Epic 4 | 4.6 |
-| FR27 | Change destination command | Epic 4 | 4.6 |
-| FR28 | WhatsApp opt-out command | Epic 6 | 6.1 |
-| FR29 | Web opt-out toggle | Epic 6 | 6.2 |
-| FR30 | Sync opt-out between channels | Epic 6 | 6.3 |
-| FR31 | Respect opt-out for re-engagement | Epic 6 | 6.4 |
-| FR32 | Opt back in | Epic 6 | 6.1 |
-| FR33 | Tone guidelines | Epic 1 | 1.4, 1.5 |
-| FR34 | No guilt/pressure messaging | Epic 1 | 1.4, 1.5 |
-| FR35 | Appropriate message length | Epic 1 | 1.4, 1.5 |
-| FR36 | Max one emoji per message | Epic 1 | 1.4, 1.5 |
-| FR37 | User's preferred language | Epic 1 | 1.4, 1.5 |
-| FR38 | Track tier completion events | Epic 3 | 3.6 |
-| FR39 | Track magic moment | Epic 2 | 2.5 |
-| FR40 | Track goodbye response distribution | Epic 4 | 4.7 |
-| FR41 | Track unprompted returns | Epic 4 | 4.7 |
-| FR42 | Track state transitions | Epic 4 | 4.7 |
-| FR43 | Analytics dashboard access | Epic 6 | 6.5 |
-| FR44 | Daily engagement evaluation | Epic 5 | 5.1 |
-| FR45 | Process reminders | Epic 5 | 5.1 |
-| FR46 | Weekly review evaluation | Epic 5 | 5.3 |
-| FR47 | Idempotent operations | Epic 5 | 5.6 |
-| FR48 | Scheduler state persistence | Epic 5 | 5.1 |
-| FR49 | E2E testing for WhatsApp | Epic 7 | 7.1 |
-| FR50 | 30-day journey tests | Epic 7 | 7.5 |
-| FR51 | Scheduler unit tests | Epic 7 | 7.3 |
-| FR52 | State transition coverage | Epic 7 | 7.2 |
-| FR53 | Idempotency tests | Epic 7 | 7.6 |
-
-**Coverage validation:** All 53 FRs mapped to specific stories. No gaps.
-
----
-
-## Epic 8: Transaction Type Correction & NLP Deprecation
-
-**Goal:** Allow users to correct transaction type (expense ↔ income) after creation and formally deprecate the legacy NLP parser in favor of AI-first intent processing.
-
-**FRs Covered:** New feature request (not in original PRD)
-
-**Context:** Default transaction type is expense. Users frequently send income-related messages that get logged as expenses. Currently no way to correct via WhatsApp.
-
----
-
-### Story 8.1: Support Transaction Type Change in Edit Handler
-
-**As a** user,
-**I want** to change a transaction from expense to income (or vice versa),
-**So that** I can correct mistakes without deleting and re-adding.
-
-**Acceptance Criteria:**
-
-**Given** a transaction exists with `type = 'expense'`
-**When** user requests to change it to income via edit
-**Then** the `type` field is updated to `'income'`
-**And** a confirmation message is sent
-
-**Given** a transaction with `type = 'income'`
-**When** user requests to change it to expense
-**Then** the `type` field is updated to `'expense'`
-**And** a confirmation message is sent
-
-**Given** a type change request
-**When** the edit handler processes it
-**Then** the undo state is stored before making changes
-**And** the change is logged with appropriate context
-
-**Prerequisites:** None (core functionality)
-
-**Technical Notes:**
-- Location: `whatsapp-bot/src/handlers/transactions/transactions.ts`
-- Add `type` to the `handleEditTransaction` function's update object
-- Update `changedFields` messaging for type changes
-- Track via analytics: `TRANSACTION_TYPE_CHANGED` event
-
----
-
-### Story 8.2: AI Intent Support for Type Conversion
-
-**As a** user,
-**I want** to say "convert EXP-123 to income" or "change EXP-123 to receita" naturally,
-**So that** I can correct transactions without learning specific commands.
-
-**Acceptance Criteria:**
-
-**Given** user sends "convert EXP-123 to income" or similar
-**When** AI processes the message
-**Then** intent `edit_transaction` is returned with `entities.type = 'income'` and `entities.transactionId = 'EXP-123'`
-
-**Given** user sends "mudar EXP-123 para receita" (pt-BR)
-**When** AI processes the message
-**Then** intent correctly identifies type change to income
-
-**Given** user sends "this was actually income not expense" after logging
-**When** AI processes in context of recent transaction
-**Then** intent identifies type correction for most recent transaction
-
-**Supported phrases (pt-BR):**
-- "mudar [ID] para receita/despesa"
-- "converter [ID] para receita/despesa"
-- "[ID] era receita/despesa"
-- "corrigir [ID] - era receita"
-
-**Supported phrases (en):**
-- "change [ID] to income/expense"
-- "convert [ID] to income/expense"
-- "[ID] was income/expense"
-- "correct [ID] - was income"
-
-**Prerequisites:** Story 8.1
-
-**Technical Notes:**
-- Location: `whatsapp-bot/src/services/ai/ai-pattern-generator.ts`
-- Update system prompt examples to include type conversion scenarios
-- Add to `edit_transaction` function schema: `type` field as optional enum
-- NO changes to NLP parser (legacy)
-
----
-
-### Story 8.3: Handle Category Mismatch When Changing Type
-
-**As a** system,
-**I want** to handle category type mismatches when transaction type changes,
-**So that** income transactions have income categories and expense transactions have expense categories.
-
-**Acceptance Criteria:**
-
-**Given** expense transaction with expense category (e.g., "Food")
-**When** type changed to income
-**Then** system offers to change category OR auto-assigns matching income category
-**And** user is notified of the category change
-
-**Given** income transaction with income category (e.g., "Salary")
-**When** type changed to expense
-**Then** system offers to change category OR auto-assigns matching expense category
-
-**Given** category with matching type already assigned
-**When** type remains same category type
-**Then** no category change needed
-
-**Given** user's custom category list
-**When** auto-selecting replacement category
-**Then** prefer user's custom categories over defaults
-**And** fallback to "Other Income" / "Other Expense" if no match
-
-**Prerequisites:** Story 8.1
-
-**Technical Notes:**
-- Location: `whatsapp-bot/src/handlers/transactions/transactions.ts`
-- Use `category-matcher.ts` to find appropriate replacement
-- Query categories by type: `.eq('type', newType)`
-- Consider semantic matching for similar categories across types
-
----
-
-### Story 8.4: Localization Messages for Type Change
-
-**As a** user,
-**I want** clear confirmation messages when I change transaction type,
-**So that** I understand what changed.
-
-**Acceptance Criteria:**
-
-**Given** type changed from expense to income
-**Then** confirmation message indicates: transaction ID, old type, new type
-**And** if category changed, includes category change info
-
-**Given** type changed with category auto-switch
-**Then** message explains both changes clearly
-
-**Message templates (pt-BR):**
-- `✅ Transação #EXP-123 alterada de despesa para receita.`
-- `✅ Transação #EXP-123 alterada de despesa para receita. Categoria mudou de "Alimentação" para "Outras Receitas".`
-
-**Message templates (en):**
-- `✅ Transaction #EXP-123 changed from expense to income.`
-- `✅ Transaction #EXP-123 changed from expense to income. Category changed from "Food" to "Other Income".`
-
-**Prerequisites:** Story 8.1
-
-**Technical Notes:**
-- Location: `whatsapp-bot/src/localization/pt-br.ts` and `en.ts`
-- Add new message keys: `transactionTypeChanged`, `transactionTypeChangedWithCategory`
-- Follow existing tone guidelines (one emoji max)
-
----
-
-### Story 8.5: Tests for Transaction Type Correction
-
-**As a** developer,
-**I want** comprehensive tests for type correction functionality,
-**So that** the feature works reliably.
-
-**Acceptance Criteria:**
-
-**Given** unit tests for edit handler
-**Then** coverage includes:
-- Type change expense → income
-- Type change income → expense
-- Type change with category mismatch handling
-- Undo state storage for type changes
-- Analytics event firing
-
-**Given** AI prompt tests
-**Then** coverage includes:
-- Portuguese type change phrases
-- English type change phrases
-- Edge cases (ambiguous phrasing)
-
-**Given** integration tests
-**Then** coverage includes:
-- Full flow: message → AI → handler → database → response
-- Category auto-switch scenarios
-
-**Prerequisites:** Stories 8.1-8.4
-
-**Technical Notes:**
-- Location: `whatsapp-bot/src/__tests__/handlers/transactions/`
-- Follow existing test patterns in `expenses.test.ts`
-- Mock Supabase for unit tests
-- Target 80%+ coverage for new code
-
----
-
-### Story 8.6: Mark NLP Intent Parser as Legacy
-
-**As a** developer,
-**I want** the NLP intent parser clearly marked as legacy/deprecated,
-**So that** future development uses AI-first approach exclusively.
-
-**Acceptance Criteria:**
-
-**Given** `intent-parser.ts` file
-**When** developer opens it
-**Then** deprecation notice is visible at top of file
-**And** JSDoc comments mark exported functions as `@deprecated`
-
-**Given** CLAUDE.md project documentation
-**When** developer reads architecture section
-**Then** clear guidance states: "NLP parser is legacy. All new features use AI layer."
-
-**Given** new feature development
-**When** developer considers NLP parser modifications
-**Then** documentation redirects to `ai-pattern-generator.ts`
-
-**Documentation updates:**
-- Add `@deprecated` JSDoc to all public functions in `intent-parser.ts`
-- Add file-level deprecation comment block
-- Update CLAUDE.md "WhatsApp Bot Message Flow" section
-- Add "Legacy vs AI-First" guidance section
-
-**Prerequisites:** None
-
-**Technical Notes:**
-- Location: `whatsapp-bot/src/nlp/intent-parser.ts`
-- Location: `CLAUDE.md`
-- DO NOT remove or modify NLP functionality (still used as fallback)
-- Mark as legacy only - no functional changes
+| FR1 | System detects first credit card transaction | Epic 1 | 1.2 |
+| FR2 | System prompts Credit Mode vs Simple Mode | Epic 1 | 1.3, 1.4 |
+| FR3 | System stores mode preference per payment method | Epic 1 | 1.3, 1.4 |
+| FR4 | Users can switch modes | Epic 1 | 1.5 |
+| FR5 | System warns about data implications when switching | Epic 1 | 1.5 |
+| FR6 | Simple Mode = existing behavior | Epic 1 | 1.6 |
+| FR7 | Credit Mode = credit features access | Epic 1 | 1.6 |
+| FR8 | Set personal monthly budget | Epic 3 | 3.2 |
+| FR9 | Track against user budget (not limit) | Epic 3 | 3.2, 3.3 |
+| FR10 | Edit budget anytime | Epic 3 | 3.2 |
+| FR11 | Display budget progress | Epic 3 | 3.3 |
+| FR12 | Awareness-first language when exceeded | Epic 3 | 3.3 |
+| FR13 | Add expenses with installments | Epic 2 | 2.1, 2.2 |
+| FR14 | Create parent installment record | Epic 2 | 2.1, 2.2 |
+| FR15 | Auto-create monthly payment entries | Epic 2 | 2.1, 2.2 |
+| FR16 | Distribute payments across months | Epic 2 | 2.1, 2.2 |
+| FR17 | Display future commitments | Epic 2 | 2.3 |
+| FR18 | Only monthly payment counts against budget | Epic 2 | 2.8 |
+| FR19 | View all active installments | Epic 2 | 2.4 |
+| FR20 | Mark installments as paid off early | Epic 2 | 2.5 |
+| FR21 | Early payoff recalculates future totals | Epic 2 | 2.5 |
+| FR22 | Edit or delete installment records | Epic 2 | 2.6, 2.7 |
+| FR23 | Deleting removes all future payments | Epic 2 | 2.7 |
+| FR24 | Set statement closing date | Epic 3 | 3.1 |
+| FR25 | WhatsApp reminder 3 days before closing | Epic 3 | 3.4 |
+| FR26 | Reminder includes statement total | Epic 3 | 3.4 |
+| FR27 | Distinguish current vs next statement | Epic 3 | 3.6 |
+| FR28 | Pre-statement category summary | Epic 3 | 3.5 |
+| FR29 | Neutral reminder tone | Epic 3 | 3.4 |
+| FR30 | Set payment due date | Epic 4 | 4.1 |
+| FR31 | WhatsApp reminder 2 days before due | Epic 4 | 4.2 |
+| FR32 | Reminder includes amount due | Epic 4 | 4.2 |
+| FR33 | Auto-create payment transaction | Epic 4 | 4.3 |
+| FR34 | System category for payments | Epic 4 | 4.5 |
+| FR35 | Separate usage from payment month | Epic 4 | 4.3 |
+| FR36 | Edit/delete auto-payment | Epic 4 | 4.4 |
+| FR37-42 | Awareness-first language | All Epics | Cross-cutting quality requirement |
+| FR43 | PostHog feature flags | Epic 5 | 5.1 |
+| FR44 | Gradual rollout support | Epic 5 | 5.1, 5.8 |
+| FR45 | Instant rollback | Epic 5 | 5.1 |
+| FR46 | Environment variable fallback | Epic 5 | 5.1 (not implemented per ADR-002) |
+| FR47 | BaseHelper architecture | Epic 5 | 5.2 |
+| FR48 | Route to appropriate helper | Epic 5 | 5.3 |
+| FR49 | Coexist with 3-layer NLP | Epic 5 | 5.3 |
+| FR50 | Helpers ask clarifying questions | Epic 5 | 5.2, 5.5 |
+| FR51 | Education over execution | Epic 5 | 5.5 |
+| FR52 | Multi-turn conversations | Epic 5 | 5.2, 5.5 |
+| FR53 | Credit Card Helper responds to "ajuda cartão" | Epic 5 | 5.4, 5.5 |
+| FR54 | Explains Credit vs Simple Mode | Epic 5 | 5.5 |
+| FR55 | Teaches installment syntax | Epic 5 | 5.5 |
+| FR56 | Shows statement dates and budget | Epic 5 | 5.4, 5.5 |
+| FR57 | Guides first credit expense | Epic 5 | 5.5 |
+| FR58 | Transaction Helper responds to "ajuda gastos" | Epic 6 | 6.1 |
+| FR59 | Explains CRUD operations | Epic 6 | 6.2, 6.4, 6.5 |
+| FR60 | Shows recent transactions | Epic 6 | 6.3 |
+| FR61 | Guides category changes | Epic 6 | 6.4 |
+| FR62 | Differentiates income vs expenses | Epic 6 | 6.6 |
+| FR63 | AI integration testing | Epic 5 | 5.6 |
+| FR64 | Test conversational quality | Epic 5 | 5.6 |
+| FR65 | Test multi-turn flows | Epic 5 | 5.6 |
+| FR66 | Test education-first behavior | Epic 5 | 5.6 |
+| FR67 | Prevent prompt regression | Epic 5 | 5.6 |
+| FR68 | Log all helper interactions | Epic 5 | 5.7 |
+| FR69 | Track usage metrics | Epic 5 | 5.7 |
+| FR70 | Monitor error rates | Epic 5 | 5.7 |
+| FR71 | Gradual user rollout | Epic 5 | 5.8 |
+| FR72 | Old system remains accessible | Epic 5 | 5.8 |
+| FR73 | Deprecate old system after 2 months | Epic 5 | 5.8 |
+
+**Coverage validation:** All 73 MVP FRs mapped to specific stories. Growth features (FR74-FR95) explicitly deferred to post-MVP.
 
 ---
 
@@ -1560,53 +2077,70 @@ This document provides the complete epic and story breakdown for NexFinApp's Sma
 
 | Epic | Title | Stories | FRs |
 |------|-------|---------|-----|
-| 1 | Foundation & Message Infrastructure | 6 | FR33-37 |
-| 2 | Conversation-First Welcome | 6 | FR1-3, 9, 24-25, 39 |
-| 3 | Progressive Tier Journey | 6 | FR4-8, 10, 38 |
-| 4 | Engagement State Machine | 7 | FR11-19, 26-27, 40-42 |
-| 5 | Scheduled Jobs & Weekly Reviews | 6 | FR20-23, 44-48 |
-| 6 | User Preferences & Web Integration | 5 | FR28-32, 43 |
-| 7 | Testing & Quality Assurance | 6 | FR49-53 |
-| 8 | Transaction Type Correction & NLP Deprecation | 6 | New feature |
-| **Total** | | **48 stories** | **53 FRs + 1 feature** |
+| 1 | Credit Mode Foundation | 6 | FR1-7 |
+| 2 | Parcelamento Intelligence | 8 | FR13-23 |
+| 3 | Statement-Aware Budgets | 6 | FR8-12, 24-29 |
+| 4 | Payment Reminders & Auto-Accounting | 5 | FR30-36 |
+| 5 | AI Helper Platform Foundation | 8 | FR43-57, 63-73 |
+| 6 | Transaction Helper & Platform Validation | 6 | FR58-62 |
+| **Total** | | **39 stories** | **73 MVP FRs** |
 
 ### Implementation Sequence
 
 ```
-Epic 1 (Foundation) ─────────────────────────────────────────────────────────┐
-    │                                                                        │
-    ├──→ Epic 2 (Welcome) ──→ Epic 3 (Tiers) ──┐                            │
-    │                                           │                            │
-    └──→ Epic 4 (State Machine) ←───────────────┘                            │
-              │                                                              │
-              ├──→ Epic 5 (Scheduler) ──→ Epic 6 (Preferences)               │
-              │                                                              │
-              └──────────────────────────────────────────→ Epic 7 (Testing) ←┘
+Epic 1 (Foundation) ────────────────────────────────────────┐
+    │                                                        │
+    ├──→ Epic 2 (Parcelamento) ──┐                          │
+    │                             │                          │
+    └──→ Epic 3 (Budgets) ────────┤                          │
+                                  │                          │
+                 Epic 4 (Payments)┘                          │
+                                                             │
+Epic 5 (AI Platform) ──→ Epic 6 (Transaction Helper) ───────┘
 ```
+
+**Parallel Development:**
+- Tracks A & B can run simultaneously:
+  - Track A: Epics 1-4 (Credit Card Management)
+  - Track B: Epics 5-6 (AI Helper Platform)
+- Epic 5 & 6 depend on Epic 1 for Credit Mode context but are otherwise independent
 
 ### Key Deliverables
 
-**User-Facing:**
-- Conversation-first welcome with magic moment
-- 3-tier progressive onboarding with celebrations
-- Respectful self-select goodbye (never spam)
-- Weekly celebration for active users
-- Dual-channel preference control
+**User-Facing (Credit Card Management):**
+- Opt-in Credit Mode vs Simple Mode choice
+- Brazilian parcelamento (installment) tracking with future commitments
+- Statement-period budgets (not calendar month)
+- Payment reminders with auto-accounting separation
+- Awareness-first language throughout (no judgment)
 
-**System:**
-- 5-state engagement machine
-- Idempotent scheduler with daily/weekly jobs
-- Message queue with retry capability
-- Comprehensive analytics tracking
+**Platform (AI Helper System):**
+- Feature-flagged gradual rollout (0% → 5% → 25% → 50% → 100%)
+- BaseHelper architecture (extensible to 7 eventual helpers)
+- Credit Card Helper (education-first conversational learning)
+- Transaction Helper (proves platform value beyond credit)
+- AI integration test framework
+- Complete logging & monitoring
 
-**Quality:**
-- E2E test framework with mocked Baileys
-- 30-day journey integration tests
-- Idempotency verification tests
+**Technical Foundation:**
+- Two-table installment model (plans + payments)
+- Hybrid budget periods (calendar for categories, statement for credit totals)
+- PostHog feature flags (no environment fallback)
+- LLM-based helper routing (not keyword-based)
+- Non-destructive mode switching
+
+### Innovation Highlights
+
+1. **Brazilian Cultural Intelligence:** Parcelamento tracking as first-class feature (not afterthought)
+2. **Mental Model Respect:** Users choose Credit vs Simple Mode (no forced credit features)
+3. **Awareness-First Philosophy:** Budget "acima do planejado" not "OVERSPENT!" - dignity preserved
+4. **Education-First Helpers:** AI teaches then executes (vs rigid tool calling)
+5. **Statement Period Budgets:** Align with billing cycle (what users actually care about)
+6. **Feature Flag Discipline:** Safe experimentation with instant rollback
 
 ---
 
 _Generated by BMAD Epic & Story Decomposition Workflow_
-_Date: 2025-11-21_
+_Date: 2025-12-02_
 _For: Lucas_
-_Project: NexFinApp Smart Onboarding & Engagement System_
+_Project: NexFinApp Credit Card Management & AI Helper System_
