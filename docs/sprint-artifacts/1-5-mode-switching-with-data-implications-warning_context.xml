@@ -1,0 +1,630 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>1.5</story-id>
+    <story-key>1-5-mode-switching-with-data-implications-warning</story-key>
+    <story-title>Mode Switching with Data Implications Warning</story-title>
+    <epic>Epic 1: Credit Card Foundation</epic>
+    <status>ready-for-dev</status>
+    <generated-date>2025-12-02</generated-date>
+    <dependencies>
+      <dependency>Story 1.1 - Database Schema Migration (installment_plans table required)</dependency>
+      <dependency>Story 1.2 - First Credit Card Transaction Detection (payment method structure)</dependency>
+      <dependency>Story 1.3 - Credit Mode Selection WhatsApp (localization patterns)</dependency>
+      <dependency>Story 1.4 - Credit Mode Selection Web Frontend (dialog patterns, server actions)</dependency>
+    </dependencies>
+  </metadata>
+
+  <story-objective>
+    <user-story>
+      As a user who has already chosen a credit mode for my credit card,
+      I want to switch between Credit Mode and Simple Mode with clear warnings about data implications,
+      so that I can adapt my tracking approach without accidentally losing installment data or being surprised by consequences.
+    </user-story>
+
+    <context>
+      Users may change their minds about credit card tracking after initial selection. They might:
+      - Start with Credit Mode but find installment tracking too complex → switch to Simple Mode
+      - Start with Simple Mode but need installment features → switch to Credit Mode
+      - Have active installments when wanting to switch → need guidance on what happens to that data
+
+      This story ensures users can switch modes safely with full awareness of consequences.
+    </context>
+  </story-objective>
+
+  <technical-specification>
+    <database-schema>
+      <table name="payment_methods">
+        <description>Stores user payment methods with credit mode preference</description>
+        <relevant-columns>
+          <column name="id" type="UUID" description="Primary key" />
+          <column name="user_id" type="UUID" description="Foreign key to auth.users" />
+          <column name="name" type="TEXT" description="Payment method name" />
+          <column name="type" type="TEXT" description="credit, debit, cash, pix, other" />
+          <column name="credit_mode" type="BOOLEAN" description="TRUE=Credit Mode, FALSE=Simple Mode, NULL=not chosen" />
+          <column name="statement_closing_day" type="INTEGER" description="Day of month (1-31), NULL for Simple Mode" />
+          <column name="payment_due_day" type="INTEGER" description="Days after closing, NULL for Simple Mode" />
+        </relevant-columns>
+        <migration-file>fe/scripts/040_credit_card_management.sql</migration-file>
+      </table>
+
+      <table name="installment_plans">
+        <description>Tracks installment purchases (active, paid_off, cancelled)</description>
+        <relevant-columns>
+          <column name="id" type="UUID" description="Primary key" />
+          <column name="user_id" type="UUID" description="Foreign key to auth.users" />
+          <column name="description" type="TEXT" description="What was purchased" />
+          <column name="total_amount" type="DECIMAL(10,2)" description="Total purchase price" />
+          <column name="total_installments" type="INTEGER" description="Number of installments" />
+          <column name="status" type="TEXT" description="active, paid_off, cancelled" />
+          <column name="payment_method_id" type="UUID" description="Foreign key to payment_methods" />
+          <column name="category_id" type="UUID" description="Foreign key to categories" />
+        </relevant-columns>
+        <migration-file>fe/scripts/040_credit_card_management.sql</migration-file>
+        <note>When switching to Simple Mode with active installments, user chooses: keep active OR mark paid_off</note>
+      </table>
+
+      <table name="installment_payments">
+        <description>Individual installment payment records</description>
+        <relevant-columns>
+          <column name="id" type="UUID" description="Primary key" />
+          <column name="plan_id" type="UUID" description="Foreign key to installment_plans (CASCADE delete)" />
+          <column name="transaction_id" type="UUID" description="Foreign key to transactions (SET NULL)" />
+          <column name="installment_number" type="INTEGER" description="Which installment (1, 2, 3...)" />
+          <column name="amount" type="DECIMAL(10,2)" description="Payment amount" />
+          <column name="due_date" type="DATE" description="When payment is due" />
+          <column name="status" type="TEXT" description="pending, paid, cancelled" />
+        </relevant-columns>
+        <migration-file>fe/scripts/040_credit_card_management.sql</migration-file>
+        <note>When user chooses "pay off all", pending installment_payments set to status=cancelled</note>
+      </table>
+    </database-schema>
+
+    <architecture-patterns>
+      <pattern name="Server Actions">
+        <description>Frontend uses server actions for all database mutations</description>
+        <location>fe/lib/actions/payment-methods.ts</location>
+        <existing-pattern>
+          <code-reference>fe/lib/actions/payment-methods.ts:22-76</code-reference>
+          <function>setCreditMode(paymentMethodId, creditMode)</function>
+          <pattern-notes>
+            - Uses getSupabaseServerClient() for authenticated access
+            - Validates user authentication first
+            - Uses .eq() filters for user_id to enforce RLS
+            - Tracks analytics via trackServerEvent()
+            - Revalidates paths after mutation
+            - Returns { success, error? } interface
+          </pattern-notes>
+        </existing-pattern>
+
+        <new-implementation>
+          <function>switchCreditMode(paymentMethodId, newMode, options?)</function>
+          <requirements>
+            - Check for active installments when switching TO Simple Mode
+            - Return requiresConfirmation=true if installments exist and no cleanup option
+            - Use database transaction for atomic updates (mode + installment cleanup)
+            - Track analytics with hadActiveInstallments and installmentsCleanedUp properties
+            - Revalidate /settings/account and /transactions paths
+          </requirements>
+        </new-implementation>
+      </pattern>
+
+      <pattern name="Localization">
+        <description>Multi-language support via next-intl and custom localization files</description>
+        <frontend>
+          <file>fe/lib/localization/pt-br.ts</file>
+          <file>fe/lib/localization/en.ts</file>
+          <structure>
+            <code>
+              export const messages = {
+                common: { ... },
+                transaction: { ... },
+                credit_mode: {
+                  // Existing keys from Story 1.4
+                  mode_selection_title: "...",
+
+                  // NEW keys for Story 1.5
+                  switch_warning_title: "⚠️ Atenção: Mudança de Modo",
+                  switch_warning_message: "Você tem {count} parcelamento(s) ativo(s)...",
+                  option_keep_installments: "Manter parcelamentos ativos",
+                  option_pay_off: "Quitar todos agora",
+                  option_cancel: "Cancelar mudança",
+                  mode_switched_keep: "Modo alterado. Parcelamentos ativos continuam.",
+                  mode_switched_payoff: "Modo alterado. {count} parcelamentos marcados como quitados."
+                }
+              }
+            </code>
+          </structure>
+        </frontend>
+
+        <whatsapp>
+          <file>whatsapp-bot/src/localization/pt-br.ts</file>
+          <file>whatsapp-bot/src/localization/en.ts</file>
+          <note>Use emoji-based numbering (1️⃣ 2️⃣ 3️⃣) for WhatsApp options</note>
+        </whatsapp>
+      </pattern>
+
+      <pattern name="Analytics Tracking">
+        <description>PostHog event tracking for user behavior analysis</description>
+        <location>fe/lib/analytics/events.ts</location>
+        <existing-events>
+          <event>CREDIT_MODE_SELECTED</event>
+        </existing-events>
+        <new-events>
+          <event name="CREDIT_MODE_SWITCHED">
+            <properties>
+              <property>userId</property>
+              <property>paymentMethodId</property>
+              <property>previousMode: 'credit' | 'simple'</property>
+              <property>newMode: 'credit' | 'simple'</property>
+              <property>hadActiveInstallments: boolean</property>
+              <property>installmentsCleanedUp: boolean</property>
+              <property>channel: 'web' | 'whatsapp'</property>
+            </properties>
+          </event>
+
+          <event name="MODE_SWITCH_CANCELLED">
+            <properties>
+              <property>userId</property>
+              <property>paymentMethodId</property>
+              <property>reason: 'installment_warning' | 'user_abort'</property>
+              <property>activeInstallments: number</property>
+            </properties>
+          </event>
+        </new-events>
+      </pattern>
+
+      <pattern name="Radix UI Components">
+        <description>Accessible UI primitives for dialogs and forms</description>
+        <existing-reference>fe/components/transactions/credit-mode-selection-dialog.tsx</existing-reference>
+        <pattern-to-follow>
+          <code>
+            import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+            // Dialog structure:
+            // - DialogContent with accessible props
+            // - DialogHeader with title
+            // - Form or button group in body
+            // - Proper keyboard navigation
+            // - Mobile-responsive layout
+          </code>
+        </pattern-to-follow>
+      </pattern>
+
+      <pattern name="WhatsApp Conversation State">
+        <description>Multi-turn conversation handling for WhatsApp flows</description>
+        <location>whatsapp-bot/src/services/conversation/</location>
+        <usage>
+          When user triggers mode switch and has active installments:
+          1. Store conversation state: { type: 'mode_switch_confirm', paymentMethodId, newMode, installmentsCount }
+          2. Send warning message with 3 options
+          3. Wait for user reply (1, 2, or 3)
+          4. Retrieve conversation state
+          5. Process choice and clear state
+        </usage>
+      </pattern>
+    </architecture-patterns>
+
+    <implementation-workflow>
+      <phase name="Backend Foundation">
+        <task>Create switchCreditMode() server action in fe/lib/actions/payment-methods.ts</task>
+        <task>Implement active installment check query</task>
+        <task>Implement transaction wrapper for atomic updates</task>
+        <task>Add error handling and rollback logic</task>
+        <acceptance-criteria>AC5.13, AC5.15</acceptance-criteria>
+      </phase>
+
+      <phase name="Analytics Integration">
+        <task>Define new analytics events in fe/lib/analytics/events.ts</task>
+        <task>Add event tracking to server action</task>
+        <task>Add event tracking to WhatsApp handler</task>
+        <acceptance-criteria>AC5.16</acceptance-criteria>
+      </phase>
+
+      <phase name="Web Frontend - Settings UI">
+        <task>Create CreditCardSettings component (fe/components/settings/credit-card-settings.tsx)</task>
+        <task>List all user credit cards with current mode</task>
+        <task>Add "Switch Mode" button per card</task>
+        <task>Integrate into settings page (fe/app/[locale]/settings/account/page.tsx)</task>
+        <acceptance-criteria>AC5.1, AC5.11</acceptance-criteria>
+      </phase>
+
+      <phase name="Web Frontend - Warning Dialog">
+        <task>Create ModeSwitchWarningDialog component (fe/components/settings/mode-switch-warning-dialog.tsx)</task>
+        <task>Display installment count dynamically</task>
+        <task>Three action buttons: Keep, Pay Off, Cancel</task>
+        <task>Handle each option appropriately</task>
+        <task>Add accessibility features (keyboard navigation, ARIA labels)</task>
+        <acceptance-criteria>AC5.4, AC5.5, AC5.6, AC5.12</acceptance-criteria>
+      </phase>
+
+      <phase name="Localization">
+        <task>Add pt-BR keys to fe/lib/localization/pt-br.ts</task>
+        <task>Add English keys to fe/lib/localization/en.ts</task>
+        <task>Add pt-BR keys to whatsapp-bot/src/localization/pt-br.ts</task>
+        <task>Add English keys to whatsapp-bot/src/localization/en.ts</task>
+        <acceptance-criteria>AC5.19, AC5.20</acceptance-criteria>
+      </phase>
+
+      <phase name="WhatsApp Integration">
+        <task>Create mode switch handler (whatsapp-bot/src/handlers/credit-card/mode-switch.ts)</task>
+        <task>Detect mode switch intent from natural language</task>
+        <task>Identify target payment method</task>
+        <task>Check for active installments</task>
+        <task>Handle multi-turn conversation (send warning → wait for choice → process)</task>
+        <task>Send appropriate confirmation messages</task>
+        <acceptance-criteria>AC5.2, AC5.14</acceptance-criteria>
+      </phase>
+
+      <phase name="Testing">
+        <task>Unit tests for switchCreditMode() (no installments, with installments, cleanup logic)</task>
+        <task>Unit tests for WhatsApp handler</task>
+        <task>Integration tests (end-to-end flows for all 3 options)</task>
+        <task>Test database consistency and rollback behavior</task>
+        <task>Manual testing in both channels (web + WhatsApp)</task>
+        <task>Verify analytics events in PostHog</task>
+        <acceptance-criteria>All ACs</acceptance-criteria>
+      </phase>
+    </implementation-workflow>
+  </technical-specification>
+
+  <existing-code-references>
+    <file path="fe/lib/actions/payment-methods.ts">
+      <purpose>Server actions for payment method operations</purpose>
+      <existing-functions>
+        <function name="setCreditMode" lines="22-76">
+          <description>Sets credit mode for first-time selection (Story 1.4)</description>
+          <pattern-to-reuse>
+            - Authentication check
+            - Supabase client usage
+            - Analytics tracking
+            - Path revalidation
+            - Error handling
+          </pattern-to-reuse>
+        </function>
+
+        <function name="getPaymentMethods" lines="86-103">
+          <description>Retrieves all user payment methods</description>
+          <usage>Use this to list credit cards in settings component</usage>
+        </function>
+      </existing-functions>
+
+      <new-functions-to-add>
+        <function name="switchCreditMode">
+          <signature>
+            switchCreditMode(
+              paymentMethodId: string,
+              newMode: boolean,
+              options?: { cleanupInstallments?: boolean }
+            ): Promise&lt;SwitchResult&gt;
+          </signature>
+
+          <return-type>
+            interface SwitchResult {
+              success: boolean
+              requiresConfirmation?: boolean
+              activeInstallments?: number
+              error?: string
+            }
+          </return-type>
+
+          <implementation-steps>
+            1. Get authenticated user via Supabase
+            2. If switching TO Simple Mode (newMode=false):
+               a. Query installment_plans for active installments
+               b. If installments found AND no cleanup option:
+                  - Return { success: false, requiresConfirmation: true, activeInstallments: count }
+               c. If cleanupInstallments=true:
+                  - Start transaction
+                  - Update installment_plans.status = 'paid_off' WHERE status='active'
+                  - Update installment_payments.status = 'cancelled' WHERE status='pending'
+            3. Update payment_methods.credit_mode = newMode
+            4. Track analytics event
+            5. Revalidate paths
+            6. Return { success: true }
+          </implementation-steps>
+
+          <code-example source="tech-spec-epic-1.md" lines="416-448">
+            <![CDATA[
+export async function switchCreditMode(
+  paymentMethodId: string,
+  newMode: boolean,
+  options?: { cleanupInstallments?: boolean }
+): Promise<SwitchResult> {
+  const supabase = createServerClient()
+  const user = await getUser()
+
+  // Check for active installments if switching to Simple Mode
+  if (newMode === false) {
+    const { data: installments } = await supabase
+      .from('installment_plans')
+      .select('id')
+      .eq('payment_method_id', paymentMethodId)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+
+    if (installments && installments.length > 0) {
+      if (!options?.cleanupInstallments) {
+        return {
+          success: false,
+          requiresConfirmation: true,
+          activeInstallments: installments.length
+        }
+      }
+
+      // User chose to mark installments as paid off
+      await supabase
+        .from('installment_plans')
+        .update({ status: 'paid_off' })
+        .eq('payment_method_id', paymentMethodId)
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+    }
+  }
+
+  // Update mode
+  const { error } = await supabase
+    .from('payment_methods')
+    .update({ credit_mode: newMode })
+    .eq('id', paymentMethodId)
+    .eq('user_id', user.id)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await posthog.capture('credit_mode_switched', {
+    userId: user.id,
+    paymentMethodId,
+    newMode: newMode ? 'credit' : 'simple',
+    hadInstallments: !!options?.cleanupInstallments
+  })
+
+  revalidatePath('/settings/account')
+  return { success: true }
+}
+            ]]>
+          </code-example>
+        </function>
+      </new-functions-to-add>
+    </file>
+
+    <file path="fe/components/transactions/credit-mode-selection-dialog.tsx">
+      <purpose>Reference for Radix UI dialog pattern (Story 1.4)</purpose>
+      <pattern-to-follow>
+        - Dialog component structure
+        - Form submission handling
+        - Loading states
+        - Error display
+        - Localization usage
+        - Mobile responsiveness
+      </pattern-to-follow>
+    </file>
+
+    <file path="fe/scripts/040_credit_card_management.sql">
+      <purpose>Database schema for credit card features</purpose>
+      <tables>
+        <table name="payment_methods" lines="14-56">
+          <key-columns>credit_mode, statement_closing_day, payment_due_day</key-columns>
+        </table>
+        <table name="installment_plans" lines="74-86">
+          <key-columns>status (active, paid_off, cancelled)</key-columns>
+        </table>
+        <table name="installment_payments" lines="97-107">
+          <key-columns>status (pending, paid, cancelled)</key-columns>
+        </table>
+      </tables>
+      <note>RLS policies enforce user_id = auth.uid() pattern</note>
+    </file>
+
+    <file path="fe/lib/localization/pt-br.ts">
+      <purpose>Portuguese localization messages</purpose>
+      <structure>
+        Messages organized by feature namespace (common, transaction, budget, etc.)
+      </structure>
+      <new-namespace>
+        <namespace>credit_mode</namespace>
+        <keys-to-add>
+          - switch_warning_title
+          - switch_warning_message (with {count} placeholder)
+          - option_keep_installments
+          - option_keep_description
+          - option_pay_off
+          - option_pay_off_description
+          - option_cancel
+          - mode_switched_keep
+          - mode_switched_payoff (with {count} placeholder)
+          - mode_switched_success
+          - switch_button (with {mode} placeholder)
+          - current_mode (with {mode} placeholder)
+        </keys-to-add>
+      </new-namespace>
+    </file>
+
+    <file path="whatsapp-bot/src/handlers/core/text-handler.ts">
+      <purpose>Main WhatsApp message routing</purpose>
+      <pattern>Intent detection → Route to specific handler</pattern>
+      <integration-point>Add mode switch intent detection and route to new handler</integration-point>
+    </file>
+  </existing-code-references>
+
+  <key-acceptance-criteria>
+    <critical-ac id="AC5.4">
+      <title>Warning Dialog for Switch to Simple Mode with Installments</title>
+      <requirement>When switching FROM Credit Mode TO Simple Mode with active installments, display blocking warning dialog with three options</requirement>
+      <validation>
+        - Count active installments from database
+        - Display count in warning message
+        - Prevent mode switch until user chooses option
+        - All three buttons functional
+      </validation>
+    </critical-ac>
+
+    <critical-ac id="AC5.7">
+      <title>Option 1 - Keep Installments Active</title>
+      <requirement>Mode switches but installments remain active and continue auto-creating</requirement>
+      <validation>
+        - credit_mode = FALSE
+        - installment_plans.status unchanged (active)
+        - installment_payments.status unchanged
+        - Future installments still auto-create
+        - Confirmation message shown
+      </validation>
+    </critical-ac>
+
+    <critical-ac id="AC5.8">
+      <title>Option 2 - Pay Off All Installments</title>
+      <requirement>Mode switches AND all active installments marked as paid off</requirement>
+      <validation>
+        - credit_mode = FALSE
+        - installment_plans.status = 'paid_off' (where previously active)
+        - installment_payments.status = 'cancelled' (where previously pending)
+        - Already paid installments (status='paid') remain unchanged
+        - Confirmation message shows count
+      </validation>
+    </critical-ac>
+
+    <critical-ac id="AC5.13">
+      <title>Server Action - switchCreditMode()</title>
+      <requirement>Implement server action with installment check and cleanup logic</requirement>
+      <validation>
+        - Returns requiresConfirmation if installments exist
+        - Accepts cleanupInstallments option
+        - Uses database transaction for atomicity
+        - Tracks analytics
+        - Revalidates paths
+      </validation>
+    </critical-ac>
+
+    <critical-ac id="AC5.15">
+      <title>Atomic Transactions</title>
+      <requirement>Mode switch and installment cleanup must succeed/fail together</requirement>
+      <validation>
+        - Use Supabase transaction
+        - If installment update fails, mode change rolls back
+        - No partial state changes possible
+        - Error handling prevents data inconsistency
+      </validation>
+    </critical-ac>
+  </key-acceptance-criteria>
+
+  <edge-cases>
+    <edge-case id="EC1">
+      <scenario>Concurrent mode switch attempts from web and WhatsApp</scenario>
+      <handling>Database transaction ensures atomic update, last write wins</handling>
+    </edge-case>
+
+    <edge-case id="EC2">
+      <scenario>Installment created during warning dialog display</scenario>
+      <handling>Switch proceeds with count at time of decision, new installment included in cleanup if user chooses pay off</handling>
+    </edge-case>
+
+    <edge-case id="EC3">
+      <scenario>Payment method deleted during switch flow</scenario>
+      <handling>Server action returns error, user notified, no partial state changes</handling>
+    </edge-case>
+
+    <edge-case id="EC4">
+      <scenario>Switch to Simple Mode with NO active installments but has paid-off installments</scenario>
+      <handling>No warning needed, direct switch allowed, historical data preserved</handling>
+    </edge-case>
+
+    <edge-case id="EC5">
+      <scenario>User has multiple credit cards, switches mode on one</scenario>
+      <handling>Each card independent, switching one does not affect others</handling>
+    </edge-case>
+  </edge-cases>
+
+  <testing-strategy>
+    <unit-tests>
+      <test>switchCreditMode() with no installments → direct switch</test>
+      <test>switchCreditMode() with active installments → returns requiresConfirmation</test>
+      <test>switchCreditMode() with cleanupInstallments=true → marks installments as paid_off</test>
+      <test>switchCreditMode() with cleanupInstallments=false → keeps installments active</test>
+      <test>Error handling when database update fails</test>
+      <test>WhatsApp handler detects mode switch intent</test>
+      <test>WhatsApp handler conversation state management</test>
+    </unit-tests>
+
+    <integration-tests>
+      <test>End-to-end: Web flow - switch with no installments</test>
+      <test>End-to-end: Web flow - switch with installments, choose keep</test>
+      <test>End-to-end: Web flow - switch with installments, choose pay off</test>
+      <test>End-to-end: Web flow - cancel mode switch</test>
+      <test>End-to-end: WhatsApp flow - all 3 options</test>
+      <test>Database consistency after each option</test>
+      <test>Analytics events tracked correctly</test>
+    </integration-tests>
+
+    <manual-testing>
+      <test>Test in Chrome, Firefox, Safari (web)</test>
+      <test>Test WhatsApp flow in pt-BR and English</test>
+      <test>Test with multiple credit cards</test>
+      <test>Verify accessibility (keyboard navigation, screen readers)</test>
+      <test>Verify responsive design (mobile, tablet, desktop)</test>
+      <test>Verify analytics in PostHog dashboard</test>
+    </manual-testing>
+  </testing-strategy>
+
+  <performance-targets>
+    <metric name="Installment check query" target="&lt; 100ms" />
+    <metric name="Mode switch (no installments)" target="&lt; 500ms" description="Total server action execution" />
+    <metric name="Mode switch (with cleanup)" target="&lt; 1 second" description="Including installment updates" />
+    <metric name="Warning dialog open" target="&lt; 200ms" description="Smooth transition" />
+  </performance-targets>
+
+  <localization-requirements>
+    <language code="pt-BR">
+      <tone>Conversational, awareness-first (no judgment)</tone>
+      <guidelines>
+        - Use natural Brazilian Portuguese (not direct translation)
+        - Explain implications clearly without technical jargon
+        - Use emoji sparingly for visual clarity (⚠️ for warnings)
+        - Numbered options with emoji (1️⃣ 2️⃣ 3️⃣) for WhatsApp
+      </guidelines>
+    </language>
+
+    <language code="en">
+      <tone>Clear, concise, professional</tone>
+      <guidelines>
+        - Short sentences
+        - Active voice
+        - Explain consequences directly
+        - Consistent with existing English messages
+      </guidelines>
+    </language>
+  </localization-requirements>
+
+  <dev-notes>
+    <note priority="high">
+      Use database transactions for atomic updates. If installment cleanup fails, the mode change MUST be rolled back.
+      This is critical for data consistency.
+    </note>
+
+    <note priority="high">
+      Never automatically delete installments. User must explicitly choose to mark as paid off. This prevents accidental data loss.
+    </note>
+
+    <note priority="medium">
+      Warning dialog is critical UX. Make sure it's accessible (keyboard navigation, ARIA labels) and mobile-responsive.
+      Test with real installment counts (1, 5, 10+) to ensure layout works.
+    </note>
+
+    <note priority="medium">
+      WhatsApp conversational state is required for multi-turn dialog. Store state after sending warning, retrieve when processing user's choice (1/2/3).
+    </note>
+
+    <note priority="low">
+      Analytics tracking helps understand user behavior. Track both successful switches AND cancellations to understand friction points.
+    </note>
+  </dev-notes>
+
+  <references>
+    <reference type="tech-spec" path="docs/sprint-artifacts/tech-spec-epic-1.md" section="AC5" lines="1287-1337" />
+    <reference type="tech-spec" path="docs/sprint-artifacts/tech-spec-epic-1.md" section="Switch Mode Workflow" lines="690-748" />
+    <reference type="tech-spec" path="docs/sprint-artifacts/tech-spec-epic-1.md" section="Server Actions" lines="416-473" />
+    <reference type="project-docs" path="CLAUDE.md" section="WhatsApp Bot Structure" />
+    <reference type="project-docs" path="CLAUDE.md" section="Localization" />
+    <reference type="story" path="docs/sprint-artifacts/1-4-credit-mode-selection-web-frontend.md" note="Reference for dialog patterns" />
+  </references>
+</story-context>

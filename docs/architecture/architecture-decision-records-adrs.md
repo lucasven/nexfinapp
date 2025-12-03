@@ -1,54 +1,6 @@
-# Architecture - Credit Card Management & AI Helper System
+# Architecture Decision Records (ADRs)
 
-**Project:** NexFinApp
-**Date:** 2025-12-02
-**Author:** Lucas (Architect Agent)
-**Version:** 2.0
-**Context:** Brownfield Enhancement (~12,000 LOC existing)
-
----
-
-## Executive Summary
-
-This architecture defines the technical approach for adding two major feature epics to NexFinApp's existing expense tracking system:
-
-1. **Epic A: Credit Card Management** - Brazilian parcelamento (installment) intelligence with statement-aware budgeting and awareness-first UX
-2. **Epic B: AI Helper System** - Conversational education platform with feature-flagged gradual rollout
-
-**Key Architectural Decisions:**
-- Two-table installment model (plans + payments) for parcelamento tracking
-- Hybrid budget periods: calendar month for categories, statement period for credit card totals
-- AI-first conversational layer (GPT-4o-mini, no NLP pattern extensions)
-- Feature flag infrastructure for 5% → 100% helper rollout
-- Extend existing Next.js frontend + Node.js WhatsApp bot architecture
-
-**Foundation:** Built on existing tech stack (Next.js 15, PostgreSQL + pgvector, Baileys WhatsApp, OpenAI GPT-4o-mini, Supabase, PostHog).
-
----
-
-## Decision Summary
-
-| # | Category | Decision | Priority | Affects Epics | Key Rationale |
-|---|----------|----------|----------|---------------|---------------|
-| **ADR-001** | Data Model - Installments | Two-table design: `installment_plans` + `installment_payments` | CRITICAL | Epic A (FR13-FR23) | Clean separation of plan metadata from monthly payments. Natural fit for Brazilian "compra parcelada" mental model. |
-| **ADR-001** | Budget Periods | Hybrid: Calendar month (categories), Statement period (credit card totals) | CRITICAL | Epic A (FR8-FR12) | Category budgets stay simple. Credit card total budgets follow statement closing date. Avoids per-card category complexity. |
-| **ADR-002** | Feature Flags | PostHog feature flags (no custom fallback) | CRITICAL | Epic A, Epic B (FR69-FR70) | Pure PostHog for 5% → 100% rollout. Simple, no dual systems. |
-| **ADR-003** | Helper Architecture | BaseHelper abstract class + LLM-based routing | CRITICAL | Epic B (FR55-FR68) | Class-based abstraction enables 7 eventual helpers. LLM routing from day 1 (not keyword-based). |
-| **ADR-004** | Credit Mode Switch | Non-destructive with user choice (keep/pay off installments) | CRITICAL | Epic A (FR3-FR7) | Never lose data. User decides what happens to active installments when switching modes. |
-| **ADR-005** | Scheduled Jobs | In-process node-cron scheduler | IMPORTANT | Epic A (FR51-FR54) | Extend existing `whatsapp-bot/src/scheduler.ts`. Jobs need WhatsApp socket access. |
-| **ADR-006** | Statement Period Edge Cases | Use last day of month when closing_day > days in month | IMPORTANT | Epic A (FR8-FR12) | Edge case: Feb 30 → Feb 28/29. Prevents errors, predictable behavior. |
-| **ADR-007** | Budget Calculation | Real-time aggregation (no caching) | IMPORTANT | Epic A (FR8-FR12) | Proper indexes sufficient for realistic workload. Defer caching until proven need. |
-| **ADR-008** | Helper Rollout & Testing | Manual testing + metrics-driven 4-phase rollout | IMPORTANT | Epic B (FR66-FR68) | Realistic for WhatsApp (no E2E automation). 0% → 5% → 25% → 50% → 100%. |
-| **ADR-009** | AI Cost Management | Per-helper domain tracking, shared daily limit | IMPORTANT | Epic B (FR64) | Track costs by helper domain. Graceful degradation when limit reached. Admin-only limit adjustment. |
-| **ADR-010** | Auto-Payment Category | Use recurring payment's saved category (simple) | IMPORTANT | Epic A (FR47-FR50) | Simple, fast, predictable. User can manually correct if needed. |
-| **ADR-011** | Performance Optimization | Defer until proven need (start with indexes) | NICE-TO-HAVE | Epic A (NFR1) | YAGNI principle. Proper indexes handle realistic workload (<1s dashboard load). |
-| **ADR-012** | Analytics Events | Extend existing PostHog pattern | NICE-TO-HAVE | Epic A, Epic B (NFR9) | Consistent with existing analytics. Simple event tracking, no complex taxonomy. |
-
----
-
-## Architecture Decision Records (ADRs)
-
-### ADR-001: Installment Data Model + Statement-Aware Budget Periods
+## ADR-001: Installment Data Model + Statement-Aware Budget Periods
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -56,7 +8,7 @@ This architecture defines the technical approach for adding two major feature ep
 
 **Decision:**
 
-#### 1. Two-Table Installment Storage
+### 1. Two-Table Installment Storage
 
 ```sql
 -- Parent table: Installment plans
@@ -113,7 +65,7 @@ CREATE POLICY installment_payments_user_policy ON installment_payments
 - **Extensibility:** Add plan-level fields (e.g., interest rate, discount for early payoff) without touching payment records
 - **Query efficiency:** Simple aggregation for "future commitments" dashboard
 
-#### 2. Payment Methods Extended for Credit Cards
+### 2. Payment Methods Extended for Credit Cards
 
 ```sql
 ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS statement_closing_day INTEGER CHECK (statement_closing_day BETWEEN 1 AND 31);
@@ -132,7 +84,7 @@ COMMENT ON COLUMN payment_methods.monthly_budget IS 'User-defined budget per sta
 - **Opt-in model:** `credit_mode` flag enables credit-specific features (installments, statement tracking)
 - **User-defined budgets:** Separate from bank credit limit—user sets personal spending goal per statement
 
-#### 3. Budget Period Rules
+### 3. Budget Period Rules
 
 | Budget Type | Period Basis | Calculation Example |
 |-------------|--------------|---------------------|
@@ -167,7 +119,7 @@ function getStatementPeriod(closingDay: number, referenceDate: Date) {
 // Edge case handling: closingDay = 31 in February → use last day of month
 ```
 
-#### 4. Budget Calculation Queries
+### 4. Budget Calculation Queries
 
 **Category Budget (Calendar Month):**
 ```sql
@@ -236,7 +188,7 @@ ORDER BY commitment_month;
 
 ---
 
-### ADR-002: Feature Flag Infrastructure (PostHog)
+## ADR-002: Feature Flag Infrastructure (PostHog)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -430,7 +382,7 @@ posthog.capture('ai_helper_fallback', {
 
 ---
 
-### ADR-003: Helper System Architecture (Class-Based + LLM Routing)
+## ADR-003: Helper System Architecture (Class-Based + LLM Routing)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -620,7 +572,7 @@ services/helpers/
 
 ---
 
-### ADR-004: Credit Mode Switch Behavior (Non-Destructive)
+## ADR-004: Credit Mode Switch Behavior (Non-Destructive)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -877,7 +829,7 @@ Responda 1 ou 2."
 
 ---
 
-### ADR-005: Scheduled Jobs Infrastructure (In-Process Scheduler)
+## ADR-005: Scheduled Jobs Infrastructure (In-Process Scheduler)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -1083,7 +1035,7 @@ function getNextPaymentDue(closingDay: number, paymentDueDays: number, reference
 
 ---
 
-### ADR-006: Statement Period Calculation (Edge Case Handling)
+## ADR-006: Statement Period Calculation (Edge Case Handling)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -1290,7 +1242,7 @@ describe('getStatementClosingDate', () => {
 
 ---
 
-### ADR-007: Budget Calculation Performance (Real-Time Aggregation)
+## ADR-007: Budget Calculation Performance (Real-Time Aggregation)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -1525,7 +1477,7 @@ If caching becomes necessary:
 
 ---
 
-### ADR-008: Helper Rollout & Testing Strategy (Manual + Metrics-Driven)
+## ADR-008: Helper Rollout & Testing Strategy (Manual + Metrics-Driven)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -1857,7 +1809,7 @@ Week 8+: Phase 4 (100%), monitor weekly
 
 ---
 
-### ADR-009: AI Cost Management for Helpers (Per-Helper Domain Tracking)
+## ADR-009: AI Cost Management for Helpers (Per-Helper Domain Tracking)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -1867,7 +1819,7 @@ Week 8+: Phase 4 (100%), monitor weekly
 
 **Implementation:**
 
-#### 1. Extend Existing `user_ai_usage` Table
+### 1. Extend Existing `user_ai_usage` Table
 
 ```sql
 -- Add helper domain tracking
@@ -1901,7 +1853,7 @@ FROM user_ai_usage
 GROUP BY user_id, date;
 ```
 
-#### 2. Cost Enforcement Function
+### 2. Cost Enforcement Function
 
 ```typescript
 // services/ai/cost-manager.ts
@@ -1983,7 +1935,7 @@ export async function trackHelperCost(
 }
 ```
 
-#### 3. Graceful Degradation in BaseHelper
+### 3. Graceful Degradation in BaseHelper
 
 ```typescript
 // services/helpers/base-helper.ts
@@ -2040,7 +1992,7 @@ class BudgetHelper extends BaseHelper {
 }
 ```
 
-#### 4. Admin Cost Analytics
+### 4. Admin Cost Analytics
 
 ```typescript
 // Admin dashboard view for helper costs
@@ -2125,7 +2077,7 @@ Admin dashboard shows:
 
 ---
 
-### ADR-010: Auto-Payment Category Design (Saved Category)
+## ADR-010: Auto-Payment Category Design (Saved Category)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -2328,7 +2280,7 @@ Auto-pay executes:
 
 ---
 
-### ADR-011: Performance Optimization Strategy (Defer Until Proven Need)
+## ADR-011: Performance Optimization Strategy (Defer Until Proven Need)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -2338,7 +2290,7 @@ Auto-pay executes:
 
 **Implementation:**
 
-#### 1. Index Strategy (Sufficient for Expected Load)
+### 1. Index Strategy (Sufficient for Expected Load)
 
 All indexes already defined in previous ADRs:
 
@@ -2357,7 +2309,7 @@ CREATE INDEX idx_transactions_category ON transactions(category_id);
 CREATE INDEX idx_payment_methods_user ON payment_methods(user_id);
 ```
 
-#### 2. Performance Monitoring
+### 2. Performance Monitoring
 
 ```typescript
 // lib/analytics/performance.ts
@@ -2388,7 +2340,7 @@ export default async function DashboardPage() {
 }
 ```
 
-#### 3. Query Optimization Guidelines
+### 3. Query Optimization Guidelines
 
 **Real-time queries acceptable for:**
 - User-scoped data (single user's transactions, installments, budgets)
@@ -2432,7 +2384,7 @@ export async function getFutureCommitments(userId: string, months: number = 12) 
 - Dashboard parallel queries: all <200ms each
 - Total dashboard load: <1s (well under 2s threshold)
 
-#### 4. Optimization Decision Tree
+### 4. Optimization Decision Tree
 
 ```
 Dashboard load time > 2s?
@@ -2511,7 +2463,7 @@ GROUP BY user_id;
 
 ---
 
-### ADR-012: Analytics Event Design (Extend Existing PostHog Pattern)
+## ADR-012: Analytics Event Design (Extend Existing PostHog Pattern)
 
 **Status:** Accepted
 **Date:** 2025-12-02
@@ -2521,7 +2473,7 @@ GROUP BY user_id;
 
 **Implementation:**
 
-#### 1. Frontend Events (Extend Existing Pattern)
+### 1. Frontend Events (Extend Existing Pattern)
 
 ```typescript
 // fe/lib/analytics/events.ts (extend existing file)
@@ -2641,7 +2593,7 @@ export const trackHelperLimitReached = (
 }
 ```
 
-#### 2. WhatsApp Bot Events (New Integration)
+### 2. WhatsApp Bot Events (New Integration)
 
 ```typescript
 // whatsapp-bot/src/services/analytics/posthog.ts (NEW FILE)
@@ -2739,7 +2691,7 @@ POSTHOG_API_KEY=phc_xxxxx
 POSTHOG_HOST=https://app.posthog.com
 ```
 
-#### 3. Usage Examples
+### 3. Usage Examples
 
 **Frontend:**
 
@@ -2778,7 +2730,7 @@ class BudgetHelper extends BaseHelper {
 }
 ```
 
-#### 4. PostHog Dashboards
+### 4. PostHog Dashboards
 
 **Dashboard 1: Credit Card Management Adoption**
 
@@ -2843,334 +2795,3 @@ Metrics:
 | `ai_helper_limit_reached` | user_id, helper_domain, used_today, daily_limit, feature_flag | Track AI cost limit hits (ADR-009) |
 
 ---
-
-## Implementation Roadmap
-
-### Phase 1: Foundation (Week 1-2)
-
-**Database Schema:**
-- Create `installment_plans` and `installment_payments` tables (ADR-001)
-- Add `credit_mode`, `statement_closing_day`, `payment_due_day` to `payment_methods` (ADR-001)
-- Add `helper_domain` column to `user_ai_usage` (ADR-009)
-- Create indexes for performance (ADR-011)
-
-**Feature Flags:**
-- Configure PostHog feature flags: `credit-card-management`, `ai-helpers` (ADR-002)
-- Set both to 0% initially
-
-**Analytics:**
-- Add PostHog integration to WhatsApp bot (ADR-012)
-- Create credit card tracking events (frontend)
-- Create helper tracking events (bot)
-
-### Phase 2: Credit Card Management (Week 3-5)
-
-**Backend (WhatsApp Bot):**
-- Installment creation handler (ADR-001)
-- Statement period calculation utility (ADR-006)
-- Credit card budget calculations (ADR-007)
-- Auto-payment scheduled job (ADR-010)
-- Credit card reminder scheduled job (ADR-005)
-
-**Frontend:**
-- Credit Mode toggle UI (ADR-004)
-- Installment plan creation/editing
-- Statement period budget display
-- Future commitments visualization
-
-**Testing:**
-- Manual testing with real WhatsApp numbers
-- Edge case validation (Feb 30 → Feb 28/29, etc.)
-- Feature flag rollout: 0% → 5% → 25% → 50% → 100% over 4 weeks
-
-### Phase 3: AI Helper System (Week 6-8)
-
-**Backend (WhatsApp Bot):**
-- BaseHelper abstract class (ADR-003)
-- LLM-based domain routing (ADR-003)
-- AI cost management (ADR-009)
-- BudgetHelper implementation (first helper)
-- InstallmentHelper implementation (second helper)
-
-**Testing:**
-- Manual test script (ADR-008)
-- Unit tests for helpers
-- Metrics collection (PostHog)
-- Feature flag rollout: 0% → 5% → 25% → 50% → 100% over 5 weeks
-
-### Phase 4: Iteration & Expansion (Week 9+)
-
-**Additional Helpers:**
-- CategoryHelper
-- RecurringHelper
-- TransactionHelper
-- ReportHelper
-- TipHelper
-
-**Optimizations:**
-- Performance monitoring (ADR-011)
-- Add caching if dashboard >2s
-- Prompt optimization based on cost analytics
-
----
-
-## Database Migration Summary
-
-### New Tables
-
-```sql
--- Migration 033: Credit Card Installments
-CREATE TABLE installment_plans (...);
-CREATE TABLE installment_payments (...);
-
--- Indexes
-CREATE INDEX idx_installment_plans_user_status ...;
-CREATE INDEX idx_installment_payments_plan ...;
-CREATE INDEX idx_installment_payments_due_date_status ...;
-
--- RLS Policies
-CREATE POLICY installment_plans_user_policy ...;
-CREATE POLICY installment_payments_user_policy ...;
-```
-
-### Table Modifications
-
-```sql
--- Migration 034: Credit Card Management Fields
-ALTER TABLE payment_methods
-ADD COLUMN credit_mode BOOLEAN DEFAULT FALSE,
-ADD COLUMN statement_closing_day INTEGER,
-ADD COLUMN payment_due_day INTEGER;
-
--- Migration 035: AI Helper Cost Tracking
-ALTER TABLE user_ai_usage
-ADD COLUMN helper_domain TEXT;
-
-CREATE INDEX idx_user_ai_usage_helper_domain ...;
-```
-
-### Views
-
-```sql
--- Helper cost analytics
-CREATE VIEW helper_costs_today ...;
-CREATE VIEW user_daily_ai_costs ...;
-```
-
----
-
-## Technology Stack Summary
-
-### Existing (Unchanged)
-
-| Layer | Technology | Version | Purpose |
-|-------|-----------|---------|---------|
-| Frontend | Next.js | 15 | React framework with App Router |
-| UI Components | Radix UI | Latest | Accessible component primitives |
-| Styling | Tailwind CSS | 4 | Utility-first CSS |
-| Database | PostgreSQL + pgvector | 15 | Relational database with vector search |
-| Auth | Supabase Auth | Latest | User authentication |
-| Backend | Node.js + TypeScript | 20 + 5.3 | WhatsApp bot runtime |
-| WhatsApp | Baileys | Latest | WhatsApp Web API library |
-| AI/NLP | OpenAI GPT-4o-mini | Latest | Intent parsing, helpers |
-| Analytics | PostHog | Latest | Product analytics + feature flags |
-
-### New Additions
-
-| Package | Version | Purpose | Used By |
-|---------|---------|---------|---------|
-| `posthog-node` | ^4.0.0 | Server-side PostHog | WhatsApp bot (ADR-012) |
-| `node-cron` | Existing | Scheduled jobs | Already in use (ADR-005) |
-
----
-
-## Risk Assessment & Mitigation
-
-### High Risk
-
-| Risk | Impact | Mitigation | ADR |
-|------|--------|------------|-----|
-| Helper system causes high AI costs | $$$ | Per-user daily limits ($1), graceful degradation, admin-only limit adjustment | ADR-009 |
-| Feature flags misconfigured (100% rollout too early) | User experience | Manual testing before each phase, metrics-driven rollout criteria, quick rollback procedure | ADR-008 |
-| Statement period calculation errors | Budget accuracy | Comprehensive edge case testing (Feb 30, leap years), use last day of month fallback | ADR-006 |
-
-### Medium Risk
-
-| Risk | Impact | Mitigation | ADR |
-|------|--------|------------|-----|
-| Dashboard performance degrades with installment queries | User experience | Proper indexes, performance monitoring, defer optimization until proven need | ADR-011 |
-| Credit Mode switching confusion | User confusion | Non-destructive mode switching, clear warnings, option to keep/pay off installments | ADR-004 |
-| Auto-payment category becomes stale | Data accuracy | Use saved category (simple), user can manually correct or update recurring payment | ADR-010 |
-
-### Low Risk
-
-| Risk | Impact | Mitigation | ADR |
-|------|--------|------------|-----|
-| PostHog downtime affects feature flags | Feature rollout | Acceptable: PostHog SLA 99.9%, feature flags cached locally | ADR-002 |
-| Helper routing accuracy <90% | User experience | LLM-based routing from day 1, monitor routing_accuracy metric, iterate on prompts | ADR-003 |
-
----
-
-## Success Metrics (Post-Launch)
-
-### Credit Card Management (Epic A)
-
-| Metric | Target | Measurement | Dashboard |
-|--------|--------|-------------|-----------|
-| Credit Mode adoption rate | >30% of credit card users | `credit_card_created` with `credit_mode=true` | PostHog: Credit Card Adoption |
-| Installment creation rate | >10 installments/week | `installment_created` count | PostHog: Credit Card Adoption |
-| Statement period usage | >50% of Credit Mode users view statement | `statement_period_viewed` unique users | PostHog: Credit Card Adoption |
-| Auto-payment success rate | >95% | `auto_payment_executed` success/total | Logs + PostHog |
-
-### AI Helper System (Epic B)
-
-| Metric | Target | Measurement | Dashboard |
-|--------|--------|-------------|-----------|
-| Helper invocation rate | >5 invocations/user/week | `ai_helper_invoked` count | PostHog: AI Helper Performance |
-| Helper completion rate | >70% | `ai_helper_completed` success/total | PostHog: AI Helper Performance |
-| Helper error rate | <10% | `ai_helper_error` count/invocations | PostHog: AI Helper Performance |
-| Avg conversation turns | <4 turns | `turn_count` average | PostHog: AI Helper Performance |
-| Routing accuracy | >90% | Manual validation sample | PostHog: AI Helper Performance |
-| Cost per user per day | <$0.10 | `user_ai_usage` daily totals | Admin analytics |
-
-### Performance (NFRs)
-
-| Metric | Target | Measurement | Dashboard |
-|--------|--------|-------------|-----------|
-| Dashboard load time (p95) | <2s | `dashboard_load` duration_ms | PostHog: Dashboard Performance |
-| Auto-payment execution time | <5s per payment | Logs | Scheduler logs |
-| Helper response time | <3s | Time to first message | PostHog: AI Helper Performance |
-
----
-
-## Next Steps
-
-### Immediate (Before Implementation)
-
-1. **Review & Approve:** Lucas reviews this architecture document
-2. **PRD Alignment Check:** Verify all 95 FRs are addressed in ADRs
-3. **Database Migration Planning:** Create migration scripts 033-035
-4. **Feature Flag Setup:** Configure PostHog flags (both at 0% initially)
-
-### Development Phase
-
-1. **Phase 1 (Foundation):** Database schema, feature flags, analytics integration
-2. **Phase 2 (Credit Cards):** Backend + frontend implementation, 4-phase rollout
-3. **Phase 3 (Helpers):** Helper system + first 2 helpers, 5-phase rollout
-4. **Phase 4 (Iteration):** Performance monitoring, additional helpers, optimizations
-
-### Post-Launch
-
-1. **Monitor Metrics:** Daily checks during rollout phases
-2. **Iterate on Prompts:** Optimize helper prompts based on cost/accuracy analytics
-3. **Performance Tuning:** Add caching only if dashboard exceeds 2s (ADR-011)
-4. **User Feedback:** Collect qualitative feedback on helpers and credit card UX
-
----
-
-## Appendix A: Functional Requirements Coverage
-
-All 95 FRs from PRD covered across 12 ADRs:
-
-**Epic A: Credit Card Management (FR1-FR54)**
-- FR1-FR7: Credit Mode toggle → ADR-004
-- FR8-FR12: Statement-aware budgets → ADR-001, ADR-006, ADR-007
-- FR13-FR23: Installment tracking → ADR-001
-- FR24-FR27: Category intelligence → ADR-010
-- FR28-FR32: User preferences → Existing (notification preferences)
-- FR33-FR42: WhatsApp interactions → ADR-001, ADR-004
-- FR43-FR46: Web interactions → ADR-001, ADR-004
-- FR47-FR50: Auto-payments → ADR-010
-- FR51-FR54: Reminders → ADR-005
-
-**Epic B: AI Helper System (FR55-FR95)**
-- FR55-FR58: Helper framework → ADR-003
-- FR59-FR63: Domain routing → ADR-003
-- FR64: AI cost management → ADR-009
-- FR65: Context awareness → ADR-003
-- FR66-FR68: Conversation flow → ADR-003, ADR-008
-- FR69-FR70: Feature flags → ADR-002
-- FR71-FR95: Individual helpers (7 domains) → ADR-003
-
-**Non-Functional Requirements**
-- NFR1: Dashboard load <2s → ADR-011
-- NFR3: AI cost $1/user/day → ADR-009
-- NFR9: Analytics integration → ADR-012
-- NFR10: Web/WhatsApp sync <5s → Existing (shared database)
-
----
-
-## Appendix B: File Structure Changes
-
-### New Files
-
-```
-whatsapp-bot/src/
-├── services/
-│   ├── helpers/
-│   │   ├── base-helper.ts              # NEW (ADR-003)
-│   │   ├── budget-helper.ts            # NEW (ADR-003)
-│   │   ├── installment-helper.ts       # NEW (ADR-003)
-│   │   └── [5 more helpers...]         # FUTURE
-│   ├── installments/
-│   │   ├── installment-manager.ts      # NEW (ADR-001)
-│   │   └── future-commitments.ts       # NEW (ADR-001)
-│   ├── ai/
-│   │   └── cost-manager.ts             # NEW (ADR-009)
-│   ├── scheduler/
-│   │   ├── auto-payments-job.ts        # NEW (ADR-010)
-│   │   └── credit-card-reminders-job.ts # NEW (ADR-005)
-│   └── analytics/
-│       └── posthog.ts                  # NEW (ADR-012)
-
-fe/
-├── components/
-│   ├── credit-cards/
-│   │   ├── credit-mode-toggle.tsx      # NEW (ADR-004)
-│   │   ├── installment-dialog.tsx      # NEW (ADR-001)
-│   │   └── statement-period-display.tsx # NEW (ADR-006)
-│   └── settings/
-│       └── notification-preferences.tsx # EXISTING (referenced)
-└── lib/
-    └── analytics/
-        └── performance.ts              # NEW (ADR-011)
-```
-
-### Modified Files
-
-```
-whatsapp-bot/src/
-└── scheduler.ts                        # UPDATE (ADR-005, ADR-010)
-
-fe/
-├── lib/actions/
-│   ├── installments.ts                 # NEW (ADR-001)
-│   └── admin.ts                        # UPDATE (ADR-009)
-└── lib/analytics/
-    └── events.ts                       # UPDATE (ADR-012)
-```
-
-### Database Migrations
-
-```
-supabase/migrations/
-├── 033_installment_tables.sql          # NEW (ADR-001)
-├── 034_credit_mode_fields.sql          # NEW (ADR-001)
-└── 035_helper_cost_tracking.sql        # NEW (ADR-009)
-```
-
----
-
-**Document Version:** 2.0
-**Status:** ✅ Complete - All 12 ADRs Finalized
-**Last Updated:** 2025-12-02
-**Next Review:** After Phase 1 implementation completion
-
-**Approval:**
-- [x] Lucas (Product Owner) - Architecture Review
-- [x] Lucas (Developer) - Technical Feasibility Review
-- [x] Ready for Implementation
-
----
-
-_This architecture document was created through collaborative decision facilitation by Lucas (Architect Agent) as part of the BMad Method workflow._

@@ -61,6 +61,77 @@ export async function handleAddExpense(
       })
     }
 
+    // Story 1.2 & 1.3: Credit Mode Detection and Selection
+    // Handle payment method and trigger mode selection if needed
+    let paymentMethodId: string | null = null
+    if (paymentMethod) {
+      const { findOrCreatePaymentMethod, detectPaymentMethodType } = await import('../../utils/payment-method-helper.js')
+      const { needsCreditModeSelection } = await import('../../utils/credit-mode-detection.js')
+      const { storePendingTransactionContext } = await import('../../services/conversation/pending-transaction-state.js')
+      const { sendModeSelectionPrompt } = await import('../credit-card/mode-selection.js')
+      const { getUserLocale } = await import('../../localization/i18n.js')
+
+      // Detect payment method type from name
+      const pmType = detectPaymentMethodType(paymentMethod)
+
+      // Find or create payment method
+      const pm = await findOrCreatePaymentMethod(session.userId, paymentMethod, pmType)
+
+      if (pm) {
+        paymentMethodId = pm.id
+
+        // Check if credit mode selection is needed
+        const needsMode = await needsCreditModeSelection(paymentMethodId)
+
+        if (needsMode) {
+          // Get user locale for pending transaction context
+          const locale = await getUserLocale(session.userId)
+
+          // Store pending transaction
+          storePendingTransactionContext(whatsappNumber, {
+            paymentMethodId,
+            amount,
+            categoryId,
+            description,
+            date: date || new Date().toISOString().split('T')[0],
+            locale: locale as 'pt-BR' | 'en',
+            transactionType: (type || 'expense') as 'expense' | 'income'
+          })
+
+          logger.info('Credit mode selection triggered', {
+            whatsappNumber,
+            userId: session.userId,
+            paymentMethodId,
+            paymentMethodName: paymentMethod
+          })
+
+          // Return mode selection prompt (Story 1.3)
+          return await sendModeSelectionPrompt(session.userId)
+        }
+
+        // Story 1.6: Simple Mode Backward Compatibility
+        // If credit_mode = FALSE (Simple Mode), skip all credit-specific features
+        // - No installment prompts (Epic 2)
+        // - No statement period tracking (Epic 3)
+        // - Transaction proceeds as standard expense (same as debit card)
+        if (pm.type === 'credit' && pm.credit_mode === false) {
+          logger.info('Simple Mode credit card detected - standard transaction flow', {
+            whatsappNumber,
+            userId: session.userId,
+            paymentMethodId,
+            paymentMethodName: paymentMethod
+          })
+          // Continue to standard transaction creation (no credit features)
+          // This is the desired behavior for Simple Mode (AC6.1, AC6.8)
+        }
+
+        // Future Epic 2: Credit Mode installment logic would go here
+        // if (pm.type === 'credit' && pm.credit_mode === true) {
+        //   // Prompt for installments, statement period, etc.
+        // }
+      }
+    }
+
     // Check for duplicate transactions
     const expenseData = {
       amount,
@@ -115,7 +186,7 @@ export async function handleAddExpense(
 
     const userReadableId = idData
 
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('transactions')
       .insert({
         user_id: session.userId,
@@ -124,7 +195,8 @@ export async function handleAddExpense(
         category_id: categoryId,
         description: description || null,
         date: transactionDate,
-        payment_method: paymentMethod || null,
+        payment_method: paymentMethod || null, // Legacy field - keep for backward compatibility
+        payment_method_id: paymentMethodId || null, // New ID-based field (Story 1.3)
         user_readable_id: userReadableId,
         match_confidence: matchConfidence,
         match_type: categoryMatch.matchType,
@@ -157,6 +229,9 @@ export async function handleAddExpense(
     const categoryName = data.category?.name || 'Sem categoria'
 
     // Track successful transaction creation
+    // Story 1.6: TODO - Add payment_method_mode when payment_method_id is integrated
+    // Get payment method from database to determine mode (credit/simple/null)
+    // This will enable tracking of Simple Mode vs Credit Mode adoption rates (AC6.16)
     trackEvent(
       WhatsAppAnalyticsEvent.WHATSAPP_TRANSACTION_CREATED,
       session.userId,
@@ -169,6 +244,8 @@ export async function handleAddExpense(
         [WhatsAppAnalyticsProperty.CATEGORY_NAME]: categoryName,
         [WhatsAppAnalyticsProperty.CATEGORY_MATCHING_METHOD]: categoryMatch.matchType,
         category_match_confidence: matchConfidence,
+        // TODO: Add when refactored to use payment_method_id:
+        // payment_method_mode: pm?.credit_mode === true ? 'credit' : pm?.credit_mode === false ? 'simple' : null
       }
     )
 

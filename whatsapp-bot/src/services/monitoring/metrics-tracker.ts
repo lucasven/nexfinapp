@@ -27,6 +27,7 @@ export type ParsingStrategy =
   | 'first_message_welcome' // Story 2.2: First message detection
   | 'tip_command' // Story 3.5: Tip opt-out/opt-in commands
   | 'goodbye_response' // Story 4.4: Goodbye response processing
+  | 'credit_mode_selection' // Story 1.3: Credit mode selection
   | 'unknown'
 
 export interface ParsingMetric {

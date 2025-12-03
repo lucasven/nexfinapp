@@ -66,6 +66,35 @@ export async function createTransaction(formData: {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  // Story 1.2: Credit Mode Detection (Web)
+  // TODO: Integrate credit mode detection when payment_method is refactored to use payment_method_id
+  // Current state: payment_method is stored as string in transactions table
+  // Future state: payment_method_id references payment_methods table
+  //
+  // When payment method system is refactored to use IDs:
+  // 1. Get payment_method_id from form data (user selects from payment_methods table)
+  // 2. Call needsCreditModeSelection(payment_method_id) utility
+  // 3. If true:
+  //    - Do NOT insert transaction yet
+  //    - Return a special response indicating mode selection needed
+  //    - Frontend will show mode selection modal (Story 1.4)
+  //    - Frontend stores form data in React state during modal
+  // 4. After mode selection, call this function again to complete transaction
+  //
+  // Code placeholder (will be activated when payment method IDs are supported):
+  // ```
+  // import { needsCreditModeSelection } from '@/lib/utils/credit-mode-detection'
+  //
+  // if (formData.payment_method_id) {
+  //   const needsMode = await needsCreditModeSelection(formData.payment_method_id)
+  //   if (needsMode) {
+  //     // Signal to frontend that mode selection is needed
+  //     throw new Error('CREDIT_MODE_SELECTION_REQUIRED')
+  //     // Frontend will catch this and open mode selection modal
+  //   }
+  // }
+  // ```
+
   // Check if this is the user's first transaction BEFORE insertion to avoid race conditions
   const { count: existingTransactionCount } = await supabase
     .from("transactions")

@@ -436,7 +436,54 @@ Para pausar novamente, envie: *parar lembretes*`,
   engagementDestinationSwitchedToGroup: 'Pronto! Agora vou enviar mensagens no grupo.',
   engagementDestinationSwitchedToIndividual: 'Pronto! Agora vou enviar mensagens no privado.',
   engagementDestinationSwitchFailed: 'Não consegui mudar a preferência. Tenta de novo?',
-  engagementDestinationNeedGroupFirst: 'Para receber mensagens no grupo, envie uma mensagem no grupo primeiro.'
+  engagementDestinationNeedGroupFirst: 'Para receber mensagens no grupo, envie uma mensagem no grupo primeiro.',
+
+  // Credit Mode Selection (Story 1.3)
+  credit_mode: {
+    selection_prompt: `Como você quer acompanhar este cartão?
+
+1️⃣ Modo Crédito
+- Acompanhe parcelamentos (3x, 12x, etc)
+- Orçamento mensal personalizado
+- Lembrete de fechamento da fatura
+- Ideal para quem parcela compras
+
+2️⃣ Modo Simples
+- Trata como débito
+- Sem recursos de cartão de crédito
+- Ideal para quem paga a fatura em dia
+
+Responda 1 ou 2`,
+    confirmation_credit: '✅ Modo Crédito ativado! Você pode adicionar parcelamentos e acompanhar sua fatura.',
+    confirmation_simple: '✅ Modo Simples ativado! Este cartão será tratado como débito.',
+    invalid_input: 'Por favor, responda 1 para Modo Crédito ou 2 para Modo Simples.',
+
+    // Mode Switching (Story 1.5)
+    switch_warning: (count: number) => `⚠️ Atenção: Mudança de Modo
+
+Você tem ${count} parcelamento(s) ativo(s). O que deseja fazer?
+
+1️⃣ Manter parcelamentos ativos
+   - Próximas parcelas continuam aparecendo
+   - Pode voltar para Modo Crédito depois
+   - Parcelamentos não serão excluídos
+
+2️⃣ Quitar todos agora
+   - Marca todos como "pagos antecipadamente"
+   - Remove parcelas futuras
+   - Histórico de parcelas já pagas é preservado
+
+3️⃣ Cancelar mudança
+   - Continua no Modo Crédito
+   - Nada é alterado
+
+Responda 1, 2 ou 3`,
+    mode_switched_keep: 'Modo alterado. Parcelamentos ativos continuam.',
+    mode_switched_payoff: (count: number) => `Modo alterado. ${count} parcelamentos marcados como quitados.`,
+    mode_switched_success: 'Modo alterado com sucesso!',
+    mode_switch_cancelled: 'Mudança de modo cancelada.',
+    invalid_switch_option: 'Por favor, responda 1, 2 ou 3.'
+  }
 }
 
 export const formatCurrency = (value: number): string => {

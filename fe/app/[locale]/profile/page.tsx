@@ -2,6 +2,7 @@ import { ProfileSettingsCard } from "@/components/profile-settings-card"
 import { WhatsAppNumbersCard } from "@/components/whatsapp-numbers-card"
 import { AuthorizedGroupsCard } from "@/components/authorized-groups-card"
 import { AccountSettingsSection } from "@/components/profile/account-settings-section"
+import { CreditCardSettingsWrapper } from "@/components/settings/credit-card-settings-wrapper"
 import { UserMenu } from "@/components/user-menu"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { ArrowLeftIcon } from "lucide-react"
@@ -39,6 +40,10 @@ export default async function ProfilePage() {
 
         <div className="mt-6">
           <AuthorizedGroupsCard />
+        </div>
+
+        <div className="mt-6">
+          <CreditCardSettingsWrapper />
         </div>
 
         <div className="mt-8">

@@ -1,0 +1,312 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>3</storyId>
+    <title>Credit Mode vs Simple Mode Selection (WhatsApp)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-02</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/1-3-credit-mode-vs-simple-mode-selection-whatsapp.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>WhatsApp user adding my first credit card transaction</asA>
+    <iWant>to receive a clear explanation of Credit Mode vs Simple Mode and choose my preference</iWant>
+    <soThat>I can track my credit card expenses in a way that matches my financial habits</soThat>
+    <tasks>
+- Task 1: Create mode selection handler (AC: 3.1, 3.2, 3.3, 3.4)
+  - Create handlers/credit-card/mode-selection.ts
+  - Implement handleModeSelection() function
+  - Check conversation state for pending transaction context
+  - Parse user response (1/2, crédito/credit, simples/simple)
+  - Update payment_methods.credit_mode in database
+  - Confirm pending transaction from conversation state
+  - Send confirmation message based on chosen mode
+  - Clear conversation state after successful selection
+  - Handle invalid input with retry logic (max 3 attempts)
+
+- Task 2: Add localization keys (pt-BR) (AC: 3.1, 3.2, 3.3, 3.4, 3.6)
+  - Update whatsapp-bot/src/localization/pt-br.ts
+  - Add credit_mode.selection_prompt with full explanation
+  - Add credit_mode.confirmation_credit success message
+  - Add credit_mode.confirmation_simple success message
+  - Add credit_mode.invalid_input clarification message
+  - Review with native speaker for natural language
+
+- Task 3: Add localization keys (en) (AC: 3.1, 3.2, 3.3, 3.7)
+  - Update whatsapp-bot/src/localization/en.ts
+  - Add credit_mode.selection_prompt with full explanation
+  - Add credit_mode.confirmation_credit success message
+  - Add credit_mode.confirmation_simple success message
+  - Add credit_mode.invalid_input clarification message
+
+- Task 4: Integrate with transaction handler (AC: 3.1)
+  - Update handlers/transactions/expenses.ts (or transactions.ts)
+  - After detecting needsCreditModeSelection() = true
+  - Store pending transaction in conversation state (use Story 1.2 utility)
+  - Trigger mode selection prompt instead of confirming transaction
+  - Set conversation state: mode_selection_pending
+
+- Task 5: Implement transaction confirmation logic (AC: 3.2, 3.3)
+  - Retrieve pending transaction context from conversation state
+  - Create transaction in database with all original details
+  - Link transaction to payment method with newly set mode
+  - Handle database errors gracefully (show user-friendly message)
+  - Verify transaction was created successfully
+
+- Task 6: Add PostHog analytics tracking (AC: 3.2, 3.3)
+  - Import PostHog client (verify existing integration)
+  - Track credit_mode_selected event on successful mode set
+  - Include event properties: userId, paymentMethodId, mode, channel='whatsapp'
+  - Ensure analytics does not block user flow (fire-and-forget)
+
+- Task 7: Write unit tests (AC: all)
+  - Test mode selection handler with valid inputs (1, 2, "crédito", "simple")
+  - Test invalid input handling and retry logic
+  - Test conversation state retrieval and clearing
+  - Test database update for both Credit and Simple modes
+  - Test transaction confirmation from pending state
+  - Test localization message selection based on locale
+  - Test PostHog event tracking (mock)
+  - Target: 85% coverage
+
+- Task 8: Write integration tests (AC: 3.2, 3.3, 3.5)
+  - End-to-end test: Add transaction → mode prompt → select Credit → transaction confirmed
+  - End-to-end test: Add transaction → mode prompt → select Simple → transaction confirmed
+  - Test conversation state timeout (10 minutes)
+  - Test retry logic with invalid inputs
+  - Verify database state after each scenario
+
+- Task 9: Manual testing (WhatsApp) (AC: all)
+  - Test with real WhatsApp account (pt-BR locale)
+  - Test with real WhatsApp account (en locale)
+  - Verify message formatting and emojis render correctly
+  - Test all input variations (1, 2, "crédito", "simples", invalid)
+  - Verify transaction appears in web dashboard after confirmation
+  - Test timeout scenario (wait 10+ minutes without responding)</tasks>
+  </story>
+
+  <acceptanceCriteria>
+AC3.1: Mode Selection Prompt Message
+- When needsCreditModeSelection() returns true for a credit card
+- WhatsApp message sent with localized explanation (pt-BR or en based on user locale)
+- Message includes both mode options with emoji indicators (1️⃣ and 2️⃣)
+- Credit Mode described with benefits: installments, budgets, statement reminders
+- Simple Mode described with benefits: treat as debit, no credit features
+- Clear call-to-action: "Responda 1 ou 2" / "Reply 1 or 2"
+- Message follows awareness-first tone (not prescriptive)
+
+AC3.2: Credit Mode Selection (Option 1)
+- When user responds "1" or text containing "crédito"/"credit"
+- payment_methods.credit_mode set to TRUE
+- Pending transaction from conversation state is confirmed
+- Transaction written to database
+- Confirmation message sent: "✅ Modo Crédito ativado!"
+- PostHog event credit_mode_selected tracked with properties: userId, paymentMethodId, mode='credit', channel='whatsapp'
+- Conversation state cleared
+
+AC3.3: Simple Mode Selection (Option 2)
+- When user responds "2" or text containing "simples"/"simple"
+- payment_methods.credit_mode set to FALSE
+- Pending transaction from conversation state is confirmed
+- Transaction written to database
+- Confirmation message sent: "✅ Modo Simples ativado!"
+- PostHog event credit_mode_selected tracked with properties: userId, paymentMethodId, mode='simple', channel='whatsapp'
+- Conversation state cleared
+
+AC3.4: Invalid Input Handling
+- When user responds with unrecognized text (e.g., "yes", "maybe", random text)
+- Clarification prompt sent: "Por favor, responda 1 para Modo Crédito ou 2 para Modo Simples"
+- Conversation state preserved (not cleared)
+- User can retry with valid input
+- Maximum 3 retry attempts before timeout
+
+AC3.5: Conversation State Timeout
+- When 10 minutes elapse without user response
+- Conversation state automatically cleared (TTL from Story 1.2)
+- Next transaction from user triggers fresh mode selection prompt
+- No orphaned pending transactions
+
+AC3.6: Portuguese Localization (pt-BR)
+- Mode selection message in Brazilian Portuguese
+- Proper grammar and natural language (not direct translation)
+- Follows awareness-first tone from ADR-005
+- Tested with native Portuguese speaker for clarity
+
+AC3.7: English Localization (en)
+- Mode selection message in English
+- Natural, conversational tone
+- Follows awareness-first tone from ADR-005
+- Clear and concise explanations
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>AC3: Credit Mode Selection (WhatsApp)</section>
+        <snippet>Lines 1198-1242 define mode selection flow for WhatsApp: User receives prompt with Credit/Simple Mode options, responds 1 or 2, system updates payment_methods.credit_mode and tracks analytics event.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>WhatsApp Bot Handler APIs</section>
+        <snippet>Lines 514-573 provide handleModeSelection() API interface with conversational state management, choice parsing (1/2, crédito/credit, simples/simple), database update, and analytics tracking.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>Localization Dependencies</section>
+        <snippet>Lines 1109-1125 define Portuguese and English message templates for mode selection prompt, confirmation messages, and invalid input handling.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>Workflow 1: First Credit Card Transaction (WhatsApp)</section>
+        <snippet>Lines 647-688 show complete mode selection workflow: Transaction Handler detects credit_mode IS NULL → Store pending tx → Send prompt → Parse choice → Update DB → Confirm transaction → Track analytics.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/1-2-first-credit-card-transaction-detection.md</path>
+        <title>Story 1.2: First Credit Card Transaction Detection</title>
+        <section>Implementation Details</section>
+        <snippet>Completed story providing needsCreditModeSelection() utility and pending transaction state management. Conversation state uses 10-minute TTL with auto-cleanup.</snippet>
+      </doc>
+      <doc>
+        <path>CLAUDE.md</path>
+        <title>Project Instructions</title>
+        <section>WhatsApp Bot Message Flow</section>
+        <snippet>Multi-identifier user system (JID/LID/phone), authorization cascade, intent parsing with AI-first approach (GPT-4o-mini), localization system (pt-BR/en).</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>whatsapp-bot/src/utils/credit-mode-detection.ts</path>
+        <kind>utility</kind>
+        <symbol>needsCreditModeSelection()</symbol>
+        <lines>1-77</lines>
+        <reason>Completed detection utility from Story 1.2 - checks if payment method type='credit' AND credit_mode IS NULL. Returns boolean, includes performance logging, graceful error handling.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/conversation/pending-transaction-state.ts</path>
+        <kind>service</kind>
+        <symbol>storePendingTransactionContext(), getPendingTransactionContext(), clearPendingTransactionContext()</symbol>
+        <lines>1-142</lines>
+        <reason>Completed conversation state management from Story 1.2 - stores transaction context during mode selection, 10-minute TTL with auto-cleanup, in-memory storage with PendingTransactionContext interface.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>messages</symbol>
+        <lines>1-50</lines>
+        <reason>Existing Portuguese localization file - need to add credit_mode section with selection_prompt, confirmation_credit, confirmation_simple, invalid_input keys.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>messages</symbol>
+        <lines>N/A</lines>
+        <reason>Existing English localization file (parallel to pt-br.ts) - need to add same credit_mode section for English messages.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/handlers/transactions/expenses.ts</path>
+        <kind>handler</kind>
+        <symbol>handleExpense()</symbol>
+        <lines>N/A</lines>
+        <reason>Existing expense transaction handler - need to integrate needsCreditModeSelection() check and trigger mode selection prompt instead of confirming transaction when detection returns true.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/actions/transactions.ts</path>
+        <kind>action</kind>
+        <symbol>createTransaction()</symbol>
+        <lines>N/A</lines>
+        <reason>Existing server action for creating transactions on web - has TODO comments for credit mode detection integration (Story 1.2 created frontend detection utility).</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <node>
+        <package name="@supabase/supabase-js" version="^2.39.3" />
+        <package name="posthog-node" version="^5.11.2" />
+        <package name="@whiskeysockets/baileys" version="^6.7.9" />
+        <package name="date-fns" version="^4.1.0" />
+        <package name="dotenv" version="^16.3.1" />
+      </node>
+      <testing>
+        <package name="jest" version="^29.7.0" />
+        <package name="ts-jest" version="^29.1.1" />
+        <package name="@types/jest" version="^29.5.8" />
+      </testing>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use existing needsCreditModeSelection() utility from whatsapp-bot/src/utils/credit-mode-detection.ts - DO NOT recreate</constraint>
+    <constraint>Use existing pending transaction state management from whatsapp-bot/src/services/conversation/pending-transaction-state.ts</constraint>
+    <constraint>Follow awareness-first tone per ADR-005 - present both options neutrally, no prescriptive language</constraint>
+    <constraint>Localization must support pt-BR and en with natural, conversational language (not direct translation)</constraint>
+    <constraint>Handle invalid input with max 3 retry attempts before timeout</constraint>
+    <constraint>Conversation state has 10-minute TTL with automatic cleanup - no orphaned pending transactions</constraint>
+    <constraint>Analytics tracking via PostHog must be fire-and-forget (non-blocking)</constraint>
+    <constraint>All user-facing messages must use emoji indicators (1️⃣ and 2️⃣) for clarity</constraint>
+    <constraint>Transaction confirmation only happens AFTER mode selection - pending transaction pattern required</constraint>
+    <constraint>Database update must check credit_mode IS NULL before setting (safety check)</constraint>
+    <constraint>Target response time: < 1 second from user response to confirmation message</constraint>
+    <constraint>Unit test coverage target: 85% for mode selection handler</constraint>
+    <constraint>Integration tests must cover full flow: Add transaction → mode prompt → select mode → transaction confirmed</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>handleModeSelection()</name>
+      <kind>WhatsApp handler function</kind>
+      <signature>async function handleModeSelection(message: string, userId: string, paymentMethodId: string, locale: string): Promise&lt;WhatsAppMessage&gt;</signature>
+      <path>whatsapp-bot/src/handlers/credit-card/mode-selection.ts (NEW)</path>
+      <description>Main handler for mode selection conversational flow. Checks conversation state, sends prompt on first call, parses user choice (1/2 or text), updates database, tracks analytics, returns confirmation message.</description>
+    </interface>
+    <interface>
+      <name>PendingTransactionContext</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface PendingTransactionContext { type: 'pending_transaction', paymentMethodId: string, amount: number, categoryId?: string, description?: string, date: string, locale: 'pt-BR' | 'en', transactionType: 'expense' | 'income', createdAt: string }</signature>
+      <path>whatsapp-bot/src/services/conversation/pending-transaction-state.ts</path>
+      <description>Existing interface from Story 1.2 - defines structure for storing transaction details during mode selection.</description>
+    </interface>
+    <interface>
+      <name>payment_methods.credit_mode</name>
+      <kind>Database column</kind>
+      <signature>BOOLEAN DEFAULT NULL</signature>
+      <path>Database migration 034_credit_card_management.sql</path>
+      <description>Database field to store user's mode choice. NULL = not chosen, TRUE = Credit Mode, FALSE = Simple Mode. Only applies to type='credit' payment methods.</description>
+    </interface>
+    <interface>
+      <name>PostHog.capture()</name>
+      <kind>Analytics API</kind>
+      <signature>posthog.capture(event: string, properties: { userId: string, paymentMethodId: string, mode: 'credit' | 'simple', channel: 'whatsapp' })</signature>
+      <path>posthog-node package</path>
+      <description>Track credit_mode_selected event when user makes choice. Fire-and-forget, must not block user flow.</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>WhatsApp bot uses Jest test framework with ts-jest for TypeScript support. Unit tests in __tests__/ directories alongside source files. Integration tests use isolated database for end-to-end scenarios. Coverage target: 85% for handlers, 90% for critical paths. Test files follow pattern: *.test.ts. Mock Supabase client and PostHog for unit tests. Use test utilities from Story 1.2 for conversation state setup.</standards>
+    <locations>whatsapp-bot/src/__tests__/handlers/credit-card/mode-selection.test.ts (NEW), whatsapp-bot/src/__tests__/utils/credit-mode-detection.test.ts (EXISTS from Story 1.2), whatsapp-bot/src/__tests__/services/conversation/pending-transaction-state.test.ts (EXISTS from Story 1.2)</locations>
+    <ideas>
+      <test ac="3.1">Test mode selection prompt message generation - verify Portuguese and English messages contain correct emoji indicators, mode descriptions, and call-to-action</test>
+      <test ac="3.2">Test Credit Mode selection - user responds "1" → credit_mode set to TRUE, transaction confirmed, confirmation message sent, PostHog event tracked</test>
+      <test ac="3.3">Test Simple Mode selection - user responds "2" → credit_mode set to FALSE, transaction confirmed, confirmation message sent, PostHog event tracked</test>
+      <test ac="3.2">Test alternate Credit Mode inputs - "crédito", "credit", "Modo Crédito" all recognized and trigger credit_mode=TRUE</test>
+      <test ac="3.3">Test alternate Simple Mode inputs - "simples", "simple", "Modo Simples" all recognized and trigger credit_mode=FALSE</test>
+      <test ac="3.4">Test invalid input handling - responses like "yes", "maybe", "não sei" trigger clarification prompt, conversation state preserved</test>
+      <test ac="3.4">Test retry logic - max 3 invalid attempts before timeout/state cleared</test>
+      <test ac="3.5">Test conversation state timeout - mock 10+ minutes elapsed, verify state cleared and next transaction triggers fresh prompt</test>
+      <test ac="3.1">Test pending transaction retrieval - verify transaction context stored during prompt and retrieved during confirmation</test>
+      <test ac="3.2, 3.3">Test transaction confirmation - verify transaction created in database with all original details (amount, category, description, date)</test>
+      <test ac="3.6">Test Portuguese localization - verify natural Brazilian Portuguese grammar and tone</test>
+      <test ac="3.7">Test English localization - verify natural conversational English tone</test>
+      <test ac="3.2, 3.3">Test analytics tracking - verify PostHog event includes all required properties and does not block user flow (fire-and-forget)</test>
+      <test ac="3.2, 3.3">Test database safety check - verify UPDATE only executes when credit_mode IS NULL (prevents overwriting existing choice)</test>
+      <test>Integration test: Full flow from expense message → mode prompt → choice → transaction confirmed → state cleared</test>
+      <test>Integration test: Verify mode selection works for both expense and income transactions</test>
+      <test>Performance test: Measure total flow time from user response to confirmation < 1 second</test>
+    </ideas>
+  </tests>
+</story-context>

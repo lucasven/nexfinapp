@@ -9,6 +9,8 @@ import { handleLogin } from '../auth/auth.js'
 import { messages } from '../../localization/pt-br.js'
 import { hasPendingTransaction, handleDuplicateConfirmation, isDuplicateReply, extractDuplicateIdFromQuote } from '../transactions/duplicate-confirmation.js'
 import { hasPendingOcrTransactions, handleOcrConfirmation, handleOcrCancel, handleOcrEdit, applyOcrEdit } from '../transactions/ocr-confirmation.js'
+import { hasPendingTransactionContext } from '../../services/conversation/pending-transaction-state.js'
+import { handleModeSelection } from '../credit-card/mode-selection.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
 import type { UserIdentifiers } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
@@ -125,6 +127,33 @@ export async function handleTextMessage(
           // Unknown response - show help
           result = messages.ocrConfirmationPrompt
         }
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+
+      // Check for credit mode selection (Story 1.3)
+      if (hasPendingTransactionContext(whatsappNumber)) {
+        strategy = 'credit_mode_selection'
+        logger.info('User has pending credit mode selection', { whatsappNumber, message })
+
+        // Get user session for mode selection
+        session = await getOrCreateSession(whatsappNumber)
+
+        if (!session) {
+          logger.warn('Failed to get session for mode selection', { whatsappNumber })
+          return messages.notAuthenticated
+        }
+
+        const result = await handleModeSelection(message, whatsappNumber, session.userId)
 
         await recordParsingMetric({
           whatsappNumber,

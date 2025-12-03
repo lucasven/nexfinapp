@@ -20,6 +20,32 @@ jest.mock('../../../handlers/transactions/duplicate-confirmation', () => ({
   storePendingTransaction: jest.fn()
 }))
 
+jest.mock('../../../services/category-matcher', () => ({
+  findCategoryWithFallback: jest.fn()
+}))
+
+// Mock payment method and credit card modules
+jest.mock('../../../utils/payment-method-helper', () => ({
+  findOrCreatePaymentMethod: jest.fn().mockResolvedValue(null),
+  detectPaymentMethodType: jest.fn().mockReturnValue('card')
+}))
+
+jest.mock('../../../utils/credit-mode-detection', () => ({
+  needsCreditModeSelection: jest.fn().mockResolvedValue(false)
+}))
+
+jest.mock('../../../services/conversation/pending-transaction-state', () => ({
+  storePendingTransactionContext: jest.fn()
+}))
+
+jest.mock('../../../handlers/credit-card/mode-selection', () => ({
+  sendModeSelectionPrompt: jest.fn()
+}))
+
+jest.mock('../../../localization/i18n', () => ({
+  getUserLocale: jest.fn().mockResolvedValue('pt-br')
+}))
+
 jest.mock('../../../localization/pt-br', () => ({
   messages: {
     notAuthenticated: 'Usuário não autenticado',
@@ -40,6 +66,7 @@ jest.mock('../../../localization/pt-br', () => ({
 import { getUserSession } from '../../../auth/session-manager'
 import { checkForDuplicate } from '../../../services/detection/duplicate-detector'
 import { storePendingTransaction } from '../../../handlers/transactions/duplicate-confirmation'
+import { findCategoryWithFallback } from '../../../services/category-matcher'
 
 describe('Expenses Handler', () => {
   beforeEach(() => {
@@ -79,11 +106,16 @@ describe('Expenses Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
       jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'comida',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
 
-      // Use mockQuerySequence for multiple from() calls
+      // Mock transaction insertion
       mockQuerySequence([
-        { data: [{ id: 'cat-123', name: 'comida' }], error: null }, // category lookup
-        { 
+        {
           data: {
             id: 'tx-123',
             amount: 50,
@@ -91,13 +123,13 @@ describe('Expenses Handler', () => {
             date: '2024-01-01'
           },
           error: null
-        } // transaction insertion
+        }
       ])
 
       const intent = createMockParsedIntent({
         action: 'add_expense',
-        entities: { 
-          amount: 50, 
+        entities: {
+          amount: 50,
           category: 'comida',
           description: 'Almoço',
           paymentMethod: 'cartão'
@@ -115,11 +147,16 @@ describe('Expenses Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
       jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'salário',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
 
-      // Use mockQuerySequence for multiple from() calls
+      // Mock transaction insertion
       mockQuerySequence([
-        { data: [{ id: 'cat-123', name: 'salário' }], error: null }, // category lookup
-        { 
+        {
           data: {
             id: 'tx-123',
             amount: 1000,
@@ -127,13 +164,13 @@ describe('Expenses Handler', () => {
             date: '2024-01-01'
           },
           error: null
-        } // transaction insertion
+        }
       ])
 
       const intent = createMockParsedIntent({
         action: 'add_income',
-        entities: { 
-          amount: 1000, 
+        entities: {
+          amount: 1000,
           category: 'salário',
           type: 'income'
         }
@@ -148,12 +185,16 @@ describe('Expenses Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
       jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'default-cat',
+        name: 'Other Expense',
+        confidence: 0.5,
+        matchType: 'fallback'
+      })
 
-      // Use mockQuerySequence for multiple from() calls
+      // Mock transaction insertion
       mockQuerySequence([
-        { data: [], error: null }, // category lookup returns empty
-        { data: { id: 'default-cat' }, error: null }, // default category lookup
-        { 
+        {
           data: {
             id: 'tx-123',
             amount: 50,
@@ -161,13 +202,13 @@ describe('Expenses Handler', () => {
             date: '2024-01-01'
           },
           error: null
-        } // transaction insertion
+        }
       ])
 
       const intent = createMockParsedIntent({
         action: 'add_expense',
-        entities: { 
-          amount: 50, 
+        entities: {
+          amount: 50,
           category: 'unknown-category'
         }
       })
@@ -180,8 +221,14 @@ describe('Expenses Handler', () => {
     it('should block high confidence duplicates', async () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
-      jest.mocked(checkForDuplicate).mockResolvedValue({ 
-        isDuplicate: true, 
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'comida',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
+      jest.mocked(checkForDuplicate).mockResolvedValue({
+        isDuplicate: true,
         confidence: 0.96,
         reason: 'Transação muito similar encontrada'
       })
@@ -199,6 +246,12 @@ describe('Expenses Handler', () => {
     it('should warn about medium confidence duplicates', async () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'comida',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
       jest.mocked(checkForDuplicate).mockResolvedValue({
         isDuplicate: true,
         confidence: 0.8,
@@ -229,11 +282,12 @@ describe('Expenses Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
       jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
-
-      // Use mockQuerySequence for multiple from() calls
-      mockQuerySequence([
-        { data: [{ id: 'cat-123', name: 'comida' }], error: null } // category lookup
-      ])
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'comida',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
 
       // Mock transaction ID generation error
       mockSupabaseClient.rpc.mockResolvedValue({
@@ -255,11 +309,16 @@ describe('Expenses Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
       jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'comida',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
 
-      // Use mockQuerySequence for multiple from() calls
+      // Mock transaction insertion error
       mockQuerySequence([
-        { data: [{ id: 'cat-123', name: 'comida' }], error: null }, // category lookup
-        { data: null, error: new Error('Insert error') } // transaction insertion error
+        { data: null, error: new Error('Insert error') }
       ])
 
       const intent = createMockParsedIntent({
@@ -367,6 +426,127 @@ describe('Expenses Handler', () => {
 
       expect(result).toContain('💸 -R$ 50')
       expect(result).toContain('Sem categoria -')
+    })
+  })
+
+  // Story 1.6: Simple Mode Backward Compatibility Tests
+  describe('Simple Mode Transaction Flow', () => {
+    it('should create transaction without installment prompts when credit_mode=false', async () => {
+      const session = createMockUserSession()
+      jest.mocked(getUserSession).mockResolvedValue(session)
+      jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'comida',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
+
+      // Mock payment method helper to return Simple Mode credit card
+      const { findOrCreatePaymentMethod } = await import('../../../utils/payment-method-helper')
+      jest.mocked(findOrCreatePaymentMethod).mockResolvedValue({
+        id: 'pm-123',
+        name: 'Nubank',
+        type: 'credit',
+        credit_mode: false, // Simple Mode
+        user_id: session.userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+      // Mock credit mode detection to return false (mode already set)
+      const { needsCreditModeSelection } = await import('../../../utils/credit-mode-detection')
+      jest.mocked(needsCreditModeSelection).mockResolvedValue(false)
+
+      // Mock transaction insertion
+      mockQuerySequence([
+        {
+          data: {
+            id: 'tx-123',
+            amount: 150,
+            category: { name: 'comida' },
+            date: '2024-01-01'
+          },
+          error: null
+        }
+      ])
+
+      const intent = createMockParsedIntent({
+        action: 'add_expense',
+        entities: {
+          amount: 150,
+          category: 'comida',
+          paymentMethod: 'Nubank'
+        }
+      })
+
+      const result = await handleAddExpense('+5511999999999', intent)
+
+      // Should complete successfully without installment prompts
+      expect(result).toContain('Despesa adicionada: R$ 150 em comida')
+      expect(result).toContain('💳 Método: Nubank')
+      expect(result).not.toContain('parcela') // No installment mentions
+      expect(result).not.toContain('installment')
+
+      // Verify needsCreditModeSelection was called
+      expect(needsCreditModeSelection).toHaveBeenCalledWith('pm-123')
+    })
+
+    it('should handle Simple Mode credit card same as debit card', async () => {
+      const session = createMockUserSession()
+      jest.mocked(getUserSession).mockResolvedValue(session)
+      jest.mocked(checkForDuplicate).mockResolvedValue({ isDuplicate: false, confidence: 0 })
+      jest.mocked(findCategoryWithFallback).mockResolvedValue({
+        id: 'cat-123',
+        name: 'transporte',
+        confidence: 1.0,
+        matchType: 'exact'
+      })
+
+      // Mock Simple Mode credit card
+      const { findOrCreatePaymentMethod } = await import('../../../utils/payment-method-helper')
+      jest.mocked(findOrCreatePaymentMethod).mockResolvedValue({
+        id: 'pm-simple',
+        name: 'Cartão Simples',
+        type: 'credit',
+        credit_mode: false,
+        user_id: session.userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+      const { needsCreditModeSelection } = await import('../../../utils/credit-mode-detection')
+      jest.mocked(needsCreditModeSelection).mockResolvedValue(false)
+
+      mockQuerySequence([
+        {
+          data: {
+            id: 'tx-simple',
+            amount: 50,
+            category: { name: 'transporte' },
+            date: '2024-01-01'
+          },
+          error: null
+        }
+      ])
+
+      const intent = createMockParsedIntent({
+        action: 'add_expense',
+        entities: {
+          amount: 50,
+          category: 'transporte',
+          paymentMethod: 'Cartão Simples'
+        }
+      })
+
+      const result = await handleAddExpense('+5511999999999', intent)
+
+      // Response should be identical to debit card transaction
+      expect(result).toContain('Despesa adicionada: R$ 50 em transporte')
+      expect(result).toContain('💳 Método: Cartão Simples')
+      // No special credit features
+      expect(result).not.toContain('fatura')
+      expect(result).not.toContain('statement')
     })
   })
 })

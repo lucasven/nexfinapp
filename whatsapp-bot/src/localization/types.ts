@@ -206,6 +206,14 @@ export interface Messages {
   engagementDestinationSwitchedToIndividual: string
   engagementDestinationSwitchFailed: string
   engagementDestinationNeedGroupFirst: string
+
+  // Credit Mode Selection (Story 1.3)
+  credit_mode: {
+    selection_prompt: string
+    confirmation_credit: string
+    confirmation_simple: string
+    invalid_input: string
+  }
 }
 
 export interface FormatHelpers {

@@ -430,7 +430,54 @@ To pause again, send: *stop reminders*`,
   engagementDestinationSwitchedToGroup: "Done! I'll now send messages in the group.",
   engagementDestinationSwitchedToIndividual: "Done! I'll now send messages privately.",
   engagementDestinationSwitchFailed: "Couldn't change preference. Try again?",
-  engagementDestinationNeedGroupFirst: 'To receive messages in a group, send a message in the group first.'
+  engagementDestinationNeedGroupFirst: 'To receive messages in a group, send a message in the group first.',
+
+  // Credit Mode Selection (Story 1.3)
+  credit_mode: {
+    selection_prompt: `How would you like to track this card?
+
+1️⃣ Credit Mode
+- Track installments (3x, 12x, etc)
+- Personal monthly budget
+- Statement closing reminders
+- Ideal for installment purchases
+
+2️⃣ Simple Mode
+- Treat as debit
+- No credit card features
+- Ideal for paying in full
+
+Reply 1 or 2`,
+    confirmation_credit: '✅ Credit Mode enabled! You can now add installments and track your statement.',
+    confirmation_simple: '✅ Simple Mode enabled! This card will be treated like debit.',
+    invalid_input: 'Please reply 1 for Credit Mode or 2 for Simple Mode.',
+
+    // Mode Switching (Story 1.5)
+    switch_warning: (count: number) => `⚠️ Warning: Mode Change
+
+You have ${count} active installment(s). What do you want to do?
+
+1️⃣ Keep installments active
+   - Future installments continue appearing
+   - You can switch back to Credit Mode later
+   - Installments will not be deleted
+
+2️⃣ Pay off all now
+   - Marks all as "paid off early"
+   - Removes future installments
+   - History of paid installments is preserved
+
+3️⃣ Cancel change
+   - Stay in Credit Mode
+   - Nothing is changed
+
+Reply 1, 2, or 3`,
+    mode_switched_keep: 'Mode changed. Active installments will continue.',
+    mode_switched_payoff: (count: number) => `Mode changed. ${count} installments marked as paid off.`,
+    mode_switched_success: 'Mode changed successfully!',
+    mode_switch_cancelled: 'Mode change cancelled.',
+    invalid_switch_option: 'Please reply 1, 2, or 3.'
+  }
 }
 
 export const formatCurrency = (value: number): string => {

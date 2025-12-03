@@ -97,6 +97,11 @@ export enum AnalyticsEvent {
 
   // Engagement Preference Events
   ENGAGEMENT_PREFERENCE_CHANGED = 'engagement_preference_changed',
+
+  // Credit Card Management Events
+  CREDIT_MODE_SELECTED = 'credit_mode_selected',
+  CREDIT_MODE_SWITCHED = 'credit_mode_switched',
+  MODE_SWITCH_CANCELLED = 'mode_switch_cancelled',
 }
 
 /**
@@ -153,6 +158,12 @@ export enum AnalyticsProperty {
   ONBOARDING_DURATION_MS = 'onboarding_duration_ms',
   ONBOARDING_SKIP_REASON = 'onboarding_skip_reason',
   WHATSAPP_SETUP_METHOD = 'whatsapp_setup_method',
+
+  // Credit Card Management properties
+  PAYMENT_METHOD_ID = 'payment_method_id',
+  PAYMENT_METHOD_MODE = 'payment_method_mode',
+  MODE = 'mode',
+  CHANNEL = 'channel',
 }
 
 /**

@@ -27,6 +27,10 @@ import { trackEvent } from '@/lib/analytics/tracker'
 import { AnalyticsEvent } from '@/lib/analytics/events'
 import { advanceOnboardingStep } from "@/lib/actions/onboarding"
 import type { OnboardingStep } from "@/hooks/use-onboarding"
+// Story 1-4: Credit Mode Selection (Web Frontend)
+// TODO: Import and integrate when payment_method is refactored to payment_method_id
+// import { needsCreditModeSelection } from "@/lib/utils/credit-mode-detection"
+// import { CreditModeSelectionDialog } from "@/components/transactions/credit-mode-selection-dialog"
 
 interface TransactionDialogProps {
   categories: Category[]
@@ -67,6 +71,21 @@ export function TransactionDialog({ categories, transaction, trigger, currentSte
         ...formData,
         amount: Number.parseFloat(formData.amount),
       }
+
+      // Story 1-4: Credit Mode Selection Integration Point
+      // Story 1-6: Simple Mode Backward Compatibility (AC6.1, AC6.7)
+      // TODO: When payment_method field is refactored to payment_method_id UUID:
+      // 1. Check: const needsMode = await needsCreditModeSelection(formData.payment_method_id)
+      // 2. If needsMode === true:
+      //    - Open CreditModeSelectionDialog (see fe/components/transactions/credit-mode-selection-dialog.tsx)
+      //    - Store formData in state during modal interaction
+      //    - On mode selected, call createTransaction(data) with original form data
+      // 3. Simple Mode check (Story 1.6 AC6.7):
+      //    - Conditionally render installment fields based on:
+      //      const showInstallmentFields = selectedPaymentMethod?.type === 'credit' && selectedPaymentMethod?.credit_mode === true
+      //    - Hide installment inputs when credit_mode === false (Simple Mode)
+      //    - No credit-specific UI elements for Simple Mode
+      // 4. Current limitation: payment_method is TEXT field, needs migration to payment_method_id UUID
 
       if (transaction) {
         await updateTransaction(transaction.id, data)

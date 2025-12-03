@@ -1,0 +1,363 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>2</storyId>
+    <title>First Credit Card Transaction Detection</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-02</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/1-2-first-credit-card-transaction-detection.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>a user adding my first credit card transaction</asA>
+    <iWant>the system to detect that I haven't chosen a credit card mode yet</iWant>
+    <soThat>I can be prompted to select between Credit Mode and Simple Mode before my transaction is confirmed</soThat>
+    <tasks>
+- [ ] **Task 1: Implement detection utility (shared)** (AC: 2.1)
+  - [ ] Create `utils/credit-mode-detection.ts` in whatsapp-bot
+  - [ ] Implement `needsCreditModeSelection(paymentMethodId)` function
+  - [ ] Add Supabase query with proper type checking
+  - [ ] Include performance logging for query time measurement
+  - [ ] Write unit tests covering all detection scenarios
+
+- [ ] **Task 2: Integrate detection in transaction handler (WhatsApp)** (AC: 2.1, 2.3)
+  - [ ] Update `handlers/transactions/transactions.ts`
+  - [ ] Call `needsCreditModeSelection()` after payment method identified
+  - [ ] Branch logic: if true → trigger mode selection flow
+  - [ ] Store transaction context in conversation state
+  - [ ] Defer transaction creation until mode selected
+
+- [ ] **Task 3: Integrate detection in transaction form (Web)** (AC: 2.1, 2.2)
+  - [ ] Update transaction form submission handler
+  - [ ] Call `needsCreditModeSelection()` on form submit
+  - [ ] If true → open mode selection modal, prevent database write
+  - [ ] Store form data in React state (preserves values if user cancels)
+  - [ ] Complete transaction after mode selection callback
+
+- [ ] **Task 4: Implement conversation state management (WhatsApp)** (AC: 2.3)
+  - [ ] Create state schema for pending transaction context
+  - [ ] Store: amount, category_id, description, date, payment_method_id, locale
+  - [ ] Use existing conversation state system (if available) or create new
+  - [ ] Clear state after mode selection or user cancels
+
+- [ ] **Task 5: Test multi-card scenarios** (AC: 2.5)
+  - [ ] Integration test: User with 2 cards (one mode set, one not)
+  - [ ] Test Card A transaction → no prompt
+  - [ ] Test Card B transaction → prompt appears
+  - [ ] Verify mode selection for Card B doesn't affect Card A
+
+- [ ] **Task 6: Verify backward compatibility** (AC: 2.6)
+  - [ ] Test with payment method created before migration (credit_mode = NULL)
+  - [ ] Verify first transaction triggers mode selection
+  - [ ] Verify no automatic prompts on app load/login
+  - [ ] Test that existing Simple Mode users (pre-Epic 1) unaffected
+
+- [ ] **Task 7: Performance testing** (AC: 2.1)
+  - [ ] Measure `needsCreditModeSelection()` query time
+  - [ ] Verify < 100ms target met (run 100 iterations, calculate p95)
+  - [ ] Add performance monitoring/logging if needed
+  - [ ] Optimize query if threshold exceeded
+</tasks>
+  </story>
+
+  <acceptanceCriteria>
+**AC2.1: Detection Logic for Unset Mode**
+- Function `needsCreditModeSelection(paymentMethodId)` checks payment method
+- Returns `true` when `payment_methods.type = 'credit'` AND `credit_mode IS NULL`
+- Returns `false` when `credit_mode` is already set (TRUE or FALSE)
+- Returns `false` for non-credit payment methods (debit, cash)
+- Query executes in < 100ms (NFR from tech spec line 834)
+
+**AC2.2: Transaction Pending State (Web)**
+- When mode selection needed, transaction data saved to temporary state
+- Transaction form data preserved (amount, category, description, date)
+- Transaction NOT written to database until mode is selected
+- User can cancel and return to form with data intact
+
+**AC2.3: Transaction Pending State (WhatsApp)**
+- When mode selection needed, transaction context stored in conversation state
+- Transaction details extracted from NLP/AI parsing preserved
+- Mode selection dialog triggered immediately
+- Transaction completed after mode selection confirmed
+
+**AC2.4: No Prompt When Mode Already Set**
+- When `credit_mode = TRUE` (Credit Mode), transaction proceeds normally
+- When `credit_mode = FALSE` (Simple Mode), transaction proceeds normally
+- No mode selection prompt shown for subsequent transactions
+- Existing transaction flow unchanged
+
+**AC2.5: Multi-Card Scenario Support**
+- User with Card A (mode set) and Card B (mode not set) handled correctly
+- Mode selection prompt triggered ONLY for Card B transactions
+- Each payment method mode tracked independently
+- No cross-card interference
+
+**AC2.6: Backward Compatibility**
+- Existing credit cards (pre-migration) have `credit_mode = NULL`
+- First transaction after migration triggers mode selection
+- Users not forced to choose mode until they add a transaction
+- No automatic prompts on login or app launch
+</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>AC2: First Credit Card Transaction Detection (lines 1176-1197)</section>
+        <snippet>Detection happens when user adds first transaction using credit card with credit_mode=NULL. System triggers mode selection prompt, stores transaction as pending until mode chosen.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>Detailed Design - Key Algorithms (lines 160-179)</section>
+        <snippet>needsCreditModeSelection() queries payment_methods table filtering on type='credit' AND credit_mode IS NULL. Returns boolean indicating if prompt needed.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>Non-Functional Requirements - Performance (lines 826-849)</section>
+        <snippet>Detection query must execute in < 100ms. Mode selection dialog load < 200ms. Query indexed on primary key (payment_methods.id) for fast lookup.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: Credit Mode Foundation</title>
+        <section>Test Strategy - Integration Tests (lines 1588-1619)</section>
+        <snippet>Integration tests verify modal appears on first credit transaction (Web), transaction NOT saved until mode selected, no prompt when mode already set.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Documentation</title>
+        <section>Database Schema - payment_methods table</section>
+        <snippet>payment_methods table extended with credit_mode (BOOLEAN, default NULL), statement_closing_day, payment_due_day, monthly_budget columns. Migration 034 applied.</snippet>
+      </doc>
+      <doc>
+        <path>CLAUDE.md</path>
+        <title>Project Instructions</title>
+        <section>WhatsApp Bot Message Flow</section>
+        <snippet>Message handling includes user identification, authorization check, intent parsing (4 layers), transaction handlers. Conversation state system available for storing pending contexts.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>whatsapp-bot/src/handlers/transactions/transactions.ts</path>
+        <kind>handler</kind>
+        <symbol>handleTransactionMessage</symbol>
+        <lines>main handler</lines>
+        <reason>Primary transaction handler where credit mode detection should be integrated after payment method identification</reason>
+      </file>
+      <file>
+        <path>whatsapp-bot/src/handlers/transactions/expenses.ts</path>
+        <kind>handler</kind>
+        <symbol>handleAddExpense</symbol>
+        <lines>expense creation</lines>
+        <reason>Expense-specific handler that may need credit mode detection before database write</reason>
+      </file>
+      <file>
+        <path>fe/components/transaction-dialog.tsx</path>
+        <kind>component</kind>
+        <symbol>TransactionDialog</symbol>
+        <lines>form component</lines>
+        <reason>Web transaction form where detection should be called on submit before database write</reason>
+      </file>
+      <file>
+        <path>fe/lib/actions/transactions.ts</path>
+        <kind>server-action</kind>
+        <symbol>createTransaction</symbol>
+        <lines>server action</lines>
+        <reason>Server action that creates transactions - detection logic should be added here before database insert</reason>
+      </file>
+      <file>
+        <path>fe/scripts/034_credit_card_management.sql</path>
+        <kind>migration</kind>
+        <symbol>ALTER TABLE payment_methods</symbol>
+        <lines>1-30</lines>
+        <reason>Migration that adds credit_mode column (BOOLEAN, default NULL) required for detection query</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>@supabase/supabase-js</package>
+        <version>^2.39.3</version>
+        <reason>Database client for querying payment_methods table</reason>
+      </node>
+      <node>
+        <package>next</package>
+        <version>15.5.4</version>
+        <reason>Frontend framework with server actions pattern</reason>
+      </node>
+      <node>
+        <package>react-hook-form</package>
+        <version>^7.60.0</version>
+        <reason>Form state management for preserving transaction data during mode selection</reason>
+      </node>
+      <node>
+        <package>@radix-ui/react-dialog</package>
+        <version>1.1.4</version>
+        <reason>Modal dialog primitive for mode selection UI (used in Story 1.4)</reason>
+      </node>
+      <node>
+        <package>posthog-node</package>
+        <version>^5.11.2</version>
+        <reason>Analytics tracking for mode selection events</reason>
+      </node>
+      <node>
+        <package>date-fns</package>
+        <version>4.1.0</version>
+        <reason>Date manipulation for transaction timestamps</reason>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>
+      <type>Pattern</type>
+      <description>All database queries must use Supabase client methods (no raw SQL in application code)</description>
+      <source>CLAUDE.md - Database Access section</source>
+    </constraint>
+    <constraint>
+      <type>Security</type>
+      <description>Frontend uses Supabase client with RLS policies; WhatsApp bot uses service key with manual user_id checks</description>
+      <source>CLAUDE.md - Database Access section</source>
+    </constraint>
+    <constraint>
+      <type>Performance</type>
+      <description>Detection query must execute in < 100ms; indexed on primary key (payment_methods.id)</description>
+      <source>tech-spec-epic-1.md lines 826-849</source>
+    </constraint>
+    <constraint>
+      <type>Testing</type>
+      <description>Unit test coverage ≥ 70% (branches, functions, lines, statements) for WhatsApp bot code</description>
+      <source>CLAUDE.md - Testing Strategy section</source>
+    </constraint>
+    <constraint>
+      <type>Localization</type>
+      <description>All user-facing text must support pt-BR and English using next-intl (frontend) and custom localization files (WhatsApp bot)</description>
+      <source>CLAUDE.md - Localization section</source>
+    </constraint>
+    <constraint>
+      <type>Backward Compatibility</type>
+      <description>Existing credit card users must not be prompted until they add a new transaction (credit_mode defaults to NULL)</description>
+      <source>tech-spec-epic-1.md NFR32, AC2.6</source>
+    </constraint>
+    <constraint>
+      <type>State Management</type>
+      <description>WhatsApp: Use conversation state for pending transaction context. Web: Use React state to preserve form data during modal</description>
+      <source>Story 1.2 Dev Notes - State Management section</source>
+    </constraint>
+    <constraint>
+      <type>Error Handling</type>
+      <description>Graceful degradation if detection query fails (allow transaction to proceed, log error for monitoring)</description>
+      <source>Story 1.2 Dev Notes - Edge Case 3</source>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>needsCreditModeSelection</name>
+      <kind>function</kind>
+      <signature>async function needsCreditModeSelection(paymentMethodId: string): Promise&lt;boolean&gt;</signature>
+      <path>whatsapp-bot/src/utils/credit-mode-detection.ts (NEW)</path>
+      <description>Queries payment_methods table to check if credit_mode is NULL for a credit card. Returns true if mode selection prompt needed.</description>
+    </interface>
+    <interface>
+      <name>payment_methods table</name>
+      <kind>database</kind>
+      <signature>
+        id UUID PRIMARY KEY,
+        type TEXT ('credit' | 'debit' | 'cash'),
+        credit_mode BOOLEAN DEFAULT NULL,
+        statement_closing_day INTEGER,
+        payment_due_day INTEGER,
+        monthly_budget DECIMAL(10,2)
+      </signature>
+      <path>Database (migration 034)</path>
+      <description>Extended payment_methods table with credit card columns. credit_mode NULL indicates user hasn't chosen mode yet.</description>
+    </interface>
+    <interface>
+      <name>Supabase Query</name>
+      <kind>database-query</kind>
+      <signature>
+        supabase
+          .from('payment_methods')
+          .select('type, credit_mode')
+          .eq('id', paymentMethodId)
+          .single()
+      </signature>
+      <path>whatsapp-bot/src/utils/credit-mode-detection.ts</path>
+      <description>Single-row lookup query for credit mode detection. Indexed on primary key for sub-100ms performance.</description>
+    </interface>
+    <interface>
+      <name>PendingTransactionContext</name>
+      <kind>interface</kind>
+      <signature>
+        interface PendingTransactionContext {
+          type: 'pending_transaction',
+          paymentMethodId: string,
+          amount: number,
+          categoryId?: string,
+          description?: string,
+          date: string, // ISO8601
+          locale: 'pt-BR' | 'en',
+          createdAt: string
+        }
+      </signature>
+      <path>whatsapp-bot/src/types (NEW or existing conversation state types)</path>
+      <description>Schema for storing pending transaction context in WhatsApp conversation state during mode selection</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      WhatsApp Bot: Jest with ts-jest, unit tests in __tests__/ directories, mocks in __mocks__/. Coverage threshold: 70% (branches, functions, lines, statements).
+      Frontend: React Testing Library for component tests, server action tests for data mutations.
+      Integration tests verify database interactions and cross-component flows.
+      Performance tests measure query execution time (target: < 100ms for detection, p95 over 100 iterations).
+    </standards>
+    <locations>
+      whatsapp-bot/src/__tests__/utils/credit-mode-detection.test.ts (NEW)
+      whatsapp-bot/src/__tests__/handlers/transactions/transaction-detection.test.ts (NEW or extend existing transactions.test.ts)
+      fe/__tests__/lib/actions/transactions.test.ts (EXTEND)
+      fe/__tests__/components/transaction-dialog.test.tsx (EXTEND)
+    </locations>
+    <ideas>
+      <test ac="AC2.1">
+        <description>Unit test: needsCreditModeSelection() returns true for credit card with credit_mode=NULL</description>
+        <approach>Mock Supabase to return { type: 'credit', credit_mode: null }, assert function returns true</approach>
+      </test>
+      <test ac="AC2.1">
+        <description>Unit test: needsCreditModeSelection() returns false for credit card with credit_mode=true</description>
+        <approach>Mock Supabase to return { type: 'credit', credit_mode: true }, assert function returns false</approach>
+      </test>
+      <test ac="AC2.1">
+        <description>Unit test: needsCreditModeSelection() returns false for debit card</description>
+        <approach>Mock Supabase to return { type: 'debit', credit_mode: null }, assert function returns false</approach>
+      </test>
+      <test ac="AC2.1">
+        <description>Performance test: Detection query executes in < 100ms (p95)</description>
+        <approach>Run 100 iterations of needsCreditModeSelection(), measure duration, calculate p95, assert < 100ms</approach>
+      </test>
+      <test ac="AC2.2">
+        <description>Integration test: Web transaction form preserves data when modal opened</description>
+        <approach>Render form, enter transaction data, submit (trigger detection), verify form data still present after modal opens</approach>
+      </test>
+      <test ac="AC2.3">
+        <description>Integration test: WhatsApp stores transaction context in conversation state</description>
+        <approach>Send transaction message, trigger detection, verify conversation state contains pending transaction with all fields</approach>
+      </test>
+      <test ac="AC2.4">
+        <description>Integration test: No prompt when credit_mode already set</description>
+        <approach>Create payment method with credit_mode=true, submit transaction, verify no modal/prompt, transaction saved immediately</approach>
+      </test>
+      <test ac="AC2.5">
+        <description>Integration test: Multi-card scenario - prompt only for card without mode</description>
+        <approach>User with Card A (mode=true) and Card B (mode=null), transaction with Card A → no prompt, Card B → prompt appears</approach>
+      </test>
+      <test ac="AC2.6">
+        <description>Integration test: Backward compatibility - existing card (credit_mode=NULL) triggers prompt on first transaction</description>
+        <approach>Create payment method with credit_mode=NULL (simulates pre-migration card), add transaction, verify prompt triggered</approach>
+      </test>
+    </ideas>
+  </tests>
+</story-context>
