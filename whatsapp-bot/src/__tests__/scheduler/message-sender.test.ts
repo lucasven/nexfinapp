@@ -94,9 +94,17 @@ function setupSupabaseMock(data: any, error: any = null) {
         },
       }
     }
+    // Handle user_profiles query for locale lookup
     if (table === 'user_profiles') {
+      // Extract user_ids from the messages and return corresponding locales
+      const profiles = data?.map((msg: any) => ({
+        user_id: msg.user_id,
+        locale: msg.user_profiles?.locale || 'pt-BR',
+      })) || []
       return {
-        select: jest.fn().mockReturnValue(userProfilesSelectChain),
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockResolvedValue({ data: profiles, error: null }),
+        }),
       }
     }
     return {}
