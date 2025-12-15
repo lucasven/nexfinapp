@@ -27,14 +27,14 @@ export async function findOrCreatePaymentMethod(
   userId: string,
   paymentMethodName: string,
   type: 'credit' | 'debit' | 'cash' | 'pix' | 'other' = 'other'
-): Promise<{ id: string; name: string } | null> {
+): Promise<{ id: string; name: string; type: string; credit_mode: boolean | null } | null> {
   const supabase = getSupabaseClient()
 
   try {
     // First, try to find existing payment method by name
     const { data: existing, error: findError } = await supabase
       .from('payment_methods')
-      .select('id, name')
+      .select('id, name, type, credit_mode')
       .eq('user_id', userId)
       .eq('name', paymentMethodName)
       .maybeSingle()
@@ -53,7 +53,7 @@ export async function findOrCreatePaymentMethod(
         paymentMethodId: existing.id,
         name: existing.name
       })
-      return { id: existing.id, name: existing.name }
+      return { id: existing.id, name: existing.name, type: existing.type, credit_mode: existing.credit_mode }
     }
 
     // Payment method doesn't exist - create it
@@ -65,7 +65,7 @@ export async function findOrCreatePaymentMethod(
         type: type,
         credit_mode: type === 'credit' ? null : undefined // Only set credit_mode for credit cards
       })
-      .select('id, name')
+      .select('id, name, type, credit_mode')
       .single()
 
     if (createError) {
@@ -84,7 +84,7 @@ export async function findOrCreatePaymentMethod(
       type
     })
 
-    return { id: created.id, name: created.name }
+    return { id: created.id, name: created.name, type: created.type, credit_mode: created.credit_mode }
   } catch (error) {
     logger.error('Unexpected error in findOrCreatePaymentMethod', {
       userId,

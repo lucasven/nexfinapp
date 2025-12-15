@@ -3,6 +3,9 @@ import { redirect } from "next/navigation"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { getCategories, deleteCategory, checkCategoryUsage } from "@/lib/actions/categories"
 import { CategoriesClient } from "./categories-client"
+import { Header } from "@/components/header"
+import { getPaymentMethods } from "@/lib/actions/payment-methods"
+import { checkIsAdmin } from "@/lib/actions/admin"
 
 export const metadata: Metadata = {
   title: "Categories | Expense Tracker",
@@ -20,13 +23,26 @@ export default async function CategoriesPage() {
     redirect("/auth/login")
   }
 
-  const categories = await getCategories()
+  // Fetch data needed for header
+  const [allCategories, paymentMethods, isAdmin] = await Promise.all([
+    getCategories(),
+    getPaymentMethods(),
+    checkIsAdmin()
+  ])
 
   return (
     <div className="min-h-screen bg-background">
+      <Header
+        userEmail={user?.email}
+        displayName={user?.user_metadata?.display_name}
+        isAdmin={isAdmin}
+        categories={allCategories}
+        paymentMethods={paymentMethods}
+      />
+
       <div className="container mx-auto py-8 px-4">
         <CategoriesClient
-          categories={categories}
+          categories={allCategories}
           userId={user.id}
           userEmail={user.email}
           displayName={user.user_metadata?.display_name}

@@ -1,0 +1,1 @@
+../../fe/scripts/026_add_ocr_preference.sql

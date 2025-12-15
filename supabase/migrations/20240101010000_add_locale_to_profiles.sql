@@ -1,0 +1,1 @@
+../../fe/scripts/010_add_locale_to_profiles.sql

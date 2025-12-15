@@ -1,82 +1,71 @@
-import { BalanceCard } from "@/components/balance-card"
 import { TransactionList } from "@/components/transaction-list"
-import { UserMenu } from "@/components/user-menu"
-import { UpcomingRecurringWidget } from "@/components/upcoming-recurring-widget"
+import { Header } from "@/components/header"
+import { FinancialOverviewCard } from "@/components/dashboard/financial-overview-card"
+import { CommitmentsWidget } from "@/components/dashboard/commitments-widget"
+import { CollapsibleCategoryBreakdownWrapper } from "@/components/budget/collapsible-category-breakdown-wrapper"
+import { BudgetProgressWidgetsSection } from "@/components/dashboard/budget-progress-widgets-section"
 import { getBalance, getTransactions } from "@/lib/actions/transactions"
 import { getCategories } from "@/lib/actions/categories"
 import { getRecurringPayments } from "@/lib/actions/recurring"
+import { getPaymentMethods } from "@/lib/actions/payment-methods"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { checkIsAdmin } from "@/lib/actions/admin"
-import { Link } from "@/lib/localization/link"
-import { Button } from "@/components/ui/button"
-import { BarChart3Icon, RepeatIcon, TargetIcon, FolderIcon } from "lucide-react"
-import { getTranslations } from 'next-intl/server'
 import { HomeOnboardingWrapper } from "./home-client"
-import { TransactionDialogWrapper } from "./transaction-dialog-wrapper"
 
 export default async function HomePage() {
-  const t = await getTranslations()
   const supabase = await getSupabaseServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [balance, categories, transactions, recurringPayments, isAdmin] = await Promise.all([
+  const [balance, categories, transactions, paymentMethods, isAdmin] = await Promise.all([
     getBalance(),
     getCategories(),
     getTransactions(),
-    getRecurringPayments(), // Get current month's recurring payments
+    getPaymentMethods(),
     checkIsAdmin()
   ])
+
+  // Find first credit card with credit mode enabled for budget breakdown
+  const creditModeCard = paymentMethods.find(pm => pm.type === 'credit' && pm.credit_mode === true)
 
   return (
     <HomeOnboardingWrapper>
       <div className="min-h-screen bg-background">
+        <Header
+          userEmail={user?.email}
+          displayName={user?.user_metadata?.display_name}
+          isAdmin={isAdmin}
+          categories={categories}
+          paymentMethods={paymentMethods}
+        />
+
         <div className="container mx-auto py-8 px-4">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">{t('home.title')}</h1>
-              <p className="text-muted-foreground mt-1">{t('home.subtitle')}</p>
-            </div>
-            <div className="flex gap-2 items-center" data-onboarding-features>
-              <Button variant="outline" asChild>
-                <Link href="/reports">
-                  <BarChart3Icon className="h-4 w-4 mr-2" />
-                  {t('nav.reports')}
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/budgets">
-                  <TargetIcon className="h-4 w-4 mr-2" />
-                  {t('nav.budgets')}
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/categories">
-                  <FolderIcon className="h-4 w-4 mr-2" />
-                  {t('nav.categories')}
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/recurring">
-                  <RepeatIcon className="h-4 w-4 mr-2" />
-                  {t('nav.recurring')}
-                </Link>
-              </Button>
-              <div data-onboarding-add-transaction>
-                <TransactionDialogWrapper categories={categories} />
-              </div>
-              <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} isAdmin={isAdmin} />
-            </div>
-          </div>
-
           <div className="space-y-6">
-            <div className="grid gap-6">
-              <BalanceCard income={balance.income} expenses={balance.expenses} balance={balance.balance} />
-              <UpcomingRecurringWidget payments={recurringPayments} />
+            {/* 3-Column Responsive Grid: Financial Overview | Budget Widget | Commitments */}
+            <div className="grid gap-6 grid-cols-1 lg:grid-cols-[300px_1fr_500px] items-start">
+              {/* Column 1: Compact Financial Overview (300px) */}
+              <FinancialOverviewCard
+                income={balance.income}
+                expenses={balance.expenses}
+                balance={balance.balance}
+              />
+
+              {/* Column 2: Budget Progress Widgets (flexible) - Stacks vertically */}
+              <div className="space-y-4">
+                <BudgetProgressWidgetsSection userId={user?.id} />
+              </div>
+
+              {/* Column 3: Commitments Widget (500px) */}
+              <CommitmentsWidget />
             </div>
 
-            <TransactionList transactions={transactions} categories={categories} />
+            {/* Collapsible Category Breakdown: Shows top 2 in collapsed state */}
+            {creditModeCard && (
+              <CollapsibleCategoryBreakdownWrapper paymentMethodId={creditModeCard.id} />
+            )}
+
+            <TransactionList transactions={transactions} categories={categories} paymentMethods={paymentMethods} />
           </div>
         </div>
       </div>

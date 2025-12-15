@@ -1,0 +1,716 @@
+<story-context>
+  <story-id>2-4-view-all-installments-active-and-history</story-id>
+  <story-title>View All Installments (Active &amp; History)</story-title>
+  <epic-id>epic-2</epic-id>
+  <epic-title>Parcelamento Intelligence</epic-title>
+
+  <story-summary>
+    Create a dedicated installments page at /[locale]/installments showing all installment purchases with their payment progress. Users can view active installments with progress bars, see completed and cancelled installments, view detailed payment schedules, and access management actions (pay off, edit, delete).
+  </story-summary>
+
+  <context-why>
+    <problem>
+      Brazilian users commonly make installment purchases (parcelamentos), but traditional expense trackers don't provide a comprehensive view of all installment plans across credit cards. Users need to:
+      - See which installments are still active vs completed/cancelled
+      - Track payment progress for each installment (e.g., "3/12 paid")
+      - View upcoming payment commitments and remaining amounts
+      - Manage their installments (view details, pay off early, edit, delete)
+      - Access historical data for financial record-keeping
+    </problem>
+
+    <user-need>
+      Users need a central place to see all their installment purchases, similar to how credit card apps show "parcelamentos ativos," but with better visualization and management capabilities. The page provides financial awareness and control over long-term payment commitments.
+    </user-need>
+
+    <epic-context>
+      This is Story 2.4 of Epic 2 (Parcelamento Intelligence), which delivers NexFinApp's killer feature: proper installment tracking for Brazilian users. Epic 2 builds on Epic 1's Credit Mode foundation, implementing FR13-FR23 from the PRD. Story 2.4 provides the main UI for viewing and managing all installment plans created via Stories 2.1 (WhatsApp) and 2.2 (Web).
+    </epic-context>
+  </context-why>
+
+  <context-what>
+    <functional-requirements>
+      <requirement id="FR18">View all installments with payment progress</requirement>
+      <requirement id="FR15">List active installments with status</requirement>
+      <requirement id="FR16">View installment details with payment schedule</requirement>
+    </functional-requirements>
+
+    <deliverables>
+      <deliverable>Installments page at /[locale]/installments with three tabs (Active, Paid Off, Cancelled)</deliverable>
+      <deliverable>Installment cards showing progress bars, remaining amounts, and next payment dates</deliverable>
+      <deliverable>Details modal with complete payment schedule and transaction links</deliverable>
+      <deliverable>Pagination controls for users with many installments (&gt;20)</deliverable>
+      <deliverable>Empty states for each tab with helpful guidance</deliverable>
+      <deliverable>Server actions for querying installment data with optimized performance</deliverable>
+      <deliverable>Localization support for pt-BR and English</deliverable>
+      <deliverable>PostHog analytics events for page views and user interactions</deliverable>
+    </deliverables>
+
+    <acceptance-criteria>
+      <ac id="AC4.1">
+        <title>Tabs for Installment Status</title>
+        <requirements>
+          - Three tabs: Active (default), Paid Off, Cancelled
+          - Badge counts showing installment count per tab
+          - URL parameter updates on tab change (/installments?tab=active)
+          - Active tab highlighted with different background
+          - Radix Tabs component for accessibility
+        </requirements>
+      </ac>
+
+      <ac id="AC4.2">
+        <title>Active Tab Content</title>
+        <requirements>
+          - Installment cards show: category emoji + description, payment method name
+          - Summary: total amount, monthly payment, payment progress (3/12 pagas)
+          - Visual progress bar: percentage filled with color coding (0-25% red, 25-75% yellow, 75-100% green)
+          - Status: remaining amount, next payment date
+          - Action buttons: Ver Detalhes, Quitar (Story 2.5), Editar (Story 2.6), Deletar (Story 2.7)
+          - Sorted by next_payment_date ASC (earliest first)
+        </requirements>
+      </ac>
+
+      <ac id="AC4.3">
+        <title>Details Modal</title>
+        <requirements>
+          - Opens on "Ver Detalhes" click
+          - Shows complete payment schedule (all payments chronologically)
+          - Each payment shows: status icon (✅ paid, 📅 pending, ❌ cancelled), payment number/total, amount, due date, status label
+          - Paid payments show transaction links (clickable to transaction details)
+          - Summary footer: Total paid (sum + count), Total remaining (sum + count)
+          - Close button with ESC key and overlay click support
+          - Responsive: scrollable on mobile, centered on desktop
+        </requirements>
+      </ac>
+
+      <ac id="AC4.4">
+        <title>Pagination</title>
+        <requirements>
+          - 20 installments per page
+          - Pagination controls: Previous, page numbers (up to 5), Next
+          - Total count display: "Mostrando 1-20 de 47 parcelamentos"
+          - URL parameter updates on page change (/installments?page=2)
+          - Page load time &lt; 1 second for 100 active + 200 historical installments (NFR-P4)
+          - Database query uses LIMIT/OFFSET for efficient pagination
+        </requirements>
+      </ac>
+    </acceptance-criteria>
+  </context-what>
+
+  <context-how>
+    <architecture-decisions>
+      <decision id="ARCH-1">
+        <title>Three Tabs (Not One List with Filters)</title>
+        <rationale>Clear separation between active (actionable) and historical (read-only) installments. Users immediately see which installments need attention.</rationale>
+        <implementation>Radix Tabs with URL parameters (tab=active/paid_off/cancelled)</implementation>
+        <alternative-rejected>Single list with status filter dropdown (less discoverable)</alternative-rejected>
+        <tradeoff>Requires separate queries per tab, but acceptable as queries are cached per page load</tradeoff>
+      </decision>
+
+      <decision id="ARCH-2">
+        <title>Pagination at 20 Items Per Page</title>
+        <rationale>Performance target &lt; 1s for 100+ installments (NFR-P4). Fast page loads, predictable navigation.</rationale>
+        <implementation>Database LIMIT/OFFSET pagination with indexed queries</implementation>
+        <alternative-rejected>Infinite scroll (harder to navigate, no page state)</alternative-rejected>
+        <tradeoff>Users with 100+ installments need to click through pages, but this is a rare case</tradeoff>
+      </decision>
+
+      <decision id="ARCH-3">
+        <title>Details Modal (Not Inline Expansion)</title>
+        <rationale>Payment schedule can be long (12-60 payments), would clutter list view. Clean separation between summary and details.</rationale>
+        <implementation>Radix Dialog component, fetches details on modal open</implementation>
+        <alternative-rejected>Accordion/collapsible inline (UX clutter)</alternative-rejected>
+        <tradeoff>Requires additional click to see details, but most users check summary first</tradeoff>
+      </decision>
+
+      <decision id="ARCH-4">
+        <title>Active Installments Sorted by Next Payment Date</title>
+        <rationale>Users care about upcoming payments, not creation date. Most urgent installments appear first.</rationale>
+        <implementation>ORDER BY next_payment_date ASC NULLS LAST</implementation>
+        <alternative-rejected>Sort by creation date (less actionable)</alternative-rejected>
+        <enhancement>Allow user to change sort order (Post-MVP)</enhancement>
+      </decision>
+
+      <decision id="ARCH-5">
+        <title>Progress Bar Color Coding</title>
+        <rationale>Visual feedback for payment progress. At-a-glance progress assessment.</rationale>
+        <implementation>0-25% red, 25-75% yellow, 75-100% green</implementation>
+        <alternative-rejected>Single color (less informative)</alternative-rejected>
+        <note>Not a warning system, just visual feedback</note>
+      </decision>
+    </architecture-decisions>
+
+    <data-flow>
+      <flow id="page-load">
+        <step>1. User navigates to /installments</step>
+        <step>2. Page reads URL params: tab=active, page=1</step>
+        <step>3. Server action: getInstallmentCounts(userId) - returns tab counts</step>
+        <step>4. Server action: getInstallmentPlans(userId, 'active', 1, 20) - returns paginated installments</step>
+        <step>5. Render: InstallmentsTabs + InstallmentsList + Pagination</step>
+        <step>6. Analytics: installments_page_viewed (PostHog event)</step>
+      </flow>
+
+      <flow id="tab-switch">
+        <step>1. User clicks "Quitados" tab</step>
+        <step>2. Update URL: /installments?tab=paid_off&amp;page=1</step>
+        <step>3. Server action: getInstallmentPlans(userId, 'paid_off', 1, 20)</step>
+        <step>4. Render: Updated InstallmentsList</step>
+        <step>5. Analytics: installments_tab_changed (PostHog event)</step>
+      </flow>
+
+      <flow id="details-modal">
+        <step>1. User clicks "Ver Detalhes" on installment card</step>
+        <step>2. Open modal with loading state</step>
+        <step>3. Server action: getInstallmentDetails(planId) - returns plan + all payments</step>
+        <step>4. Render: Payment schedule + summary footer</step>
+        <step>5. Analytics: installment_details_viewed (PostHog event)</step>
+        <step>6. User clicks transaction link (if paid payment) → Navigate to transaction details page</step>
+      </flow>
+
+      <flow id="pagination">
+        <step>1. User clicks "Próxima" button</step>
+        <step>2. Update URL: /installments?tab=active&amp;page=2</step>
+        <step>3. Scroll to top of page</step>
+        <step>4. Server action: getInstallmentPlans(userId, 'active', 2, 20)</step>
+        <step>5. Render: Updated InstallmentsList with page 2 data</step>
+        <step>6. Analytics: installments_page_changed (PostHog event)</step>
+      </flow>
+    </data-flow>
+
+    <query-optimization>
+      <target>NFR-P4: Page load time &lt; 1 second for 100 active + 200 historical installments</target>
+
+      <strategy id="indexed-columns">
+        Database index: idx_installment_plans_user_status (already exists from Epic 1)
+        Covers: WHERE user_id = $1 AND status = $2
+      </strategy>
+
+      <strategy id="pagination-limit-offset">
+        Fetch only 20 installments per page to reduce result set and rendering time
+      </strategy>
+
+      <strategy id="calculated-fields-in-query">
+        Use subqueries in SELECT for payments_paid and next_payment_date to avoid N+1 queries
+        Avoids fetching installment payments separately for each plan
+      </strategy>
+
+      <strategy id="count-query-caching">
+        Tab counts fetched once per page load (acceptable staleness, no real-time updates needed)
+      </strategy>
+
+      <strategy id="details-modal-lazy-loading">
+        Payment schedule fetched only when modal opened, reducing initial page load time
+      </strategy>
+
+      <monitoring>
+        - Log query execution time for getInstallmentPlans()
+        - Alert if &gt; 1s for 95th percentile
+        - PostHog custom property: queryTime on installments_page_viewed event
+      </monitoring>
+    </query-optimization>
+  </context-how>
+
+  <technical-specifications>
+    <database>
+      <tables>
+        <table name="installment_plans">
+          <description>Parent table for installment purchases (created in Epic 1 Story 1.1)</description>
+          <key-columns>
+            id (UUID PK), user_id (UUID FK), description (TEXT), total_amount (DECIMAL),
+            total_installments (INTEGER 1-60), status (active/paid_off/cancelled),
+            payment_method_id (UUID FK), category_id (UUID FK), created_at, updated_at
+          </key-columns>
+          <indexes>idx_installment_plans_user_status (user_id, status)</indexes>
+        </table>
+
+        <table name="installment_payments">
+          <description>Child table for individual monthly payments (created in Epic 1 Story 1.1)</description>
+          <key-columns>
+            id (UUID PK), plan_id (UUID FK CASCADE), transaction_id (UUID FK NULL),
+            installment_number (INTEGER), amount (DECIMAL), due_date (DATE),
+            status (pending/paid/cancelled), created_at, updated_at
+          </key-columns>
+          <indexes>idx_installment_payments_plan (plan_id), idx_installment_payments_due_date_status (due_date, status)</indexes>
+        </table>
+      </tables>
+
+      <key-queries>
+        <query name="getInstallmentPlans">
+          <description>Fetch paginated installments with calculated fields</description>
+          <sql-pattern>
+            SELECT ip.*, pm.name as payment_method_name, c.emoji as category_emoji,
+              (SELECT COUNT(*) FROM installment_payments WHERE plan_id = ip.id AND status = 'paid') as payments_paid,
+              (SELECT MIN(due_date) FROM installment_payments WHERE plan_id = ip.id AND status = 'pending') as next_payment_date
+            FROM installment_plans ip
+            LEFT JOIN payment_methods pm ON ip.payment_method_id = pm.id
+            LEFT JOIN categories c ON ip.category_id = c.id
+            WHERE ip.user_id = $1 AND ip.status = $2
+            ORDER BY next_payment_date ASC NULLS LAST
+            LIMIT 20 OFFSET $3
+          </sql-pattern>
+          <performance-target>&lt; 500ms for 100 installments</performance-target>
+        </query>
+
+        <query name="getInstallmentDetails">
+          <description>Fetch complete payment schedule for details modal</description>
+          <sql-pattern>
+            SELECT ip.*, t.id as transaction_id, t.date as transaction_date
+            FROM installment_payments ip
+            LEFT JOIN transactions t ON ip.transaction_id = t.id
+            WHERE ip.plan_id = $1
+            ORDER BY ip.installment_number ASC
+          </sql-pattern>
+          <performance-target>&lt; 200ms for 60 payments</performance-target>
+        </query>
+
+        <query name="getInstallmentCounts">
+          <description>Get tab badge counts</description>
+          <sql-pattern>
+            SELECT status, COUNT(*) as count
+            FROM installment_plans
+            WHERE user_id = $1
+            GROUP BY status
+          </sql-pattern>
+          <performance-target>&lt; 100ms</performance-target>
+        </query>
+      </key-queries>
+    </database>
+
+    <server-actions>
+      <action name="getInstallmentPlans">
+        <file>fe/lib/actions/installments.ts</file>
+        <signature>async function getInstallmentPlans(userId: string, status: 'active' | 'paid_off' | 'cancelled', page: number = 1, pageSize: number = 20): Promise&lt;{ installments: InstallmentPlanWithDetails[]; total: number }&gt;</signature>
+        <description>Fetch paginated installments with calculated fields (payments_paid, next_payment_date, remaining_amount)</description>
+        <sorting>Active: next_payment_date ASC; Paid Off/Cancelled: updated_at DESC</sorting>
+      </action>
+
+      <action name="getInstallmentDetails">
+        <file>fe/lib/actions/installments.ts</file>
+        <signature>async function getInstallmentDetails(planId: string): Promise&lt;InstallmentPlanDetails&gt;</signature>
+        <description>Fetch complete installment plan with all payments and transaction links</description>
+      </action>
+
+      <action name="getInstallmentCounts">
+        <file>fe/lib/actions/installments.ts</file>
+        <signature>async function getInstallmentCounts(userId: string): Promise&lt;{ active: number; paid_off: number; cancelled: number }&gt;</signature>
+        <description>Get tab badge counts (cached per page load)</description>
+      </action>
+    </server-actions>
+
+    <typescript-interfaces>
+      <interface name="InstallmentPlanWithDetails">
+        <description>Installment plan with calculated fields for list view</description>
+        <definition>
+          interface InstallmentPlanWithDetails extends InstallmentPlan {
+            payment_method_name: string
+            payment_method_type: string
+            category_name: string | null
+            category_emoji: string | null
+            payments_paid: number
+            next_payment_date: string | null
+            remaining_amount: number
+          }
+        </definition>
+      </interface>
+
+      <interface name="InstallmentPlanDetails">
+        <description>Complete installment plan with payment schedule for details modal</description>
+        <definition>
+          interface InstallmentPlanDetails {
+            plan: InstallmentPlanWithDetails
+            payments: InstallmentPaymentWithTransaction[]
+            total_paid: number
+            total_remaining: number
+            payments_paid_count: number
+            payments_pending_count: number
+          }
+        </definition>
+      </interface>
+
+      <interface name="InstallmentPaymentWithTransaction">
+        <description>Individual payment with linked transaction data</description>
+        <definition>
+          interface InstallmentPaymentWithTransaction extends InstallmentPayment {
+            transaction_id: string | null
+            transaction_date: string | null
+          }
+        </definition>
+      </interface>
+    </typescript-interfaces>
+
+    <components>
+      <component name="InstallmentsTabs">
+        <file>fe/components/installments/installments-tabs.tsx</file>
+        <description>Radix Tabs component with three tabs (Active, Paid Off, Cancelled) and badge counts</description>
+        <props>currentTab, onTabChange, counts (active/paid_off/cancelled counts)</props>
+      </component>
+
+      <component name="InstallmentsList">
+        <file>fe/components/installments/installments-list.tsx</file>
+        <description>Grid of installment cards (1 column mobile, 2 columns desktop)</description>
+        <props>installments, status, onAction (view/edit/delete/payoff)</props>
+      </component>
+
+      <component name="InstallmentCard">
+        <file>fe/components/installments/installment-card.tsx</file>
+        <description>Card showing installment summary with progress bar and action buttons</description>
+        <props>installment: InstallmentPlanWithDetails, onAction</props>
+        <layout>Header (emoji + description + payment method), Summary (total, progress, progress bar), Status (remaining, next payment), Actions (conditional based on status)</layout>
+      </component>
+
+      <component name="InstallmentDetailsModal">
+        <file>fe/components/installments/installment-details-modal.tsx</file>
+        <description>Radix Dialog showing complete payment schedule with transaction links</description>
+        <props>planId, isOpen, onClose</props>
+        <features>Loading state, error handling, payment schedule list, summary footer, close button</features>
+      </component>
+
+      <component name="Pagination">
+        <file>fe/components/installments/pagination.tsx</file>
+        <description>Pagination controls with Previous/Next buttons and page numbers</description>
+        <props>currentPage, totalPages, totalItems, pageSize, onPageChange</props>
+        <features>Ellipsis for skipped pages, current page highlighted, disabled states</features>
+      </component>
+
+      <component name="EmptyState">
+        <file>fe/components/installments/empty-state.tsx</file>
+        <description>Empty state component for each tab with guidance and optional CTA</description>
+        <variants>Active (with Create button), Paid Off (guidance text), Cancelled (guidance text)</variants>
+      </component>
+    </components>
+
+    <localization>
+      <locale name="pt-br">
+        <file>fe/lib/localization/pt-br.ts</file>
+        <keys>
+          installments.pageTitle: 'Meus Parcelamentos'
+          installments.tabs.active: 'Ativos'
+          installments.tabs.paidOff: 'Quitados'
+          installments.tabs.cancelled: 'Cancelados'
+          installments.card.totalAmount: 'Total: {{amount}} em {{count}}x de {{monthlyPayment}}'
+          installments.card.progress: '{{paid}}/{{total}} pagas'
+          installments.card.remaining: 'Restante: {{amount}}'
+          installments.card.nextPayment: 'Próxima parcela: {{date}}'
+          installments.actions.viewDetails: 'Ver Detalhes'
+          installments.actions.payOff: 'Quitar'
+          installments.actions.edit: 'Editar'
+          installments.actions.delete: 'Deletar'
+          installments.detailsModal.paymentSchedule: 'Cronograma de Pagamentos'
+          installments.detailsModal.totalPaid: 'Total Pago: {{amount}} ({{count}} parcelas)'
+          installments.detailsModal.totalRemaining: 'Total Restante: {{amount}} ({{count}} parcelas)'
+          installments.detailsModal.transaction: 'Transação: #{{id}} ({{date}})'
+          installments.emptyState.active: 'Você não tem parcelamentos ativos.'
+          installments.emptyState.paidOff: 'Você ainda não quitou nenhum parcelamento.'
+          installments.emptyState.cancelled: 'Você não tem parcelamentos cancelados.'
+          installments.emptyState.createButton: 'Criar Parcelamento'
+          installments.pagination.showing: 'Mostrando {{start}}-{{end}} de {{total}} parcelamentos'
+          installments.pagination.previous: 'Anterior'
+          installments.pagination.next: 'Próxima'
+        </keys>
+      </locale>
+
+      <locale name="en">
+        <file>fe/lib/localization/en.ts</file>
+        <note>English translations provided for all pt-BR keys</note>
+      </locale>
+
+      <formatting>
+        <currency>Use Intl.NumberFormat: pt-BR "R$ 1.234,56", en "R$ 1,234.56"</currency>
+        <dates>Use date-fns format() with locale: pt-BR "05/02/2025", en "02/05/2025"</dates>
+        <progress>Format: "3/12 pagas" (pt-BR), "3/12 paid" (en)</progress>
+      </formatting>
+    </localization>
+
+    <analytics>
+      <event name="installments_page_viewed">
+        <properties>userId, tab (active/paid_off/cancelled), page (number), installmentCount, timestamp, queryTime (optional)</properties>
+        <trigger>Page load</trigger>
+      </event>
+
+      <event name="installment_details_viewed">
+        <properties>userId, planId, status, total_installments, payments_paid</properties>
+        <trigger>Details modal opens</trigger>
+      </event>
+
+      <event name="installments_tab_changed">
+        <properties>userId, fromTab, toTab</properties>
+        <trigger>User switches tab</trigger>
+      </event>
+
+      <event name="installments_page_changed">
+        <properties>userId, fromPage, toPage</properties>
+        <trigger>User navigates to different page</trigger>
+      </event>
+
+      <event name="installments_empty_state_viewed">
+        <properties>userId, tab, channel: 'web'</properties>
+        <trigger>Empty state rendered</trigger>
+        <purpose>Measure how many users have no installments per status</purpose>
+      </event>
+    </analytics>
+  </technical-specifications>
+
+  <dependencies>
+    <dependency type="blocker">
+      <id>2-1-add-installment-purchase-whatsapp</id>
+      <reason>Installment plans must exist (created via WhatsApp) to be displayed</reason>
+      <status>done</status>
+    </dependency>
+
+    <dependency type="blocker">
+      <id>2-2-add-installment-purchase-web-frontend</id>
+      <reason>Installment plans must exist (created via Web) to be displayed; createInstallment server action pattern established</reason>
+      <status>done</status>
+    </dependency>
+
+    <dependency type="soft">
+      <id>2-3-future-commitments-dashboard</id>
+      <reason>Future commitments dashboard can link to this page; server actions pattern established</reason>
+      <status>done</status>
+    </dependency>
+
+    <dependency type="blocker">
+      <id>epic-1</id>
+      <reason>Database schema (installment_plans, installment_payments tables) and indexes must exist</reason>
+      <status>done</status>
+    </dependency>
+
+    <third-party-libraries>
+      <library>date-fns: Date formatting and manipulation</library>
+      <library>Radix UI: Tabs, Dialog, Progress components</library>
+      <library>next-intl: Internationalization</library>
+      <library>PostHog: Analytics tracking</library>
+    </third-party-libraries>
+  </dependencies>
+
+  <edge-cases>
+    <edge-case id="no-installments-created">
+      <scenario>New user, or user who only uses simple transactions</scenario>
+      <handling>Show empty state in Active tab with "Criar Parcelamento" button</handling>
+      <test>Create user, don't create installments, verify empty state</test>
+    </edge-case>
+
+    <edge-case id="all-installments-paid-off">
+      <scenario>User completed all installments</scenario>
+      <handling>Active tab shows empty state, Paid Off tab shows all installments</handling>
+      <test>Create installments, pay off all via Story 2.5, verify tabs</test>
+    </edge-case>
+
+    <edge-case id="installment-with-zero-pending-payments">
+      <scenario>User manually paid all payments (not via pay off early), status still "active"</scenario>
+      <handling>Installment shows as active but no next_payment_date (Story 2.5 should auto-update status)</handling>
+      <test>Create installment, manually mark all payments as paid, verify behavior</test>
+    </edge-case>
+
+    <edge-case id="page-number-exceeds-total-pages">
+      <scenario>User manually edits URL: /installments?page=999</scenario>
+      <handling>Redirect to page 1 or show empty state</handling>
+      <test>Set page param to invalid value, verify redirect</test>
+    </edge-case>
+
+    <edge-case id="transaction-link-for-paid-payment-no-transaction">
+      <scenario>Payment marked as paid but no transaction linked (edge case from Epic 1)</scenario>
+      <handling>Show payment as paid but no transaction link</handling>
+      <test>Manually update payment status to 'paid' without creating transaction, verify modal</test>
+    </edge-case>
+
+    <edge-case id="installment-with-60-payments">
+      <scenario>Car purchase in 60 monthly installments (long list)</scenario>
+      <handling>Details modal scrollable, shows all 60 payments without performance issues</handling>
+      <test>Create 60-installment plan, verify modal renders efficiently</test>
+    </edge-case>
+  </edge-cases>
+
+  <testing-strategy>
+    <unit-tests>
+      <target-coverage>80%+</target-coverage>
+      <focus-areas>
+        - InstallmentCard component rendering (all status types)
+        - Progress bar calculation and color coding
+        - Details modal payment schedule rendering
+        - Pagination controls (enable/disable, page numbers)
+        - Currency and date formatting (pt-BR and en)
+        - Empty states for each tab
+      </focus-areas>
+      <files>
+        fe/__tests__/components/installments/installment-card.test.tsx
+        fe/__tests__/components/installments/installment-details-modal.test.tsx
+        fe/__tests__/components/installments/pagination.test.tsx
+      </files>
+    </unit-tests>
+
+    <integration-tests>
+      <scenarios>
+        - Page load → Shows active installments by default
+        - Tab switch → Fetches correct installments
+        - Details modal → Opens and shows payment schedule
+        - Pagination → Loads next page of installments
+        - Create installment (Story 2.2) → Appears in active tab
+      </scenarios>
+      <database>Real test database</database>
+    </integration-tests>
+
+    <performance-tests>
+      <test-data>100 active + 200 historical installments</test-data>
+      <measurements>
+        - Page load time (target &lt; 1s, NFR-P4)
+        - getInstallmentPlans query time
+        - Verify pagination reduces load time
+        - Document performance results
+      </measurements>
+    </performance-tests>
+
+    <manual-tests>
+      <scenarios>
+        - Test installments page with 0, 1, 15, 100 installments
+        - Test all three tabs (active, paid off, cancelled)
+        - Test pagination navigation
+        - Test details modal on mobile and desktop
+        - Test both pt-BR and en locales
+        - Test empty states for each tab
+        - Test action buttons route to correct handlers
+      </scenarios>
+    </manual-tests>
+  </testing-strategy>
+
+  <risks>
+    <risk id="RISK-1">
+      <title>Query Performance with Many Installments</title>
+      <likelihood>Medium</likelihood>
+      <impact>Slow page load, poor UX</impact>
+      <mitigation>Performance testing before release, monitoring in production, pagination</mitigation>
+      <target>NFR-P4: &lt; 1s for 100 active + 200 historical</target>
+    </risk>
+
+    <risk id="RISK-2">
+      <title>Complex Details Modal Rendering</title>
+      <likelihood>Low</likelihood>
+      <impact>Modal sluggish on low-end devices (60 payments max)</impact>
+      <mitigation>Test on mobile devices, lazy load modal content, virtual scrolling if needed</mitigation>
+    </risk>
+
+    <risk id="RISK-3">
+      <title>Empty State Confusion</title>
+      <likelihood>Medium</likelihood>
+      <impact>Users don't understand how to create installments</impact>
+      <mitigation>Clear guidance in empty state, link to create installment flow</mitigation>
+    </risk>
+
+    <risk id="RISK-4">
+      <title>Action Buttons Overcrowding Card</title>
+      <likelihood>Low</likelihood>
+      <impact>Cluttered UI, hard to tap on mobile (4 buttons for active installments)</impact>
+      <mitigation>Use icon buttons for secondary actions, test on mobile</mitigation>
+    </risk>
+  </risks>
+
+  <success-metrics>
+    <metric>
+      <name>Tabs Implementation</name>
+      <criteria>Three tabs (Active, Paid Off, Cancelled) with badge counts, URL parameter updates, active tab highlighted</criteria>
+    </metric>
+
+    <metric>
+      <name>Active Tab Content</name>
+      <criteria>Installment cards show all required elements, progress bar with color coding, action buttons functional</criteria>
+    </metric>
+
+    <metric>
+      <name>Details Modal</name>
+      <criteria>Opens on click, shows complete payment schedule, transaction links for paid payments, summary totals</criteria>
+    </metric>
+
+    <metric>
+      <name>Pagination</name>
+      <criteria>20 items per page, pagination controls functional, page load &lt; 1s for 100 active + 200 historical</criteria>
+    </metric>
+
+    <metric>
+      <name>Analytics &amp; Logging</name>
+      <criteria>PostHog events firing correctly, query performance logged and monitored</criteria>
+    </metric>
+
+    <metric>
+      <name>Testing</name>
+      <criteria>Unit tests pass (80%+ coverage), integration tests pass, performance tests confirm &lt; 1s, manual tests successful</criteria>
+    </metric>
+
+    <metric>
+      <name>Documentation</name>
+      <criteria>Components documented, CLAUDE.md updated, query patterns documented</criteria>
+    </metric>
+
+    <metric>
+      <name>Deployment</name>
+      <criteria>Web frontend deployed, monitoring shows no errors, analytics events flowing to PostHog</criteria>
+    </metric>
+  </success-metrics>
+
+  <related-stories>
+    <story id="2-1-add-installment-purchase-whatsapp" relationship="prerequisite">Provides installments created via WhatsApp that appear in this view</story>
+    <story id="2-2-add-installment-purchase-web-frontend" relationship="prerequisite">Provides installments created via Web that appear in this view</story>
+    <story id="2-3-future-commitments-dashboard" relationship="related">Future commitments dashboard can link to this page for detailed view</story>
+    <story id="2-5-mark-installment-as-paid-off-early" relationship="dependent">Pay Off Early action button available on active installments in this view</story>
+    <story id="2-6-edit-installment-plan" relationship="dependent">Edit action button opens edit form from this view</story>
+    <story id="2-7-delete-installment-plan" relationship="dependent">Delete action button with confirmation dialog from this view</story>
+  </related-stories>
+
+  <implementation-notes>
+    <note priority="high">
+      Use existing database schema from Epic 1 Story 1.1 (installment_plans, installment_payments tables)
+      All indexes are already created and optimized for this query pattern
+    </note>
+
+    <note priority="high">
+      Performance is critical: NFR-P4 requires page load &lt; 1s for 100 active + 200 historical installments
+      Use pagination (20 per page), indexed queries, and calculated fields in SELECT to avoid N+1 queries
+    </note>
+
+    <note priority="medium">
+      Progress bar color coding (0-25% red, 25-75% yellow, 75-100% green) is visual feedback only, not a warning system
+      Calculate progress as: (payments_paid / total_installments) * 100
+    </note>
+
+    <note priority="medium">
+      Details modal fetches payment schedule lazily (only when opened) to reduce initial page load time
+      Modal should be scrollable for long payment lists (12-60 payments)
+    </note>
+
+    <note priority="medium">
+      Empty states should provide clear guidance and CTA buttons where appropriate
+      Active tab empty state includes "Criar Parcelamento" button linking to transaction form
+    </note>
+
+    <note priority="low">
+      Action buttons are conditional based on installment status:
+      - Active: Ver Detalhes, Quitar, Editar, Deletar
+      - Paid Off: Ver Detalhes, Deletar
+      - Cancelled: Ver Detalhes, Deletar
+    </note>
+
+    <note priority="low">
+      URL parameters enable deep linking and page state preservation:
+      - /installments?tab=active&amp;page=1 (default)
+      - /installments?tab=paid_off&amp;page=2
+      Tab switching resets to page 1 (simpler UX, acceptable tradeoff)
+    </note>
+  </implementation-notes>
+
+  <agent-handoff>
+    <from-agent>SM AI</from-agent>
+    <to-agent>Dev AI</to-agent>
+    <date>2025-12-03</date>
+    <context>
+      Story 2.4 drafted and ready for development. Stories 2.1, 2.2, and 2.3 are complete, so installments exist in the database and can be displayed. All database schema and indexes are in place from Epic 1. This story focuses on the UI/UX for viewing and managing installments, with performance optimization as a key requirement (NFR-P4: &lt; 1s page load).
+    </context>
+    <next-steps>
+      1. Review acceptance criteria and technical specifications
+      2. Implement page structure and routing (Task 1)
+      3. Create server actions for data fetching (Task 2)
+      4. Build UI components (Tasks 3-6)
+      5. Add localization and formatting (Task 7)
+      6. Implement analytics tracking (Task 8)
+      7. Write tests (Task 9)
+      8. Document and deploy (Task 10)
+    </next-steps>
+  </agent-handoff>
+</story-context>

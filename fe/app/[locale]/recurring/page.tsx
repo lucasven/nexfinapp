@@ -11,6 +11,9 @@ import { ArrowLeftIcon, EditIcon, TrashIcon } from "lucide-react"
 import { Link } from "@/lib/localization/link"
 import { getTranslations, getLocale } from 'next-intl/server'
 import { getMonthName, formatCurrency } from '@/lib/localization/format'
+import { Header } from "@/components/header"
+import { getPaymentMethods } from "@/lib/actions/payment-methods"
+import { checkIsAdmin } from "@/lib/actions/admin"
 
 export default async function RecurringPage() {
   const t = await getTranslations()
@@ -24,29 +27,33 @@ export default async function RecurringPage() {
   const currentMonth = currentDate.getMonth() + 1
   const currentYear = currentDate.getFullYear()
 
-  const [recurringTransactions, payments, categories] = await Promise.all([
+  const [recurringTransactions, payments, categories, paymentMethods, isAdmin] = await Promise.all([
     getRecurringTransactions(),
     getRecurringPayments(currentMonth, currentYear),
     getCategories(),
+    getPaymentMethods(),
+    checkIsAdmin()
   ])
 
   const monthName = `${getMonthName(currentMonth, locale as 'pt-br' | 'en')} ${currentYear}`
 
   return (
     <div className="min-h-screen bg-background">
+      <Header
+        userEmail={user?.email}
+        displayName={user?.user_metadata?.display_name}
+        isAdmin={isAdmin}
+        categories={categories}
+        paymentMethods={paymentMethods}
+      />
+
       <div className="container mx-auto py-8 px-4">
         <div className="flex items-center gap-4 mb-8">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/">
-              <ArrowLeftIcon className="h-4 w-4" />
-            </Link>
-          </Button>
           <div className="flex-1">
             <h1 className="text-3xl font-bold tracking-tight">{t('nav.recurring')}</h1>
             <p className="text-muted-foreground mt-1">{t('recurring.subtitle')}</p>
           </div>
           <RecurringDialog categories={categories} />
-          <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">

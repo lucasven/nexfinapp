@@ -1,0 +1,587 @@
+<story-context>
+  <story-id>2-5-mark-installment-as-paid-off-early</story-id>
+  <story-title>Mark Installment as Paid Off Early</story-title>
+  <epic-id>epic-2</epic-id>
+  <epic-title>Parcelamento Intelligence</epic-title>
+
+  <story-summary>
+    Enable users to mark active installment plans as "paid off early" (quitação antecipada), removing future payment obligations when they pay the remaining balance in full. This feature supports both web and WhatsApp channels with clear confirmation dialogs, atomic database operations, and immediate UI updates to future commitments.
+  </story-summary>
+
+  <context-why>
+    <problem>
+      Brazilian credit card users frequently pay off "parcelamentos" early to free up credit limit, avoid interest charges, or when receiving unexpected income (e.g., bonus, tax refund). Traditional expense trackers don't support this real-world behavior, forcing users to manually delete installments and lose payment history. This creates confusion about what was actually paid vs what was cancelled.
+    </problem>
+
+    <user-need>
+      Users need a one-click way to "quit" (pay off) installment plans before the final payment, with:
+      - Clear confirmation showing remaining amount and what will happen
+      - Preserved payment history (previously paid installments remain in record)
+      - Automatic updates to future commitments dashboard
+      - Support for both web UI and WhatsApp natural language commands
+      - Assurance that the action is properly recorded (not just deleted)
+    </user-need>
+
+    <epic-context>
+      This is Story 2.5 of Epic 2 (Parcelamento Intelligence), NexFinApp's killer feature for proper Brazilian installment tracking. Story 2.5 enables the critical "quitação antecipada" workflow that aligns with real-world credit card behavior. It integrates with:
+      - Story 2.4: "Quitar" button on installments list page
+      - Story 2.3: Future commitments dashboard updates when obligations are removed
+      - Story 2.0: Atomic RPC function (delete_installment_plan_atomic with 'paid_off' type)
+    </epic-context>
+  </context-why>
+
+  <context-what>
+    <functional-requirements>
+      <requirement id="FR19">Mark installment as paid off early</requirement>
+      <requirement id="FR13">Early payoff updates future commitments</requirement>
+      <requirement id="FR14">Budget excludes cancelled payments</requirement>
+    </functional-requirements>
+
+    <deliverables>
+      <deliverable>Payoff confirmation dialog (web) with remaining amount summary and explanation</deliverable>
+      <deliverable>payOffInstallment server action calling delete_installment_plan_atomic RPC</deliverable>
+      <deliverable>Success toast with removed amount and payment count</deliverable>
+      <deliverable>Immediate UI updates: installment moves from Active to Paid Off tab</deliverable>
+      <deliverable>Future commitments dashboard refresh after payoff</deliverable>
+      <deliverable>WhatsApp conversational payoff flow with confirmation</deliverable>
+      <deliverable>PayoffConfirmationData interface and getPayoffConfirmationData action</deliverable>
+      <deliverable>PostHog analytics event: INSTALLMENT_PAID_OFF_EARLY</deliverable>
+      <deliverable>Localization support for pt-BR and English</deliverable>
+    </deliverables>
+
+    <acceptance-criteria>
+      <ac id="AC5.1">
+        <title>Confirmation Dialog</title>
+        <requirements>
+          - Warning icon + "Quitar Parcelamento?" title
+          - Plan summary: description, payment method, category emoji
+          - Totals: Total original (R$ X em Nx), Already paid (R$ Y, N parcelas), Remaining (R$ Z, N parcelas)
+          - "O que vai acontecer" section with bullet points explaining the action
+          - Warning: "Esta ação não pode ser desfeita" (irreversible action notice)
+          - Two buttons: "Cancelar" (secondary, dismisses) and "Confirmar Quitação" (primary danger)
+          - Triggered by "Quitar" button on active installment card (Story 2.4)
+          - Only available for installments with status='active' and pending payments
+          - Uses PayoffConfirmationData interface with all required fields
+        </requirements>
+      </ac>
+
+      <ac id="AC5.2">
+        <title>Payoff Execution</title>
+        <requirements>
+          - payOffInstallment(planId) server action
+          - Calls delete_installment_plan_atomic(user_id, plan_id, 'paid_off') RPC function
+          - Atomic transaction: plan status → 'paid_off', pending payments → 'cancelled'
+          - Paid payments remain unchanged (preserved history)
+          - Error handling: invalid plan ID, unauthorized access, already paid-off, plan cancelled
+          - Performance target: &lt; 200ms for payoff execution (NFR)
+          - All-or-nothing operation: rollback on any error
+          - Returns success/error with PayoffResultData (payments_cancelled, amount_removed)
+        </requirements>
+      </ac>
+
+      <ac id="AC5.3">
+        <title>Success Feedback</title>
+        <requirements>
+          - Success toast: "Parcelamento quitado!" with details (N parcelas futuras removidas, Valor removido: R$ X)
+          - Auto-dismiss after 5 seconds
+          - Accessible screen reader announcement
+          - Installment moves from Active tab to Paid Off tab (Story 2.4 integration)
+          - Tab badge counts update
+          - Future commitments dashboard recalculates monthly totals (Story 2.3 integration)
+          - Details modal closes after successful payoff (if open)
+          - Analytics event: INSTALLMENT_PAID_OFF_EARLY with all properties
+          - UI updates occur immediately (no page reload required)
+        </requirements>
+      </ac>
+
+      <ac id="AC5.4">
+        <title>WhatsApp Support</title>
+        <requirements>
+          - Natural language: "quitar parcelamento do celular", "pagar resto do notebook", "quitação antecipada"
+          - AI extracts installment description from message
+          - Flow: 1) List active installments, 2) User selects by number or description, 3) Show confirmation, 4) User confirms (sim/não), 5) Execute or cancel
+          - Conversation state management: tracks currentStep, selectedPlanId, confirmationData
+          - Fuzzy matching on description (e.g., "celular" matches "Celular Samsung")
+          - Timeout after 5 minutes of inactivity, cleanup state
+          - User can cancel anytime with "cancelar"
+          - Same backend logic as web (reuses payOffInstallment action)
+          - Error messages: no active installments, invalid selection, payoff failed
+          - AI extraction accuracy target: 95%+ (validated in tests)
+          - Both pt-BR and English locales supported
+        </requirements>
+      </ac>
+    </acceptance-criteria>
+  </context-what>
+
+  <context-how>
+    <architecture-decisions>
+      <decision id="ARCH-1">
+        <title>Reuse delete_installment_plan_atomic() RPC Function</title>
+        <rationale>Already implemented in Story 2.0, handles atomic operations. Calling with p_delete_type='paid_off' marks plan as paid off instead of cancelled.</rationale>
+        <implementation>payOffInstallment calls delete_installment_plan_atomic(user_id, plan_id, 'paid_off')</implementation>
+        <alternative-rejected>Create separate payoff_installment_plan_atomic() function (unnecessary duplication)</alternative-rejected>
+        <tradeoff>Function name is "delete" but also handles payoff (acceptable - internal implementation detail)</tradeoff>
+      </decision>
+
+      <decision id="ARCH-2">
+        <title>Confirmation Dialog with Detailed Summary</title>
+        <rationale>Payoff is irreversible, users need to understand impact before confirming. Reduces regret and support requests.</rationale>
+        <implementation>Radix Dialog with summary section (totals, paid/remaining) + explanation section (bullet points) + warning</implementation>
+        <alternative-rejected>Simple confirm() dialog (not informative enough for irreversible action)</alternative-rejected>
+        <tradeoff>Extra click required (acceptable for irreversible action, follows best practices)</tradeoff>
+      </decision>
+
+      <decision id="ARCH-3">
+        <title>Preserve Paid Payments, Cancel Pending</title>
+        <rationale>Users need payment history for records and budget tracking. Deleting paid payments loses important financial data.</rationale>
+        <implementation>RPC function updates only status='pending' payments to 'cancelled', leaves paid payments unchanged</implementation>
+        <alternative-rejected>Delete all payments (loses historical data, breaks budget calculations)</alternative-rejected>
+        <tradeoff>Database size grows minimally (typical user has few installments, acceptable)</tradeoff>
+      </decision>
+
+      <decision id="ARCH-4">
+        <title>WhatsApp Conversational Flow</title>
+        <rationale>Natural language payoff requires multi-step confirmation for safety. Users need to see what they're paying off before confirming.</rationale>
+        <implementation>State machine: list → select → confirm → execute. Conversation state tracks progress and selected plan.</implementation>
+        <alternative-rejected>Single-message payoff (too risky without confirmation, prone to mistakes)</alternative-rejected>
+        <tradeoff>Requires state management (already implemented in Epic 1 patterns, reusable)</tradeoff>
+      </decision>
+
+      <decision id="ARCH-5">
+        <title>Update Future Commitments Immediately</title>
+        <rationale>Users expect to see removed obligations right away after payoff. Delayed updates confuse users about current state.</rationale>
+        <implementation>Trigger future commitments dashboard refresh after successful payoff (revalidatePath)</implementation>
+        <alternative-rejected>Eventual consistency / cache-based updates (confusing UX, stale data)</alternative-rejected>
+        <tradeoff>Extra database query for dashboard refresh (acceptable - payoff is infrequent action)</tradeoff>
+      </decision>
+    </architecture-decisions>
+
+    <data-flow>
+      <flow id="web-payoff">
+        <step>1. User clicks "Quitar" button on active installment card (Story 2.4)</step>
+        <step>2. getPayoffConfirmationData(planId) fetches plan + calculates totals (payments_paid, amount_paid, payments_pending, amount_remaining)</step>
+        <step>3. PayoffConfirmationDialog opens with data</step>
+        <step>4. User reviews summary: Total R$ 1,200 em 12x, Já pago R$ 300 (3 parcelas), Restante R$ 900 (9 parcelas)</step>
+        <step>5. User clicks "Confirmar Quitação" button</step>
+        <step>6. payOffInstallment(planId) server action called</step>
+        <step>7. Server action calls delete_installment_plan_atomic(auth.uid(), planId, 'paid_off') RPC</step>
+        <step>8. Atomic transaction: UPDATE installment_plans SET status='paid_off', UPDATE installment_payments SET status='cancelled' WHERE status='pending'</step>
+        <step>9. COMMIT transaction (all-or-nothing)</step>
+        <step>10. Return success with PayoffResultData (payments_cancelled: 9, amount_removed: 900)</step>
+        <step>11. Close dialog, show success toast: "Parcelamento quitado! 9 parcelas futuras removidas. Valor removido: R$ 900,00"</step>
+        <step>12. revalidatePath("/[locale]/installments") - installment moves from Active to Paid Off tab</step>
+        <step>13. Future commitments dashboard refetches (Story 2.3 integration)</step>
+        <step>14. Analytics: trackServerEvent(INSTALLMENT_PAID_OFF_EARLY, {planId, remaining_amount: 900, payments_pending: 9, ...})</step>
+      </flow>
+
+      <flow id="whatsapp-payoff">
+        <step>1. User sends: "quitar parcelamento do celular"</step>
+        <step>2. AI extracts intent: payoff_request, description="celular"</step>
+        <step>3. handlePayoffRequest(userId, message, locale) in installment-payoff-handler.ts</step>
+        <step>4. Query active installments for user</step>
+        <step>5. Send list: "📋 Seus parcelamentos ativos: 1. 📱 Celular Samsung (Nubank, 3/12 pagas, Restante R$ 900), 2. 💻 Notebook Dell (Inter, 2/8 pagas, Restante R$ 1,800)"</step>
+        <step>6. User responds: "1" or "celular"</step>
+        <step>7. Match selection to plan (numeric: direct index, description: fuzzy match on plan.description)</step>
+        <step>8. Fetch confirmation data for selected plan</step>
+        <step>9. Send confirmation: "⚠️ Confirme a quitação: 📱 Celular Samsung, Total R$ 1,200 em 12x, Já pago R$ 300 (3 parcelas), Restante R$ 900 (9 parcelas). ✅ Parcelamento marcado como quitado, ✅ 9 parcelas futuras canceladas. Confirma? (sim/não)"</step>
+        <step>10. User responds: "sim"</step>
+        <step>11. Call payOffInstallment(planId) server action (same as web)</step>
+        <step>12. Send success: "✅ Parcelamento quitado! 📱 Celular Samsung, 9 parcelas futuras removidas, Valor removido: R$ 900,00. Seus compromissos futuros foram atualizados."</step>
+        <step>13. Cleanup conversation state (pending-payoff-state.ts)</step>
+        <step>14. Analytics: trackEvent(INSTALLMENT_PAID_OFF_EARLY, {channel: 'whatsapp', ...})</step>
+      </flow>
+
+      <flow id="payoff-error-handling">
+        <step>1. Invalid plan ID → "Parcelamento não encontrado"</step>
+        <step>2. User doesn't own plan → "Você não tem permissão para quitar este parcelamento" (RLS policy enforced)</step>
+        <step>3. Plan already paid_off → "Parcelamento já está quitado" (check in RPC function)</step>
+        <step>4. Plan cancelled → "Parcelamento cancelado não pode ser quitado"</step>
+        <step>5. Database error → "Erro ao quitar parcelamento. Tente novamente." (log error, rollback transaction)</step>
+        <step>6. Web: Show error inline in dialog, WhatsApp: Send error message + cleanup state</step>
+      </flow>
+    </data-flow>
+
+    <database-operations>
+      <operation id="get-payoff-confirmation-data">
+        <description>Fetch plan details + calculate totals for confirmation dialog</description>
+        <query>
+          SELECT
+            ipl.id, ipl.description, pm.name as payment_method_name,
+            ipl.total_amount, ipl.total_installments,
+            COUNT(CASE WHEN ip.status = 'paid' THEN 1 END) as payments_paid,
+            SUM(CASE WHEN ip.status = 'paid' THEN ip.amount ELSE 0 END) as amount_paid,
+            COUNT(CASE WHEN ip.status = 'pending' THEN 1 END) as payments_pending,
+            SUM(CASE WHEN ip.status = 'pending' THEN ip.amount ELSE 0 END) as amount_remaining
+          FROM installment_plans ipl
+          JOIN payment_methods pm ON ipl.payment_method_id = pm.id
+          LEFT JOIN installment_payments ip ON ipl.id = ip.plan_id
+          WHERE ipl.id = $1 AND ipl.user_id = $2 AND ipl.status = 'active'
+          GROUP BY ipl.id, pm.name
+        </query>
+        <performance>Target &lt; 100ms (indexed on installment_plans.id, installment_payments.plan_id)</performance>
+      </operation>
+
+      <operation id="payoff-atomic-transaction">
+        <description>Atomic payoff using PostgreSQL RPC function (Story 2.0)</description>
+        <function>delete_installment_plan_atomic(p_user_id UUID, p_plan_id UUID, p_delete_type TEXT)</function>
+        <steps>
+          1. Verify ownership: installment_plans.user_id = auth.uid()
+          2. Verify status: installment_plans.status = 'active'
+          3. UPDATE installment_plans SET status='paid_off', updated_at=NOW() WHERE id=$1 AND user_id=$2
+          4. UPDATE installment_payments SET status='cancelled', updated_at=NOW() WHERE plan_id=$1 AND status='pending'
+          5. RETURN success=TRUE
+          6. On error: ROLLBACK all changes, RETURN success=FALSE with error_message
+        </steps>
+        <performance>Target &lt; 200ms (NFR from tech spec, atomic transaction with 2 UPDATEs)</performance>
+      </operation>
+    </database-operations>
+
+    <existing-code-integration>
+      <file path="fe/lib/actions/installments.ts">
+        <status>EXISTS - Add payOffInstallment and getPayoffConfirmationData functions</status>
+        <integration>
+          - Reuse createInstallment pattern (server action + RPC call + analytics)
+          - Add PayoffResultData return type
+          - Use trackServerEvent(INSTALLMENT_PAID_OFF_EARLY) like other stories
+          - revalidatePath("/[locale]/installments") to refresh UI
+        </integration>
+      </file>
+
+      <file path="fe/scripts/042_atomic_transaction_functions.sql">
+        <status>EXISTS - delete_installment_plan_atomic RPC function ready</status>
+        <integration>
+          - Function signature: delete_installment_plan_atomic(p_user_id, p_plan_id, p_delete_type)
+          - p_delete_type accepts: 'cancel' OR 'paid_off'
+          - For Story 2.5: call with p_delete_type='paid_off'
+          - Returns TABLE(success BOOLEAN, error_message TEXT)
+        </integration>
+      </file>
+
+      <file path="fe/app/[locale]/installments/">
+        <status>EXISTS (from Story 2.4) - Add PayoffConfirmationDialog component</status>
+        <integration>
+          - Create new component: fe/components/installments/payoff-confirmation-dialog.tsx
+          - Import in installments page, trigger on "Quitar" button click
+          - Pass planId as prop, component fetches confirmation data internally
+          - On success: close dialog, trigger refetch of installments list
+        </integration>
+      </file>
+
+      <file path="fe/lib/types.ts">
+        <status>EXISTS - Add PayoffConfirmationData and PayoffResultData interfaces</status>
+        <integration>
+          - PayoffConfirmationData: plan_id, description, payment_method_name, total_amount, total_installments, payments_paid, amount_paid, payments_pending, amount_remaining
+          - PayoffResultData: plan_id, payments_cancelled, amount_removed
+        </integration>
+      </file>
+
+      <file path="whatsapp-bot/src/handlers/credit-card/">
+        <status>EXISTS - Add installment-payoff-handler.ts</status>
+        <integration>
+          - Pattern from installment-handler.ts (Story 2.1) and future-commitments-handler.ts (Story 2.3)
+          - Reuse conversation state pattern from Epic 1 (pending-installment-state.ts)
+          - Call same payOffInstallment server action as web (consistency)
+        </integration>
+      </file>
+
+      <file path="whatsapp-bot/src/services/ai/ai-pattern-generator.ts">
+        <status>EXISTS - Add extract_payoff_request function</status>
+        <integration>
+          - Add OpenAI function calling definition for payoff intent
+          - Extract: installment description or keyword "parcelamento"
+          - Examples: "quitar parcelamento do celular", "pagar resto do notebook"
+        </integration>
+      </file>
+
+      <file path="fe/lib/analytics/events.ts">
+        <status>EXISTS - Add INSTALLMENT_PAID_OFF_EARLY event</status>
+        <integration>
+          - Add to AnalyticsEvent enum
+          - Properties: userId, planId, total_amount, total_installments, payments_paid, payments_pending, remaining_amount, channel ('web' | 'whatsapp'), timestamp
+        </integration>
+      </file>
+
+      <file path="fe/lib/localization/pt-br.ts">
+        <status>EXISTS - Add installments.payoff keys</status>
+        <integration>
+          - dialogTitle, totalOriginal, alreadyPaid, remaining, whatHappens, markedAsPaidOff, futurePaymentsCancelled, paidPaymentsPreserved, commitmentsUpdated, warningIrreversible, buttonCancel, buttonConfirm, successTitle, successDetails, successAmount
+          - Error messages: errorNotFound, errorUnauthorized, errorAlreadyPaidOff, errorCancelled, errorGeneric
+        </integration>
+      </file>
+
+      <file path="whatsapp-bot/src/localization/pt-br.ts">
+        <status>EXISTS - Add installments.payoff keys for WhatsApp</status>
+        <integration>
+          - listActiveInstallments, installmentSummary, selectPrompt, confirmationTitle, confirmPrompt, successMessage, cancelledMessage, noActiveInstallments, invalidSelection, payoffFailed
+        </integration>
+      </file>
+    </existing-code-integration>
+
+    <edge-cases>
+      <case id="all-payments-paid">
+        <scenario>Installment with all payments already marked as paid (not via payoff flow)</scenario>
+        <handling>"Quitar" button disabled, tooltip: "Todas as parcelas já foram pagas"</handling>
+        <test>Create installment, manually mark all payments as paid, verify button disabled</test>
+      </case>
+
+      <case id="single-pending-payment">
+        <scenario>Last payment remaining, user wants to pay off early</scenario>
+        <handling>Allow payoff, confirmation shows "1 parcela futura cancelada"</handling>
+        <test>Create installment with 1 pending payment, verify payoff works correctly</test>
+      </case>
+
+      <case id="payoff-with-modal-open">
+        <scenario>User has details modal open, confirms payoff</scenario>
+        <handling>Close modal on success, refetch installments list</handling>
+        <test>Open details modal, trigger payoff, verify modal closes and list updates</test>
+      </case>
+
+      <case id="concurrent-payoff">
+        <scenario>User tries to pay off same installment from web and WhatsApp simultaneously</scenario>
+        <handling>RPC function with status check prevents double payoff (first succeeds, second fails)</handling>
+        <test>Simulate concurrent payoff requests, verify only one succeeds</test>
+      </case>
+
+      <case id="double-click-payoff">
+        <scenario>User clicks "Confirmar Quitação" twice quickly</scenario>
+        <handling>Second request rejected with error "Parcelamento já está quitado" (status check in RPC)</handling>
+        <test>Trigger payoff twice in quick succession, verify second fails gracefully</test>
+      </case>
+
+      <case id="whatsapp-timeout">
+        <scenario>User starts payoff flow but doesn't respond for 5 minutes</scenario>
+        <handling>Cleanup conversation state, next message starts fresh flow</handling>
+        <test>Start payoff flow, wait 5+ minutes, send message, verify state reset</test>
+      </case>
+
+      <case id="ambiguous-description">
+        <scenario>User has multiple installments with similar descriptions ("Celular Samsung" and "Celular iPhone")</scenario>
+        <handling>AI lists matches, asks for numeric selection</handling>
+        <test>Create similar installments, request payoff, verify clarification prompt</test>
+      </case>
+    </edge-cases>
+
+    <performance-targets>
+      <target id="NFR-P-PAYOFF-EXECUTION">
+        <metric>Payoff execution time (payOffInstallment server action)</metric>
+        <target>&lt; 200ms for atomic transaction (plan + payments update)</target>
+        <measurement>Log execution time in server action, alert if &gt; 200ms</measurement>
+      </target>
+
+      <target id="NFR-P-CONFIRMATION-DATA">
+        <metric>Payoff confirmation data fetch (getPayoffConfirmationData)</metric>
+        <target>&lt; 100ms for single plan query with aggregations</target>
+        <measurement>Log query time, verify indexed access</measurement>
+      </target>
+    </performance-targets>
+  </context-how>
+
+  <dependencies>
+    <dependency type="blocker">
+      <story>2-0-epic-2-foundation-blockers</story>
+      <status>DONE</status>
+      <reason>Requires delete_installment_plan_atomic RPC function</reason>
+    </dependency>
+
+    <dependency type="blocker">
+      <story>2-4-view-all-installments-active-and-history</story>
+      <status>DONE</status>
+      <reason>Requires installments page with "Quitar" button placeholder</reason>
+    </dependency>
+
+    <dependency type="soft">
+      <story>2-3-future-commitments-dashboard</story>
+      <status>DONE</status>
+      <reason>Future commitments dashboard should update after payoff (integration point)</reason>
+    </dependency>
+
+    <dependency type="external">
+      <library>@radix-ui/react-dialog</library>
+      <reason>Confirmation dialog component</reason>
+    </dependency>
+
+    <dependency type="external">
+      <library>date-fns</library>
+      <reason>Date formatting for payment dates</reason>
+    </dependency>
+
+    <dependency type="external">
+      <library>posthog-js</library>
+      <reason>Analytics tracking for INSTALLMENT_PAID_OFF_EARLY event</reason>
+    </dependency>
+  </dependencies>
+
+  <testing-strategy>
+    <unit-tests>
+      <test file="fe/__tests__/actions/installments/payoff.test.ts">
+        <coverage>80%+ target</coverage>
+        <cases>
+          - Successful payoff updates plan status to 'paid_off' and pending payments to 'cancelled'
+          - Rollback on database error (simulate constraint violation)
+          - Reject unauthorized access (cross-user attempt)
+          - Reject already paid-off plan (status check)
+          - Reject cancelled plan (status check)
+          - Verify paid payments remain unchanged
+        </cases>
+        <mocks>Supabase client with RPC function mock</mocks>
+      </test>
+
+      <test file="fe/__tests__/components/installments/payoff-confirmation-dialog.test.tsx">
+        <coverage>80%+ target</coverage>
+        <cases>
+          - Renders dialog with correct confirmation data
+          - "Cancelar" dismisses dialog without changes
+          - "Confirmar Quitação" triggers payOffInstallment action
+          - Shows loading state during execution
+          - Shows error message on failure (inline in dialog)
+          - Closes dialog on success
+        </cases>
+        <mocks>payOffInstallment server action, getPayoffConfirmationData</mocks>
+      </test>
+
+      <test file="whatsapp-bot/src/__tests__/handlers/credit-card/installment-payoff-handler.test.ts">
+        <coverage>75%+ target</coverage>
+        <cases>
+          - Natural language extraction: "quitar parcelamento do celular" → description="celular"
+          - List active installments formatting
+          - Numeric selection: "1" maps to first plan
+          - Description selection: "celular" fuzzy matches "Celular Samsung"
+          - Confirmation message formatting
+          - Success message after payoff
+          - Cancel message when user responds "não"
+          - Invalid selection error handling
+        </cases>
+        <mocks>Supabase client, OpenAI API, conversation state</mocks>
+      </test>
+    </unit-tests>
+
+    <integration-tests>
+      <test scenario="web-payoff-flow">
+        <steps>
+          1. Click "Quitar" on active installment → Dialog opens
+          2. Verify confirmation data displays correctly
+          3. Click "Confirmar Quitação" → Payoff executes
+          4. Verify plan status changed to 'paid_off' in database
+          5. Verify pending payments changed to 'cancelled'
+          6. Verify paid payments unchanged
+          7. Verify installment moved from Active to Paid Off tab
+          8. Verify future commitments dashboard updated
+        </steps>
+        <database>Real test database</database>
+      </test>
+
+      <test scenario="whatsapp-payoff-flow">
+        <steps>
+          1. Send "quitar parcelamento" → Bot lists active installments
+          2. Select by number "1" → Bot shows confirmation
+          3. Confirm "sim" → Payoff executes
+          4. Verify plan status changed in database
+          5. Verify success message sent
+          6. Verify conversation state cleaned up
+        </steps>
+        <database>Real test database</database>
+      </test>
+
+      <test scenario="payoff-cancel-flow">
+        <steps>
+          1. Start payoff flow (web or WhatsApp)
+          2. User cancels (click "Cancelar" or respond "não")
+          3. Verify no changes to database
+          4. Verify dialog closed / conversation state cleaned up
+        </steps>
+      </test>
+    </integration-tests>
+
+    <performance-tests>
+      <test scenario="payoff-execution-time">
+        <measurement>Measure payOffInstallment execution time</measurement>
+        <target>&lt; 200ms for plans with 1, 12, 60 pending payments</target>
+        <verification>Log execution time, assert &lt; 200ms threshold</verification>
+      </test>
+
+      <test scenario="confirmation-data-fetch">
+        <measurement>Measure getPayoffConfirmationData query time</measurement>
+        <target>&lt; 100ms for single plan with aggregations</target>
+        <verification>Log query time, verify indexed access used</verification>
+      </test>
+    </performance-tests>
+
+    <manual-tests>
+      <test>Payoff on web (mobile and desktop browsers)</test>
+      <test>Payoff via WhatsApp bot (full conversation flow)</test>
+      <test>Test both pt-BR and English locales</test>
+      <test>Test all error cases (unauthorized, already paid-off, cancelled, invalid plan)</test>
+      <test>Verify UI updates (Active → Paid Off tab, badge counts, future commitments)</test>
+      <test>Verify success toast displays and auto-dismisses</test>
+      <test>Verify PostHog analytics event fires with correct properties</test>
+      <test>Test edge cases (all payments paid, single pending, double-click, concurrent)</test>
+    </manual-tests>
+  </testing-strategy>
+
+  <acceptance-validation>
+    <validation-checklist>
+      <item>AC5.1: Confirmation dialog shows all required data (summary, explanation, warning)</item>
+      <item>AC5.1: "Cancelar" dismisses without changes, "Confirmar Quitação" triggers payoff</item>
+      <item>AC5.2: payOffInstallment server action calls delete_installment_plan_atomic('paid_off')</item>
+      <item>AC5.2: Atomic transaction updates plan and cancels pending payments</item>
+      <item>AC5.2: Error handling covers all cases with localized messages</item>
+      <item>AC5.2: Performance &lt; 200ms verified in tests</item>
+      <item>AC5.3: Success toast shows correct information (payment count, amount removed)</item>
+      <item>AC5.3: Installment moves from Active to Paid Off tab</item>
+      <item>AC5.3: Future commitments dashboard updates immediately</item>
+      <item>AC5.3: Analytics event fires with all required properties</item>
+      <item>AC5.4: WhatsApp natural language parsing works (95%+ accuracy)</item>
+      <item>AC5.4: Conversation flow works (list → select → confirm → execute)</item>
+      <item>AC5.4: Confirmation and cancellation paths tested</item>
+      <item>AC5.4: Both pt-BR and English locales working</item>
+    </validation-checklist>
+
+    <story-complete-when>
+      1. All 4 acceptance criteria (AC5.1-AC5.4) validated
+      2. Unit tests passing with 80%+ coverage
+      3. Integration tests passing (web and WhatsApp flows)
+      4. Performance tests confirm &lt; 200ms execution time
+      5. Manual testing completed for both channels and locales
+      6. Analytics events flowing to PostHog
+      7. Documentation updated (component docs, CLAUDE.md)
+      8. "Quitar" button enabled and functional on Story 2.4 page
+      9. Future commitments integration working (Story 2.3)
+    </story-complete-when>
+  </acceptance-validation>
+
+  <dev-notes>
+    <note priority="high">
+      CRITICAL: Reuse delete_installment_plan_atomic() from Story 2.0 with p_delete_type='paid_off'. Do NOT create a new RPC function. The function already supports both 'cancel' and 'paid_off' operations.
+    </note>
+
+    <note priority="high">
+      Confirmation dialog MUST be clear about what will happen. Users need to understand: (1) Parcelamento marcado como quitado, (2) N parcelas futuras canceladas, (3) Parcelas pagas permanecem no histórico, (4) Compromissos futuros atualizados. This prevents user regret.
+    </note>
+
+    <note priority="medium">
+      WhatsApp conversation state pattern already exists from Epic 1. Reuse the pattern: create pending-payoff-state.ts similar to pending-installment-state.ts. Track currentStep, selectedPlanId, confirmationData. Cleanup on completion/timeout.
+    </note>
+
+    <note priority="medium">
+      Future commitments dashboard (Story 2.3) should automatically refresh after payoff due to revalidatePath. Test that the integration works correctly and monthly totals update immediately.
+    </note>
+
+    <note priority="low">
+      Currency formatting should use Intl.NumberFormat for consistency. pt-BR: "R$ 1.234,56", en: "R$ 1,234.56". Already used in other components, follow the same pattern.
+    </note>
+
+    <note priority="low">
+      Edge case: If user has installment with all payments already paid (not via payoff flow), "Quitar" button should be disabled with tooltip "Todas as parcelas já foram pagas". Check payments_pending_count before rendering button.
+    </note>
+
+    <architectural-context>
+      Story 2.5 completes the core installment management trilogy:
+      - Story 2.4: View installments (read)
+      - Story 2.5: Pay off early (update to paid_off)
+      - Story 2.6: Edit installment (update details)
+      - Story 2.7: Delete installment (update to cancelled)
+
+      All operations use atomic RPC functions for data consistency. All operations support both web and WhatsApp channels for user convenience. This story is critical for real-world Brazilian credit card behavior.
+    </architectural-context>
+  </dev-notes>
+</story-context>

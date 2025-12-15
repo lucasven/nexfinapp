@@ -74,6 +74,44 @@ export enum WhatsAppAnalyticsEvent {
   ENGAGEMENT_GOODBYE_RESPONSE = 'engagement_goodbye_response',
   ENGAGEMENT_UNPROMPTED_RETURN = 'engagement_unprompted_return',
   ENGAGEMENT_PREFERENCE_CHANGED = 'engagement_preference_changed', // Story 6.1
+
+  // Installment/Credit Card Events (Epic 2)
+  INSTALLMENT_CREATED = 'installment_created',
+  FUTURE_COMMITMENTS_VIEWED = 'future_commitments_viewed',
+  FUTURE_COMMITMENTS_EMPTY_STATE_VIEWED = 'future_commitments_empty_state_viewed',
+  INSTALLMENT_PAID_OFF_EARLY = 'installment_paid_off_early',
+  INSTALLMENT_PAYOFF_FAILED = 'installment_payoff_failed',
+  INSTALLMENT_DELETE_DIALOG_OPENED = 'installment_delete_dialog_opened',
+  INSTALLMENT_DELETED = 'installment_deleted',
+  INSTALLMENT_DELETE_FAILED = 'installment_delete_failed',
+  INSTALLMENT_DELETE_CANCELLED = 'installment_delete_cancelled',
+
+  // Installment Payment Linking Events
+  INSTALLMENT_PAYMENT_LINKED_AUTO = 'installment_payment_linked_auto',
+  INSTALLMENT_PAYMENT_MARKED_PAID = 'installment_payment_marked_paid',
+
+  // Installment Transaction Creation Events (Epic 2 - Auto-create transactions)
+  INSTALLMENT_TRANSACTION_CREATED = 'installment_transaction_created',
+  INSTALLMENT_TRANSACTION_CREATION_FAILED = 'installment_transaction_creation_failed',
+  INSTALLMENT_ALL_TRANSACTIONS_CREATED = 'installment_all_transactions_created',
+
+  // Statement Reminder Events (Epic 3 Story 3.4)
+  STATEMENT_REMINDER_SENT = 'statement_reminder_sent',
+  STATEMENT_REMINDER_FAILED = 'statement_reminder_failed',
+  STATEMENT_REMINDER_JOB_COMPLETED = 'statement_reminder_job_completed',
+
+  // Statement Summary Events (Epic 3 Story 3.5)
+  STATEMENT_SUMMARY_VIEWED = 'statement_summary_viewed',
+
+  // Payment Reminder Events (Epic 4 Story 4.2)
+  PAYMENT_REMINDER_SENT = 'payment_reminder_sent',
+  PAYMENT_REMINDER_FAILED = 'payment_reminder_failed',
+  PAYMENT_REMINDER_JOB_COMPLETED = 'payment_reminder_job_completed',
+
+  // Auto-Payment Transaction Events (Epic 4 Story 4.3)
+  AUTO_PAYMENT_CREATED = 'auto_payment_created',
+  AUTO_PAYMENT_CREATION_FAILED = 'auto_payment_creation_failed',
+  AUTO_PAYMENT_JOB_COMPLETED = 'auto_payment_job_completed',
 }
 
 /**
@@ -121,6 +159,7 @@ export enum WhatsAppAnalyticsProperty {
   CATEGORY_ID = 'category_id',
   CATEGORY_NAME = 'category_name',
   CATEGORY_MATCHING_METHOD = 'category_matching_method', // exact, semantic, llm
+  PAYMENT_METHOD_ID = 'payment_method_id',
 
   // Budget properties
   BUDGET_ID = 'budget_id',

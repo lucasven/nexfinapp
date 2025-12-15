@@ -1,0 +1,870 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>4-1-set-payment-due-date</story-id>
+    <story-title>Set Payment Due Date</story-title>
+    <epic>Epic 4: Payment Reminders &amp; Auto-Accounting</epic>
+    <status>ready-for-dev</status>
+    <generated-date>2025-12-03</generated-date>
+    <dependencies>
+      <dependency>Epic 1: Credit Mode flag (payment_methods.credit_mode)</dependency>
+      <dependency>Epic 3 Story 3.1: Statement closing day (payment_methods.statement_closing_day)</dependency>
+      <dependency>Epic 3: Statement period calculation (calculate_statement_period function)</dependency>
+    </dependencies>
+  </metadata>
+
+  <story-overview>
+    <summary>
+      As a Credit Mode user, I want to set when my credit card payment is due (days after
+      statement closing), so that I can receive timely reminders and have payment transactions
+      auto-created on the correct date.
+    </summary>
+
+    <epic-context>
+      Epic 4 enables payment reminders and auto-accounting where users receive WhatsApp reminders
+      2 days before payment is due and the system automatically creates payment expense transactions
+      in the payment month (proper accrual accounting). Story 4.1 is the FOUNDATION story - all
+      other Epic 4 features depend on payment due date being set.
+    </epic-context>
+
+    <why-this-matters>
+      - Foundation story for Epic 4 - payment due date required for reminders/auto-payments
+      - Credit card payments typically due X days after closing (e.g., 10 days after closing = due on 15th if closing is 5th)
+      - Handles edge cases like due date falling in next month (closing day 25 + 10 days = due on 5th of next month)
+      - Only visible for Credit Mode credit cards with statement_closing_day set
+    </why-this-matters>
+
+    <how-it-works>
+      1. User navigates to credit card settings (web frontend)
+      2. User enters payment due day (1-60 days after statement closing)
+      3. System shows preview: "Payment will be due on the 15th of each month"
+      4. User clicks Save
+      5. System stores payment_methods.payment_due_day
+      6. System calculates and displays next payment due date
+    </how-it-works>
+  </story-overview>
+
+  <technical-architecture>
+    <database-schema>
+      <migration>
+        <file>fe/scripts/046_payment_due_date.sql</file>
+        <description>Add payment_due_day column to payment_methods table</description>
+        <changes>
+          <change>
+            ALTER TABLE payment_methods ADD COLUMN payment_due_day INTEGER
+            CHECK (payment_due_day > 0 AND payment_due_day &lt;= 60)
+          </change>
+          <change>
+            COMMENT: 'Days after statement_closing_day when payment is due.
+            Example: closing_day=5, payment_due_day=10 → due on 15th'
+          </change>
+        </changes>
+        <rollback-file>fe/scripts/046_payment_due_date_rollback.sql</rollback-file>
+      </migration>
+
+      <existing-schema>
+        <table name="payment_methods">
+          <column name="id" type="UUID" primary-key="true"/>
+          <column name="user_id" type="UUID" foreign-key="users.id"/>
+          <column name="name" type="TEXT"/>
+          <column name="type" type="TEXT" check="credit|debit|cash|pix|other"/>
+          <column name="credit_mode" type="BOOLEAN" nullable="true" from-epic="1"/>
+          <column name="statement_closing_day" type="INTEGER" nullable="true" from-epic="3"/>
+          <column name="payment_due_day" type="INTEGER" nullable="true" new-in-story="4.1"/>
+          <column name="monthly_budget" type="DECIMAL" nullable="true" from-epic="3"/>
+        </table>
+      </existing-schema>
+    </database-schema>
+
+    <server-actions>
+      <action>
+        <name>setPaymentDueDate</name>
+        <file>fe/lib/actions/payment-methods.ts</file>
+        <signature>
+          async function setPaymentDueDate(
+            paymentMethodId: string,
+            paymentDueDay: number
+          ): Promise&lt;{ success: boolean; nextDueDate?: Date; error?: string }&gt;
+        </signature>
+        <validation>
+          - 1 &lt;= paymentDueDay &lt;= 60
+          - paymentMethodId is valid UUID
+          - User owns payment_method (RLS check)
+          - credit_mode = true (only Credit Mode)
+          - statement_closing_day IS NOT NULL (required dependency)
+        </validation>
+        <logic>
+          1. Validate inputs
+          2. Fetch payment method to verify ownership and get closing day
+          3. UPDATE payment_methods SET payment_due_day = X
+          4. Calculate next due date using calculatePaymentDueDate()
+          5. Track PostHog event: payment_due_date_set
+          6. Return success + next due date
+        </logic>
+      </action>
+
+      <action>
+        <name>getPaymentDueDatePreview</name>
+        <file>fe/lib/actions/payment-methods.ts</file>
+        <signature>
+          async function getPaymentDueDatePreview(
+            paymentMethodId: string,
+            paymentDueDay: number
+          ): Promise&lt;{ nextDueDate: Date; dueDay: number; formattedDate: string } | null&gt;
+        </signature>
+        <purpose>Real-time preview as user types payment due day</purpose>
+        <logic>
+          1. Fetch payment method to get closing day
+          2. Call calculatePaymentDueDate(closingDay, paymentDueDay)
+          3. Format date for display (locale-aware)
+          4. Return preview data
+        </logic>
+      </action>
+    </server-actions>
+
+    <helper-functions>
+      <helper>
+        <name>calculatePaymentDueDate</name>
+        <file>fe/lib/utils/payment-due-date.ts</file>
+        <signature>
+          function calculatePaymentDueDate(
+            closingDay: number,
+            paymentDueDay: number,
+            referenceDate: Date = new Date()
+          ): {
+            nextDueDate: Date
+            dueDay: number
+            dueMonth: number
+            dueYear: number
+          }
+        </signature>
+        <edge-cases>
+          - Closing 25 + Due 10 = 35 → 5th of next month
+          - Closing 5 + Due 10 = 15 → 15th of same month
+          - Closing 31 + Due 10 in Feb → Mar 10 (31 adjusted to 28/29, then + 10)
+          - Dec closing + Due → Jan of next year
+        </edge-cases>
+        <implementation-notes>
+          Use date-fns for reliable date arithmetic. Account for month length,
+          year boundaries, leap years. Similar logic to statement period calculation
+          but simpler (no period boundaries, just closing + days).
+        </implementation-notes>
+      </helper>
+    </helper-functions>
+
+    <frontend-components>
+      <component>
+        <name>PaymentDueSettings</name>
+        <file>fe/components/settings/payment-due-settings.tsx</file>
+        <props>
+          interface PaymentDueSettingsProps {
+            paymentMethod: PaymentMethod
+            onUpdate: () =&gt; void
+          }
+        </props>
+        <conditional-rendering>
+          Only shown if:
+          - creditMode = true
+          - statementClosingDay IS NOT NULL
+
+          If closing day not set:
+          - Show message: "Configure statement closing date first"
+          - Show button/link to closing day settings
+          - Disable payment due day input
+        </conditional-rendering>
+        <ui-elements>
+          - Number input: Days 1-60
+          - Display current value or "Not set"
+          - Real-time preview (updates as user types)
+          - Save button with loading state
+          - Toast notifications (pt-BR/en)
+        </ui-elements>
+        <similar-to>
+          StatementSettings component (fe/components/settings/statement-settings.tsx)
+          - Same pattern: input + preview + save
+          - Same localization approach
+          - Same toast notifications
+        </similar-to>
+      </component>
+    </frontend-components>
+
+    <localization>
+      <locale name="pt-br">
+        <file>fe/lib/localization/pt-br.ts</file>
+        <keys>
+          paymentDueSettings: {
+            title: 'Vencimento do Pagamento',
+            dueAfterClosingLabel: 'Dias após o fechamento',
+            dueAfterClosingPlaceholder: 'Ex: 10 dias',
+            notSet: 'Não definido',
+            previewDueDay: 'O pagamento vencerá no dia {{day}} de cada mês',
+            nextPayment: 'Próximo pagamento: {{date}}',
+            saveButton: 'Salvar',
+            successToast: 'Vencimento configurado: {{days}} dias após o fechamento',
+            errorToast: 'Erro ao salvar configuração. Tente novamente.',
+            validationError: 'Vencimento deve ser entre 1 e 60 dias após o fechamento',
+            closingDayRequired: 'Configure a data de fechamento primeiro',
+            setClosingDayButton: 'Configurar Data de Fechamento'
+          }
+        </keys>
+      </locale>
+
+      <locale name="en">
+        <file>fe/lib/localization/en.ts</file>
+        <keys>
+          paymentDueSettings: {
+            title: 'Payment Due Date',
+            dueAfterClosingLabel: 'Days after closing',
+            dueAfterClosingPlaceholder: 'E.g., 10 days',
+            notSet: 'Not set',
+            previewDueDay: 'Payment will be due on the {{day}} of each month',
+            nextPayment: 'Next payment: {{date}}',
+            saveButton: 'Save',
+            successToast: 'Payment due date set: {{days}} days after closing',
+            errorToast: 'Error saving configuration. Please try again.',
+            validationError: 'Due date must be between 1 and 60 days after closing',
+            closingDayRequired: 'Set statement closing date first',
+            setClosingDayButton: 'Set Closing Date'
+          }
+        </keys>
+      </locale>
+
+      <type-definitions>
+        <file>fe/lib/localization/types.ts</file>
+        <add-to-interface>
+          interface Messages {
+            // ... existing keys
+            paymentDueSettings: {
+              title: string
+              dueAfterClosingLabel: string
+              dueAfterClosingPlaceholder: string
+              notSet: string
+              previewDueDay: string
+              nextPayment: string
+              saveButton: string
+              successToast: string
+              errorToast: string
+              validationError: string
+              closingDayRequired: string
+              setClosingDayButton: string
+            }
+          }
+        </add-to-interface>
+      </type-definitions>
+    </localization>
+
+    <analytics>
+      <event>
+        <name>payment_due_date_set</name>
+        <file>fe/lib/analytics/events.ts</file>
+        <properties>
+          - userId: string
+          - paymentMethodId: string
+          - paymentDueDay: number
+          - closingDay: number
+          - calculatedDueDate: string (ISO8601)
+          - timestamp: ISO8601
+        </properties>
+        <trigger>After successful database update in setPaymentDueDate()</trigger>
+      </event>
+
+      <event>
+        <name>payment_due_date_preview_viewed</name>
+        <file>fe/lib/analytics/events.ts</file>
+        <properties>
+          - userId: string
+          - paymentMethodId: string
+          - paymentDueDay: number (user input)
+        </properties>
+        <trigger>When preview is displayed (optional tracking)</trigger>
+      </event>
+
+      <event>
+        <name>payment_due_date_error</name>
+        <file>fe/lib/analytics/events.ts</file>
+        <properties>
+          - userId: string
+          - paymentMethodId: string
+          - errorType: string
+          - errorMessage: string
+        </properties>
+        <trigger>On validation errors or database errors</trigger>
+      </event>
+    </analytics>
+
+    <type-extensions>
+      <file>fe/lib/types.ts</file>
+      <existing-interface>
+        export interface PaymentMethod {
+          id: string
+          user_id: string
+          name: string
+          type: 'credit' | 'debit' | 'cash' | 'pix' | 'other'
+          credit_mode: boolean | null
+          statement_closing_day: number | null
+          payment_due_day: number | null  // ← ALREADY EXISTS (added in migration)
+          monthly_budget: number | null
+          created_at: string
+          updated_at: string
+        }
+      </existing-interface>
+
+      <new-interface>
+        export interface PaymentDueDateInfo {
+          nextDueDate: Date
+          dueDay: number
+          dueMonth: number
+          dueYear: number
+        }
+      </new-interface>
+    </type-extensions>
+  </technical-architecture>
+
+  <acceptance-criteria>
+    <criterion id="AC4.1.1">
+      <title>Payment Due Settings UI Display</title>
+      <requirement>Credit Mode users can access payment due date settings</requirement>
+      <scenarios>
+        <scenario name="Credit Mode User with Statement Closing Day Set">
+          - Shows "Payment Due Date" section
+          - Shows input field for days after closing (1-60)
+          - Shows current value if already set
+          - Shows "Not set" if payment_due_day is null
+          - Shows preview of next payment due date when value entered
+        </scenario>
+        <scenario name="Credit Mode User WITHOUT Statement Closing Day">
+          - NO payment due date section displayed
+          - Shows message: "Configure statement closing date first"
+        </scenario>
+        <scenario name="Simple Mode User">
+          - NO payment due date section displayed
+          - Existing behavior unchanged
+        </scenario>
+        <scenario name="Non-Credit Card Payment Methods">
+          - NO payment due date section displayed
+        </scenario>
+      </scenarios>
+      <testing>
+        - Manual test: Verify section visible for Credit Mode with closing day set
+        - Manual test: Verify section hidden for Simple Mode and without closing day
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.2">
+      <title>Payment Due Date Preview</title>
+      <requirement>User sees preview of payment due date when entering days after closing</requirement>
+      <preview-display>
+        - When user enters days (e.g., 10 days)
+        - Closing day already set (e.g., day 5)
+        - Shows: "Payment will be due on the 15th of each month" (if today is Dec 1)
+        - Shows: "Next payment: Jan 15, 2026" (next due date)
+        - Updates in real-time as user changes input value
+      </preview-display>
+      <edge-cases>
+        - Closing day 25 + 10 days = 35 → Due on 5th of next month
+        - Closing day 5 + 10 days = 15 → Due on 15th of same month
+        - Closing day 31 + 10 days = 10 (Feb) → Due on 10th (31 adjusted to 28/29, then + 10)
+        - Month boundaries handled correctly (Dec 25 + 10 = Jan 4)
+      </edge-cases>
+      <testing>
+        - Unit test: Verify edge cases (closing day + due day &gt; days in month)
+        - E2E test: Enter 10 days, verify preview shows correct date
+        - Manual test: Test month boundary handling
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.3">
+      <title>Payment Due Day Validation</title>
+      <requirement>System validates payment due day is between 1 and 60</requirement>
+      <valid-inputs>
+        - Day 1 through 60 → Accepted
+        - Common values: 7, 10, 15, 21, 30 days
+      </valid-inputs>
+      <invalid-inputs>
+        - Day &lt; 1 → Error: "Vencimento deve ser entre 1 e 60 dias após o fechamento"
+        - Day &gt; 60 → Error: "Vencimento deve ser entre 1 e 60 dias após o fechamento"
+        - Non-numeric input → Prevented by number input UI
+      </invalid-inputs>
+      <database-constraint>
+        CHECK constraint: payment_due_day BETWEEN 1 AND 60
+      </database-constraint>
+      <testing>
+        - Unit test: Validate inputs 0, 1, 60, 61 → Only 1-60 accepted
+        - Integration test: Attempt to save day 0 → Verify error message
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.4">
+      <title>Payment Due Date Storage</title>
+      <requirement>Payment due day stored in payment_methods.payment_due_day</requirement>
+      <database-operation>
+        1. User clicks Save with payment_due_day = 10
+        2. Frontend calls setPaymentDueDate(paymentMethodId, 10)
+        3. Server action validates:
+           - User owns payment method (RLS policy)
+           - Payment due day between 1-60
+           - Payment method is Credit Mode credit card
+           - Statement closing day is already set (required)
+        4. Server action updates:
+           UPDATE payment_methods
+           SET payment_due_day = 10
+           WHERE id = payment_method_id AND user_id = current_user
+        5. Returns success + calculated next payment due date
+        6. Frontend shows toast: "Vencimento configurado: 10 dias após fechamento"
+      </database-operation>
+      <rls-security>
+        - RLS policy ensures user_id = auth.uid()
+        - User cannot update other users' payment methods
+        - Server action verifies ownership before update
+      </rls-security>
+      <testing>
+        - Integration test: Update payment_due_day → Verify database record updated
+        - Security test: Attempt to update another user's payment method → Verify rejected
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.5">
+      <title>Confirmation and Feedback</title>
+      <requirement>User receives confirmation after successful update</requirement>
+      <success-confirmation>
+        - Toast notification (pt-BR): "Vencimento configurado: 10 dias após fechamento"
+        - Toast notification (en): "Payment due date set: 10 days after closing"
+        - Shows next due date: "Próximo vencimento: 15 Jan 2026"
+        - Preview updates to reflect new setting
+      </success-confirmation>
+      <error-handling>
+        - Update fails → "Erro ao salvar configuração. Tente novamente."
+        - Network error → "Erro de conexão. Verifique sua internet."
+        - Validation fails → "Vencimento deve ser entre 1 e 60 dias após o fechamento"
+        - Closing day not set → "Configure a data de fechamento primeiro"
+      </error-handling>
+      <analytics>
+        PostHog event: payment_due_date_set with properties
+      </analytics>
+      <testing>
+        - Manual test: Save payment due day → Verify toast appears
+        - Manual test: Test both pt-BR and en locales
+        - Analytics test: Verify PostHog event logged
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.6">
+      <title>Edge Case Handling</title>
+      <requirement>System correctly handles edge cases for payment due dates</requirement>
+      <edge-cases>
+        <case name="Due Date in Next Month">
+          - Closing day = 25, payment_due_day = 10
+          - Due date = 25 + 10 = 35 → 5th of next month
+          - If today is Dec 1, closing is Dec 25: Next due date: Jan 5, 2026
+        </case>
+        <case name="Due Date Same Month">
+          - Closing day = 5, payment_due_day = 10
+          - Due date = 5 + 10 = 15 → 15th of same month
+          - If today is Dec 1, closing is Dec 5: Next due date: Dec 15, 2025
+        </case>
+        <case name="Closing Day Edge Case (Feb 31 → Feb 28/29)">
+          - Closing day = 31, payment_due_day = 10
+          - In February: closing adjusted to Feb 28 (or 29 in leap year)
+          - Due date = Feb 28 + 10 = Mar 10
+        </case>
+        <case name="Year Boundary">
+          - Closing day = 25, payment_due_day = 10
+          - In December: closing is Dec 25, due is Jan 5
+          - Preview shows: "Next payment: Jan 5, 2026"
+        </case>
+      </edge-cases>
+      <testing>
+        - Unit test: All edge cases above
+        - E2E test: Set closing 25, due 10, verify preview shows 5th
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.7">
+      <title>Dependency on Statement Closing Day</title>
+      <requirement>Payment due date requires statement closing day to be set first</requirement>
+      <dependency-enforcement>
+        - Payment due date settings ONLY shown if statement_closing_day IS NOT NULL
+        - If closing day not set:
+          - Show message: "Configure statement closing date first"
+          - Show button/link to closing day settings
+          - Payment due day input disabled
+      </dependency-enforcement>
+      <user-flow>
+        1. User navigates to payment methods settings
+        2. If statement_closing_day is NULL:
+           - Shows: "Configure statement closing date first"
+           - User clicks link to Statement Settings
+           - User sets closing day (Story 3.1)
+           - Returns to payment method settings
+        3. If statement_closing_day is set:
+           - Shows: Payment due date input
+           - User enters payment_due_day
+           - Saves successfully
+      </user-flow>
+      <testing>
+        - Manual test: Without closing day → Verify message shown
+        - Manual test: Set closing day → Verify payment due input appears
+        - Integration test: Attempt to set payment_due_day without closing_day → Verify rejected
+      </testing>
+    </criterion>
+
+    <criterion id="AC4.1.8">
+      <title>Simple Mode Compatibility (Cross-Cutting)</title>
+      <requirement>Simple Mode users unaffected by payment due date features</requirement>
+      <simple-mode-behavior>
+        - User with credit_mode = false credit cards
+        - NO payment due date settings displayed
+        - NO payment reminders or auto-payment transactions
+        - Existing behavior unchanged
+        - Zero performance impact on Simple Mode users
+      </simple-mode-behavior>
+      <credit-mode-toggle>
+        - If user switches from Simple Mode to Credit Mode:
+          - Payment due date settings become visible (after setting closing day)
+          - Default value: null (user must set)
+        - If user switches from Credit Mode to Simple Mode:
+          - Payment due date settings hidden
+          - Existing payment_due_day value preserved (not deleted)
+          - Payment features disabled until user switches back
+      </credit-mode-toggle>
+      <testing>
+        - Manual test: Simple Mode user → Verify NO payment due settings visible
+        - Manual test: Switch to Credit Mode → Verify settings appear (after closing day set)
+        - Regression test: Simple Mode behavior unchanged
+      </testing>
+    </criterion>
+  </acceptance-criteria>
+
+  <implementation-guidance>
+    <architecture-decisions>
+      <decision name="Helper Function for Due Date Calculation (Not Database Function)">
+        <rationale>
+          Due date calculation is simple arithmetic (closing_day + payment_due_day),
+          doesn't require database function. Use TypeScript helper for faster calculation
+          and easier testing.
+        </rationale>
+        <alternative-rejected>
+          PostgreSQL function - overkill for simple date addition, adds RPC call overhead
+        </alternative-rejected>
+      </decision>
+
+      <decision name="Range 1-60 Days (Not 1-30)">
+        <rationale>
+          Some credit cards have longer payment cycles (up to 60 days). Database CHECK
+          constraint (1-60), frontend validation.
+        </rationale>
+        <alternative-rejected>
+          1-30 days only - limits flexibility for extended payment periods
+        </alternative-rejected>
+      </decision>
+
+      <decision name="Dependency on Statement Closing Day (Hard Requirement)">
+        <rationale>
+          Payment due day is meaningless without knowing when statement closes.
+          Conditional rendering hides settings if closing day not set.
+        </rationale>
+        <alternative-rejected>
+          Allow setting without closing day - confusing, no preview possible
+        </alternative-rejected>
+      </decision>
+
+      <decision name="Preview Updates in Real-Time (Not After Save)">
+        <rationale>
+          Better UX - user sees impact before committing. Call getPaymentDueDatePreview()
+          on input change (debounced 300ms).
+        </rationale>
+        <alternative-rejected>
+          Only show preview after save - poor UX, user can't experiment
+        </alternative-rejected>
+      </decision>
+    </architecture-decisions>
+
+    <data-flow>
+      <flow-diagram>
+        1. User navigates to payment methods settings
+        2. For each Credit Mode credit card with closing day set:
+           - PaymentDueSettings component renders
+           - Shows number input (1-60)
+           - Shows current value or "Not set"
+        3. User enters payment due day (e.g., 10 days)
+           - Closing day already set (e.g., day 5)
+           - Frontend calls getPaymentDueDatePreview(paymentMethodId, 10)
+           - Server calculates: closing_day 5 + payment_due_day 10 = due on 15th
+           - Returns: { nextDueDate: Date, dueDay: 15, formattedDate: "15 Jan 2026" }
+           - UI displays preview: "Payment will be due on the 15th of each month"
+        4. User clicks Save
+           - Frontend calls setPaymentDueDate(paymentMethodId, 10)
+           - Server action validates: 1 &lt;= 10 &lt;= 60 ✓
+           - Server action verifies: credit_mode = true ✓
+           - Server action verifies: statement_closing_day IS NOT NULL ✓
+           - Server action updates database (with RLS enforcement)
+           - Server action tracks PostHog event
+           - Returns: { success: true, nextDueDate: Date }
+        5. UI shows success toast
+           - pt-BR: "Vencimento configurado: 10 dias após o fechamento"
+           - en: "Payment due date set: 10 days after closing"
+           - Refetches payment methods
+           - Preview updates
+      </flow-diagram>
+    </data-flow>
+
+    <error-handling>
+      <validation-errors>
+        - Day &lt; 1 or &gt; 60 → "Vencimento deve ser entre 1 e 60 dias após o fechamento"
+        - Closing day not set → "Configure a data de fechamento primeiro"
+        - Payment method not Credit Mode → Hidden UI (no error needed)
+        - Payment method not found → "Cartão não encontrado"
+      </validation-errors>
+
+      <database-errors>
+        - RLS policy rejection → "Você não tem permissão para alterar este cartão"
+        - Network error → "Erro de conexão. Verifique sua internet."
+        - Unexpected error → "Erro ao salvar configuração. Tente novamente."
+      </database-errors>
+
+      <logging>
+        Log all errors with context: userId, paymentMethodId, paymentDueDay, error message.
+        Error-level logs for database/network errors, info-level for validation errors.
+      </logging>
+    </error-handling>
+
+    <performance-targets>
+      <target name="NFR-Epic4-P1: Due Date Calculation">
+        Target: &lt; 50ms
+        Measurement: Performance.now() in frontend
+        Expected: ~5-10ms (simple date arithmetic with date-fns)
+      </target>
+
+      <target name="Preview Fetch Performance">
+        Target: &lt; 100ms (includes server action + network)
+        Expected: ~30-50ms on typical connection
+        Optimization: Debounce input changes (300ms)
+      </target>
+
+      <target name="Save Operation Performance">
+        Target: &lt; 200ms (includes update + analytics)
+        Expected: ~100-150ms
+        Network latency: ~50-100ms (depends on connection)
+      </target>
+    </performance-targets>
+
+    <integration-points>
+      <integration name="Epic 1: Credit Mode Flag">
+        - Reads payment_methods.credit_mode
+        - Only shows settings if credit_mode = true
+        - Already implemented in migration 040
+      </integration>
+
+      <integration name="Epic 3: Statement Closing Day">
+        - Requires payment_methods.statement_closing_day to be set
+        - Uses statement closing day for due date calculation
+        - Already implemented in Story 3.1
+      </integration>
+
+      <integration name="Epic 3: Statement Period Calculation">
+        - Reuses calculate_statement_period() logic (conceptually)
+        - Payment due date = closing date + payment_due_day
+        - Similar edge case handling (month boundaries, Feb 31, etc.)
+      </integration>
+
+      <integration name="Existing Settings Page">
+        - Extends Credit Card Settings page
+        - Similar to StatementSettings component
+        - Same patterns: conditional rendering, server actions, toast notifications
+      </integration>
+    </integration-points>
+
+    <similar-implementations>
+      <reference>
+        <story>Epic 3 Story 3.1: Set Statement Closing Date</story>
+        <component>fe/components/settings/statement-settings.tsx</component>
+        <patterns>
+          - Number input with validation
+          - Real-time preview
+          - Save button with loading state
+          - Toast notifications (pt-BR/en)
+          - Conditional rendering based on credit_mode
+        </patterns>
+        <reuse>
+          Follow same component structure, localization approach, and error handling patterns
+        </reuse>
+      </reference>
+
+      <reference>
+        <story>Epic 3 Migration 044: Statement Period Calculation</story>
+        <file>fe/scripts/044_statement_period_calculation.sql</file>
+        <patterns>
+          - Edge case handling (Feb 31, leap years, month boundaries)
+          - Database function for shared logic
+          - Comprehensive testing queries
+        </patterns>
+        <reuse>
+          Use similar edge case handling logic in calculatePaymentDueDate() helper
+        </reuse>
+      </reference>
+    </similar-implementations>
+  </implementation-guidance>
+
+  <testing-strategy>
+    <unit-tests>
+      <test-file>fe/lib/utils/__tests__/payment-due-date.test.ts</test-file>
+      <tests>
+        - calculatePaymentDueDate() edge cases:
+          - Closing 5 + Due 10 → 15th same month
+          - Closing 25 + Due 10 → 5th next month
+          - Closing 31 + Due 10 in Feb → Mar 10
+          - Dec 25 + Due 10 → Jan 5 of next year
+          - Leap year handling (2024 vs 2025)
+      </tests>
+
+      <test-file>fe/lib/actions/__tests__/payment-methods.test.ts</test-file>
+      <tests>
+        - setPaymentDueDate() validation:
+          - Valid day (1-60) → Success
+          - Invalid day (0, 61) → Error
+          - Without closing day → Error
+          - Simple Mode card → Error
+        - getPaymentDueDatePreview() calculations:
+          - Various payment due days and closing days
+      </tests>
+    </unit-tests>
+
+    <integration-tests>
+      <test>
+        Full flow: Enter days → Preview → Save → Verify database
+      </test>
+      <test>
+        RLS security: User can only update own payment methods
+      </test>
+      <test>
+        Credit Mode check: Cannot update Simple Mode PM
+      </test>
+      <test>
+        Dependency check: Cannot set payment due day without closing day
+      </test>
+      <test>
+        Analytics: Verify PostHog event logged
+      </test>
+    </integration-tests>
+
+    <e2e-tests>
+      <test>
+        Credit Mode with closing day → Settings visible
+      </test>
+      <test>
+        Credit Mode without closing day → Message shown
+      </test>
+      <test>
+        Simple Mode → Settings hidden
+      </test>
+      <test>
+        Input validation → Preview updates
+      </test>
+      <test>
+        Save → Toast appears, database updated
+      </test>
+      <test>
+        Both pt-BR and English locales
+      </test>
+      <test>
+        Edge cases: Various closing day + payment due day combinations
+      </test>
+    </e2e-tests>
+
+    <performance-tests>
+      <test>
+        Due date calculation: &lt; 50ms (NFR-Epic4-P1)
+      </test>
+      <test>
+        Preview fetch: &lt; 100ms
+      </test>
+      <test>
+        Save operation: &lt; 200ms
+      </test>
+      <test>
+        No impact on Simple Mode users
+      </test>
+    </performance-tests>
+  </testing-strategy>
+
+  <definition-of-done>
+    <checklist>
+      <item>✅ Payment Due Settings UI visible for Credit Mode with closing day set</item>
+      <item>✅ Payment Due Settings UI hidden for Simple Mode and without closing day</item>
+      <item>✅ Number input shows days 1-60</item>
+      <item>✅ Due date preview shows next payment due date when value entered</item>
+      <item>✅ Preview updates in real-time on input change</item>
+      <item>✅ Edge cases handled correctly (month boundaries, year boundaries)</item>
+      <item>✅ Payment due day saved to payment_methods.payment_due_day</item>
+      <item>✅ RLS enforces user can only update own payment methods</item>
+      <item>✅ Database constraint validates 1 &lt;= day &lt;= 60</item>
+      <item>✅ Success toast shown after save</item>
+      <item>✅ Localized in pt-BR and en</item>
+      <item>✅ PostHog event logged</item>
+      <item>✅ Payment due settings hidden if closing day not set</item>
+      <item>✅ Clear message shown to user when closing day not set</item>
+      <item>✅ Link/button to closing day settings</item>
+      <item>✅ Simple Mode users see NO payment due settings</item>
+      <item>✅ Simple Mode behavior unchanged</item>
+      <item>✅ Zero impact on Simple Mode performance</item>
+      <item>✅ Unit tests pass (edge cases, validation)</item>
+      <item>✅ Integration tests pass (RLS, dependency check)</item>
+      <item>✅ E2E tests pass (manual testing)</item>
+      <item>✅ Performance tests meet targets (&lt; 50ms calculation)</item>
+      <item>✅ CLAUDE.md updated</item>
+      <item>✅ Component documentation added</item>
+      <item>✅ Migration notes documented</item>
+      <item>✅ Migration 046 applied to production</item>
+      <item>✅ Code deployed to production</item>
+      <item>✅ Monitoring shows no errors</item>
+      <item>✅ Beta users tested successfully</item>
+    </checklist>
+  </definition-of-done>
+
+  <risks-and-mitigations>
+    <risk id="RISK-1">
+      <description>Edge Case Bugs in Due Date Calculation</description>
+      <likelihood>Low (date-fns is well-tested)</likelihood>
+      <impact>High (incorrect due dates break reminders and auto-payments)</impact>
+      <mitigation>
+        Comprehensive unit tests for all edge cases, manual QA with various month/year boundaries
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-2">
+      <description>User Confusion About Payment Due Day Concept</description>
+      <likelihood>Medium (concept of "days after closing" may be unfamiliar)</likelihood>
+      <impact>Medium (user sets wrong value, reminders sent at wrong time)</impact>
+      <mitigation>
+        Clear preview showing exact due date, help text explaining concept
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-3">
+      <description>Dependency on Closing Day Not Clear</description>
+      <likelihood>Low (message shown when closing day not set)</likelihood>
+      <impact>Low (user confusion, but clear path to resolution)</impact>
+      <mitigation>
+        Clear message with link/button to closing day settings
+      </mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <files-to-create>
+    <file>fe/scripts/046_payment_due_date.sql</file>
+    <file>fe/scripts/046_payment_due_date_rollback.sql</file>
+    <file>fe/lib/utils/payment-due-date.ts</file>
+    <file>fe/components/settings/payment-due-settings.tsx</file>
+  </files-to-create>
+
+  <files-to-modify>
+    <file>fe/lib/actions/payment-methods.ts</file>
+    <file>fe/lib/analytics/events.ts</file>
+    <file>fe/lib/localization/pt-br.ts</file>
+    <file>fe/lib/localization/en.ts</file>
+    <file>fe/lib/localization/types.ts</file>
+    <file>fe/components/settings/credit-card-settings.tsx</file>
+    <file>docs/sprint-artifacts/sprint-status.yaml</file>
+    <file>CLAUDE.md</file>
+  </files-to-modify>
+</story-context>

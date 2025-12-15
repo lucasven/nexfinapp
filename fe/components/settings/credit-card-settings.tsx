@@ -20,12 +20,19 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
 import { ModeSwitchWarningDialog } from './mode-switch-warning-dialog'
+import { StatementSettings } from './statement-settings'
+import { BudgetSettings } from './budget-settings'
+import { PaymentDueSettings } from './payment-due-settings'
+import { AddCreditCardDialog } from './add-credit-card-dialog'
 
 interface PaymentMethod {
   id: string
   name: string
   type: string
   credit_mode: boolean | null
+  statement_closing_day?: number | null
+  monthly_budget?: number | null
+  payment_due_day?: number | null
 }
 
 interface CreditCardSettingsProps {
@@ -74,7 +81,7 @@ export function CreditCardSettings({ paymentMethods }: CreditCardSettingsProps) 
     const targetMode = !currentMode
 
     // If switching TO Credit Mode (currentMode is false or null), show confirmation dialog (AC5.10)
-    if (currentMode === false) {
+    if (currentMode === false || currentMode === null) {
       setCreditConfirmDialogData({
         open: true,
         paymentMethodId,
@@ -148,6 +155,8 @@ export function CreditCardSettings({ paymentMethods }: CreditCardSettingsProps) 
   async function handleWarningDialogConfirm(cleanupInstallments: boolean) {
     if (!warningDialogData) return
 
+    setSwitchingCard(warningDialogData.paymentMethodId)
+
     try {
       const result = await switchCreditMode(
         warningDialogData.paymentMethodId,
@@ -162,12 +171,15 @@ export function CreditCardSettings({ paymentMethods }: CreditCardSettingsProps) 
         toast.success(message)
         router.refresh()
         setWarningDialogData(null)
+        setSwitchingCard(null)
       } else {
         toast.error(result.error || t('error'))
+        setSwitchingCard(null)
       }
     } catch (error) {
       console.error('[CreditCardSettings] Error confirming mode switch:', error)
       toast.error(t('error'))
+      setSwitchingCard(null)
     }
   }
 
@@ -175,10 +187,13 @@ export function CreditCardSettings({ paymentMethods }: CreditCardSettingsProps) 
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            {t('settings_title')}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              {t('settings_title')}
+            </CardTitle>
+            <AddCreditCardDialog onSuccess={() => router.refresh()} />
+          </div>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-center py-8">{t('no_credit_cards')}</p>
@@ -191,10 +206,13 @@ export function CreditCardSettings({ paymentMethods }: CreditCardSettingsProps) 
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            {t('settings_title')}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              {t('settings_title')}
+            </CardTitle>
+            <AddCreditCardDialog onSuccess={() => router.refresh()} />
+          </div>
           <CardDescription>
             {t('settings_description')}
           </CardDescription>
@@ -209,39 +227,56 @@ export function CreditCardSettings({ paymentMethods }: CreditCardSettingsProps) 
                 : 'Not Set'
 
             return (
-              <div
-                key={card.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <CreditCard className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{card.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-muted-foreground">
-                        {t('current_mode', { mode: '' })}
-                      </span>
-                      <Badge variant={card.credit_mode ? 'default' : 'secondary'}>
-                        {currentModeLabel}
-                      </Badge>
+              <div key={card.id} className="space-y-0">
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">{card.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm text-muted-foreground">
+                          {t('current_mode', { mode: '' })}
+                        </span>
+                        <Badge variant={card.credit_mode ? 'default' : 'secondary'}>
+                          {currentModeLabel}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSwitchMode(card.id, card.name, card.credit_mode)}
+                    disabled={isCurrentlySwitching}
+                  >
+                    {isCurrentlySwitching ? (
+                      t('switching')
+                    ) : card.credit_mode ? (
+                      t('switch_to_simple')
+                    ) : (
+                      t('switch_to_credit')
+                    )}
+                  </Button>
                 </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSwitchMode(card.id, card.name, card.credit_mode)}
-                  disabled={isCurrentlySwitching || card.credit_mode === null}
-                >
-                  {isCurrentlySwitching ? (
-                    t('switching')
-                  ) : card.credit_mode ? (
-                    t('switch_to_simple')
-                  ) : (
-                    t('switch_to_credit')
-                  )}
-                </Button>
+                {/* Story 3.1: Statement Settings for Credit Mode credit cards */}
+                <StatementSettings
+                  paymentMethod={card}
+                  onUpdate={() => router.refresh()}
+                />
+
+                {/* Story 3.2: Budget Settings for Credit Mode credit cards */}
+                <BudgetSettings
+                  paymentMethod={card}
+                  onUpdate={() => router.refresh()}
+                />
+
+                {/* Story 4.1: Payment Due Settings for Credit Mode credit cards */}
+                <PaymentDueSettings
+                  paymentMethod={card}
+                  onUpdate={() => router.refresh()}
+                />
               </div>
             )
           })}

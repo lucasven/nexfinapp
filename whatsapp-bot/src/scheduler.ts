@@ -15,6 +15,9 @@ import { runDailyEngagementJob } from './services/scheduler/daily-engagement-job
 import { runWeeklyReviewJob } from './services/scheduler/weekly-review-job.js'
 import { runAutoPaymentsJob } from './services/scheduler/auto-payments-job.js'
 import { runPaymentRemindersJob } from './services/scheduler/payment-reminders-job.js'
+import { runStatementRemindersJob } from './services/scheduler/statement-reminders-job.js'
+import { runCreditCardPaymentRemindersJob } from './services/scheduler/credit-card-payment-reminders-job.js'
+import { processAutoPaymentTransactions } from './services/scheduler/auto-payment-transactions-job.js'
 
 interface ScheduledJob {
   name: string
@@ -60,6 +63,24 @@ const jobs: ScheduledJob[] = [
     schedule: '0 8 * * *', // Daily at 8 AM UTC
     handler: runPaymentRemindersJob,  // Run in-process to share WhatsApp connection
     description: 'Daily WhatsApp reminders for upcoming payments',
+  },
+  {
+    name: 'send-statement-reminders',
+    schedule: '0 12 * * *', // Daily at 9 AM Brazil time (12:00 UTC)
+    handler: runStatementRemindersJob,  // Run in-process to share WhatsApp connection
+    description: 'Daily statement closing reminders (3 days before closing)',
+  },
+  {
+    name: 'send-credit-card-payment-reminders',
+    schedule: '0 12 * * *', // Daily at 9 AM Brazil time (12:00 UTC)
+    handler: runCreditCardPaymentRemindersJob,  // Run in-process to share WhatsApp connection
+    description: 'Daily credit card payment reminders (2 days before due date)',
+  },
+  {
+    name: 'auto-payment-transactions',
+    schedule: '0 4 * * *', // Daily at 1 AM Brazil time (4:00 UTC)
+    handler: processAutoPaymentTransactions,  // Run in-process (doesn't need socket but follows pattern)
+    description: 'Daily auto-payment transaction creation (statements closed yesterday)',
   },
 ]
 

@@ -1,0 +1,1 @@
+../../fe/scripts/039_fix_active_users_function.sql

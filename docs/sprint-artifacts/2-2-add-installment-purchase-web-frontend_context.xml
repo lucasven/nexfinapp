@@ -1,0 +1,1373 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story-metadata>
+    <story-id>2-2-add-installment-purchase-web-frontend</story-id>
+    <story-title>Add Installment Purchase (Web Frontend)</story-title>
+    <epic-id>2</epic-id>
+    <epic-title>Parcelamento Intelligence</epic-title>
+    <status>ready-for-dev</status>
+    <generated-date>2025-12-03</generated-date>
+    <context-version>1.0</context-version>
+  </story-metadata>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 1: STORY SUMMARY -->
+  <!-- ================================================================ -->
+  <story-summary>
+    <objective>
+      Implement a form-based installment purchase creation interface in the web frontend that:
+      - Shows installment fields ONLY when Credit Mode credit card is selected
+      - Provides real-time monthly payment calculation
+      - Validates inputs (amount, installments 1-60, dates)
+      - Creates installment plan + N payments atomically via PostgreSQL RPC
+      - Redirects to /installments page with success toast
+      - Tracks analytics events (PostHog)
+    </objective>
+
+    <user-value>
+      Web users can track installment purchases (parcelamentos) using a structured form with validation
+      and visual feedback, complementing the WhatsApp natural language flow implemented in Story 2.1.
+    </user-value>
+
+    <dependencies>
+      <blocker>
+        Story 2.0 (Epic 2 Foundation) - MUST be complete:
+        - Payment method ID refactoring (TEXT → UUID) ✅
+        - create_installment_plan_atomic() PostgreSQL function ✅
+        - Test infrastructure (Jest, React Testing Library) ✅
+      </blocker>
+      <soft-dependency>
+        Story 2.1 (WhatsApp Installments) - RPC function validated and working ✅
+      </soft-dependency>
+      <foundation>
+        Epic 1 Complete:
+        - installment_plans and installment_payments tables ✅
+        - payment_methods.credit_mode flag ✅
+        - Credit Mode detection in transaction flow ✅
+      </foundation>
+    </dependencies>
+
+    <key-technical-decisions>
+      <decision id="1">
+        Reuse RPC Function (Not Duplicate Logic):
+        - Story 2.1 already uses create_installment_plan_atomic() successfully
+        - Same server action pattern, different UI layer
+        - Ensures consistency across WhatsApp and Web channels
+      </decision>
+      <decision id="2">
+        Installment Toggle (Not Separate Form):
+        - Single transaction form handles both regular and installment transactions
+        - Checkbox toggle reveals installment fields conditionally
+        - Reduces cognitive overhead (one form for all transactions)
+      </decision>
+      <decision id="3">
+        Real-Time Calculation Display:
+        - Users see monthly payment before submitting
+        - React useEffect watches amount and installments, updates display instantly
+        - Enhances transparency and reduces errors
+      </decision>
+      <decision id="4">
+        Default First Payment = Today:
+        - Most users start installments immediately
+        - Date picker default value = current date
+        - Allows custom date for power users
+      </decision>
+    </key-technical-decisions>
+  </story-summary>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 2: EXISTING CODE CONTEXT -->
+  <!-- ================================================================ -->
+  <existing-code>
+    <!-- Transaction Dialog Component (Primary File to Modify) -->
+    <component>
+      <file-path>fe/components/transaction-dialog.tsx</file-path>
+      <current-state>
+        <summary>
+          React dialog component for creating/editing transactions. Already has:
+          - Payment method selection with UUID
+          - Conditional rendering placeholder for installment fields (lines 234-246)
+          - Credit Mode detection: showInstallmentFields = selectedPaymentMethod?.type === 'credit' AND credit_mode === true
+          - Form state management with useState
+          - Server action integration (createTransaction, updateTransaction)
+        </summary>
+        <key-elements>
+          <element type="state">
+            formData: { amount, type, category_id, description, date, payment_method_id }
+          </element>
+          <element type="computed">
+            selectedPaymentMethod = paymentMethods.find(pm => pm.id === formData.payment_method_id)
+          </element>
+          <element type="conditional">
+            showInstallmentFields = selectedPaymentMethod?.type === 'credit' AND credit_mode === true
+          </element>
+          <element type="placeholder">
+            Lines 234-246: Placeholder div for installment fields (Epic 2 will implement)
+          </element>
+          <element type="analytics">
+            trackEvent(AnalyticsEvent.TRANSACTION_DIALOG_OPENED, { is_edit: !!transaction })
+          </element>
+        </key-elements>
+        <modifications-needed>
+          1. Add installment state: isInstallment, totalAmount, totalInstallments, firstPaymentDate
+          2. Replace placeholder (lines 234-246) with full installment fields
+          3. Add real-time monthly payment calculation hook
+          4. Update handleSubmit to check isInstallment and call createInstallment() or createTransaction()
+          5. Add Zod schema validation for installment fields
+          6. Add toast notifications for success/error
+          7. Implement navigation to /[locale]/installments on success
+        </modifications-needed>
+      </current-state>
+    </component>
+
+    <!-- Transaction Server Actions -->
+    <component>
+      <file-path>fe/lib/actions/transactions.ts</file-path>
+      <current-state>
+        <summary>
+          Server actions for transaction CRUD. Contains:
+          - createTransaction() - Creates regular transaction with payment_method_id validation
+          - Payment method ownership verification (lines 76-86)
+          - Analytics event tracking pattern (lines 114-126)
+          - UUID validation regex (line 71-74)
+        </summary>
+        <reusable-patterns>
+          <pattern name="UUID Validation">
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          </pattern>
+          <pattern name="Payment Method Verification">
+            await supabase.from("payment_methods")
+              .select("id, name, type, credit_mode")
+              .eq("id", formData.payment_method_id)
+              .eq("user_id", user.id)
+              .single()
+          </pattern>
+          <pattern name="Analytics Tracking">
+            await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_CREATED, { ... })
+          </pattern>
+          <pattern name="Error Handling">
+            if (pmError || !paymentMethod) throw new Error("Payment method not found or unauthorized")
+          </pattern>
+        </reusable-patterns>
+        <modifications-needed>
+          NEW FILE NEEDED: fe/lib/actions/installments.ts
+          - createInstallment() server action
+          - Reuse UUID validation, payment method verification patterns
+          - Call create_installment_plan_atomic() RPC function
+          - Track installment_created analytics event
+        </modifications-needed>
+      </current-state>
+    </component>
+
+    <!-- TypeScript Types -->
+    <component>
+      <file-path>fe/lib/types.ts</file-path>
+      <current-state>
+        <summary>
+          Type definitions for data models. Contains:
+          - PaymentMethod interface (lines 19-30) with credit_mode: boolean | null
+          - Transaction interface (lines 32-47)
+          - Category, Budget, UserProfile interfaces
+        </summary>
+        <existing-types>
+          <type name="PaymentMethod">
+            { id, user_id, name, type: 'credit' | 'debit' | 'cash' | 'pix' | 'other',
+              credit_mode: boolean | null, statement_closing_day, payment_due_day,
+              monthly_budget, created_at, updated_at }
+          </type>
+        </existing-types>
+        <modifications-needed>
+          ADD NEW INTERFACES:
+          1. CreateInstallmentRequest:
+             { payment_method_id, description, total_amount, total_installments,
+               merchant?, category_id?, first_payment_date }
+          2. CreateInstallmentResponse:
+             { success: boolean, planId?: string, error?: string }
+          3. InstallmentPlan:
+             { id, user_id, description, total_amount, total_installments, status,
+               merchant, category_id, payment_method_id, created_at, updated_at }
+          4. InstallmentPayment:
+             { id, plan_id, transaction_id, installment_number, amount, due_date,
+               status, created_at, updated_at }
+        </modifications-needed>
+      </current-state>
+    </component>
+
+    <!-- Localization (pt-BR) -->
+    <component>
+      <file-path>fe/lib/localization/pt-br.ts</file-path>
+      <current-state>
+        <summary>
+          Brazilian Portuguese translations. Contains:
+          - transaction.* keys (lines 52-75)
+          - paymentMethods.* keys (lines 77-84)
+          - common.* keys (lines 4-25)
+          - Follows Messages interface from types.ts
+        </summary>
+        <existing-keys>
+          transaction.amount, transaction.description, transaction.paymentMethod,
+          common.save, common.cancel, common.loading, common.saving
+        </existing-keys>
+        <modifications-needed>
+          ADD NEW KEYS (transaction.installment namespace):
+          - toggleLabel: 'Parcelar esta compra?'
+          - totalAmountLabel: 'Valor Total'
+          - installmentsLabel: 'Número de Parcelas'
+          - monthlyPaymentLabel: 'Valor Mensal'
+          - monthlyPaymentFormat: 'R$ {amount} / mês'
+          - firstPaymentLabel: 'Data da Primeira Parcela'
+          - lastPaymentNote: '(Última parcela: R$ {amount})'
+          - createSuccess: 'Parcelamento criado com sucesso!'
+          - createError: 'Erro ao criar parcelamento: {error}'
+          - validationAmountPositive: 'O valor deve ser maior que zero'
+          - validationInstallmentsMin: 'Mínimo 1 parcela'
+          - validationInstallmentsMax: 'Máximo 60 parcelas'
+          - validationSimpleModeError: 'Este cartão não suporta parcelamentos'
+        </modifications-needed>
+      </current-state>
+    </component>
+
+    <!-- PostgreSQL RPC Function (Already Exists from Story 2.0) -->
+    <component>
+      <file-path>fe/scripts/042_atomic_transaction_functions.sql</file-path>
+      <current-state>
+        <summary>
+          Atomic transaction functions created in Story 2.0. Contains:
+          - create_installment_plan_atomic() (lines 72-148)
+          - Validates: installments 1-60, amount > 0, credit_mode = true
+          - Creates installment_plan + N installment_payments atomically
+          - Returns: { plan_id, success, error_message }
+        </summary>
+        <function-signature>
+          create_installment_plan_atomic(
+            p_user_id UUID,
+            p_payment_method_id UUID,
+            p_description TEXT,
+            p_total_amount DECIMAL(10,2),
+            p_total_installments INTEGER,
+            p_merchant TEXT,
+            p_category_id UUID,
+            p_first_payment_date DATE
+          ) RETURNS TABLE(plan_id UUID, success BOOLEAN, error_message TEXT)
+        </function-signature>
+        <validation-rules>
+          - p_total_installments BETWEEN 1 AND 60
+          - p_total_amount > 0
+          - payment_method must be Credit Mode (type='credit' AND credit_mode=TRUE)
+          - payment_method ownership verified (user_id match)
+        </validation-rules>
+        <usage-example>
+          const { data } = await supabase.rpc('create_installment_plan_atomic', {
+            p_user_id: user.id,
+            p_payment_method_id: formData.payment_method_id,
+            p_description: formData.description,
+            p_total_amount: formData.total_amount,
+            p_total_installments: formData.total_installments,
+            p_merchant: formData.merchant || null,
+            p_category_id: formData.category_id || null,
+            p_first_payment_date: formData.first_payment_date
+          })
+        </usage-example>
+      </current-state>
+    </component>
+  </existing-code>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 3: DATABASE SCHEMA -->
+  <!-- ================================================================ -->
+  <database-schema>
+    <!-- Installment Plans Table -->
+    <table name="installment_plans">
+      <purpose>Parent table for installment purchases (parcelamentos)</purpose>
+      <created-in>Epic 1 Story 1.1</created-in>
+      <columns>
+        <column name="id" type="UUID" primary-key="true">Plan identifier</column>
+        <column name="user_id" type="UUID" foreign-key="auth.users(id)">Owner</column>
+        <column name="payment_method_id" type="UUID" foreign-key="payment_methods(id)">Credit card used</column>
+        <column name="description" type="TEXT" required="true">Purchase description</column>
+        <column name="total_amount" type="DECIMAL(10,2)" required="true">Total purchase amount</column>
+        <column name="total_installments" type="INTEGER" required="true" check="1-60">Number of monthly payments</column>
+        <column name="status" type="TEXT" required="true" check="active|paid_off|cancelled">Plan status</column>
+        <column name="merchant" type="TEXT" nullable="true">Store/merchant name</column>
+        <column name="category_id" type="UUID" foreign-key="categories(id)" nullable="true">Category</column>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()">Creation timestamp</column>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()">Last update timestamp</column>
+      </columns>
+      <indexes>
+        <index>idx_installment_plans_user_status ON (user_id, status)</index>
+      </indexes>
+      <rls-policy>installment_plans_user_policy: user_id = auth.uid()</rls-policy>
+    </table>
+
+    <!-- Installment Payments Table -->
+    <table name="installment_payments">
+      <purpose>Individual monthly payment records for installment plans</purpose>
+      <created-in>Epic 1 Story 1.1</created-in>
+      <columns>
+        <column name="id" type="UUID" primary-key="true">Payment identifier</column>
+        <column name="plan_id" type="UUID" foreign-key="installment_plans(id) ON DELETE CASCADE">Parent plan</column>
+        <column name="transaction_id" type="UUID" foreign-key="transactions(id) ON DELETE SET NULL" nullable="true">Linked transaction when paid</column>
+        <column name="installment_number" type="INTEGER" required="true" check="> 0">Payment sequence (1, 2, 3...)</column>
+        <column name="amount" type="DECIMAL(10,2)" required="true">Payment amount (total_amount / total_installments)</column>
+        <column name="due_date" type="DATE" required="true">When payment is due</column>
+        <column name="status" type="TEXT" required="true" check="pending|paid|cancelled">Payment status</column>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()">Creation timestamp</column>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()">Last update timestamp</column>
+      </columns>
+      <constraints>
+        <unique>UNIQUE(plan_id, installment_number)</unique>
+      </constraints>
+      <indexes>
+        <index>idx_installment_payments_plan ON (plan_id)</index>
+        <index>idx_installment_payments_due_date_status ON (due_date, status)</index>
+      </indexes>
+      <rls-policy>installment_payments_user_policy: plan_id IN (SELECT id FROM installment_plans WHERE user_id = auth.uid())</rls-policy>
+    </table>
+
+    <!-- Payment Methods Table -->
+    <table name="payment_methods">
+      <purpose>User's payment methods (credit cards, debit, cash, etc.)</purpose>
+      <relevant-columns>
+        <column name="id" type="UUID" primary-key="true">Payment method identifier</column>
+        <column name="user_id" type="UUID" foreign-key="auth.users(id)">Owner</column>
+        <column name="name" type="TEXT" required="true">Card/method name</column>
+        <column name="type" type="TEXT" required="true" check="credit|debit|cash|pix|other">Type</column>
+        <column name="credit_mode" type="BOOLEAN" nullable="true">
+          Credit Mode flag (NULL=unset, TRUE=Credit Mode, FALSE=Simple Mode)
+          Used in Story 2.2 to conditionally show installment fields
+        </column>
+      </relevant-columns>
+      <usage-in-story>
+        - Filter Credit Mode cards: WHERE type='credit' AND credit_mode=TRUE
+        - Validate payment method ownership before creating installment
+        - Display mode in dropdown: "Nubank (Modo Crédito)" vs "Nubank (Modo Simples)"
+      </usage-in-story>
+    </table>
+  </database-schema>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 4: UI/UX PATTERNS -->
+  <!-- ================================================================ -->
+  <ui-ux-patterns>
+    <!-- Progressive Disclosure Pattern -->
+    <pattern name="progressive-disclosure">
+      <description>
+        Installment fields appear only when conditions are met, reducing form complexity for users who don't need them.
+      </description>
+      <flow>
+        1. User opens transaction form → Standard fields visible (amount, category, date, payment method, description)
+        2. User selects Simple Mode card → No installment toggle shown
+        3. User selects Credit Mode card → Installment toggle appears: "Parcelar esta compra?" (checkbox)
+        4. User checks toggle → Installment fields reveal with smooth animation (CSS transition)
+        5. User unchecks toggle → Fields hide, form returns to standard transaction mode
+      </flow>
+      <implementation>
+        - Use showInstallmentFields = selectedPaymentMethod?.type === 'credit' AND credit_mode === true
+        - Conditional rendering: {showInstallmentFields AND isInstallment AND (...)}
+        - CSS transition: transition: all 0.3s ease-in-out
+      </implementation>
+    </pattern>
+
+    <!-- Real-Time Feedback Pattern -->
+    <pattern name="realtime-feedback">
+      <description>
+        Monthly payment calculation updates instantly as user changes amount or installment count.
+      </description>
+      <user-experience>
+        - User enters Total Amount: R$ 600,00
+        - User selects Installments: 3
+        - Monthly Payment displays instantly: "R$ 200,00 / mês"
+        - User changes Installments to 6
+        - Monthly Payment updates immediately: "R$ 100,00 / mês"
+        - No submit button needed for calculation (auto-updates)
+      </user-experience>
+      <implementation>
+        - React useEffect watching [totalAmount, totalInstallments]
+        - Calculation: monthlyPayment = Math.round((totalAmount / totalInstallments) * 100) / 100
+        - Display: Read-only Input or Label styled prominently
+        - Rounding edge case: Show note if rounding difference exists (e.g., "Última parcela: R$ 33,34")
+      </implementation>
+    </pattern>
+
+    <!-- Validation Feedback Pattern -->
+    <pattern name="validation-feedback">
+      <description>
+        Inline error messages guide users to fix invalid inputs before submission.
+      </description>
+      <validation-rules>
+        1. Amount: Must be > 0 → Error: "O valor deve ser maior que zero"
+        2. Installments: Must be 1-60 → Error: "Número de parcelas deve ser entre 1 e 60"
+        3. First Payment Date: Required → Error: "Campo obrigatório"
+        4. Payment Method: Must be Credit Mode if installments checked → Error: "Este cartão não suporta parcelamentos"
+      </validation-rules>
+      <visual-indicators>
+        - Invalid field: Red border (border-red-500)
+        - Error message: Text below field in red (text-red-600 text-sm)
+        - Error summary: Alert at top of form if multiple errors
+        - Valid field: Green border (border-green-500) - optional
+      </visual-indicators>
+      <implementation>
+        - Zod schema validation with custom error messages
+        - React Hook Form integration: errors object contains field-level errors
+        - Localized messages: Use t('transaction.installment.validationAmountPositive')
+      </implementation>
+    </pattern>
+
+    <!-- Success/Error Toast Pattern -->
+    <pattern name="toast-notifications">
+      <description>
+        Non-blocking notifications provide feedback after form submission.
+      </description>
+      <success-toast>
+        Title: "✅ Parcelamento criado com sucesso!"
+        Message: "Celular - R$ 600,00 em 3x de R$ 200,00"
+        Style: Green background, auto-dismiss after 5 seconds
+        Position: Top-right or bottom-right
+      </success-toast>
+      <error-toast>
+        Title: "❌ Erro ao criar parcelamento"
+        Message: {error} (e.g., "Cartão não encontrado" or "Erro de conexão. Tente novamente.")
+        Style: Red background, manual dismiss (X button)
+        Position: Top-right or bottom-right
+      </error-toast>
+      <implementation>
+        - Radix UI Toast or similar toast library
+        - Import: import { toast } from '@/components/ui/toast'
+        - Usage: toast.success(message) or toast.error(message)
+        - Configure duration: 5000ms for success, -1 (manual) for errors
+      </implementation>
+    </pattern>
+
+    <!-- Localization Pattern -->
+    <pattern name="localization">
+      <description>
+        All user-facing text supports pt-BR (primary) and English (secondary).
+      </description>
+      <currency-formatting>
+        - pt-BR: "R$ 600,00" (comma as decimal separator)
+        - en: "R$ 600.00" (period as decimal separator)
+        - Always use R$ (Brazilian Real)
+        - Use Intl.NumberFormat with locale parameter
+      </currency-formatting>
+      <date-formatting>
+        - pt-BR: "dd/mm/yyyy" (02/12/2025)
+        - en: "mm/dd/yyyy" (12/02/2025)
+        - Use Next.js Intl or date-fns with locale
+      </date-formatting>
+      <field-labels>
+        - Use next-intl useTranslations hook: const t = useTranslations()
+        - Keys: t('transaction.installment.toggleLabel'), t('transaction.installment.totalAmountLabel'), etc.
+        - Fallback: If key missing, show key name (for debugging)
+      </field-labels>
+    </pattern>
+  </ui-ux-patterns>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 5: DATA FLOW -->
+  <!-- ================================================================ -->
+  <data-flow>
+    <flow-diagram>
+      <step id="1">
+        User Opens Transaction Form
+        → TransactionDialog component renders
+        → paymentMethods fetched from database
+        → formData initialized with empty values
+      </step>
+      <step id="2">
+        User Selects Credit Mode Credit Card
+        → formData.payment_method_id updated
+        → selectedPaymentMethod computed (paymentMethods.find(...))
+        → showInstallmentFields = selectedPaymentMethod?.credit_mode === true
+        → Installment toggle appears (checkbox)
+      </step>
+      <step id="3">
+        User Checks Installment Toggle
+        → isInstallment state set to true
+        → Installment fields reveal (CSS transition)
+        → Fields: Total Amount, Installments (1-60), Monthly Payment (read-only), First Payment Date
+      </step>
+      <step id="4">
+        User Fills Installment Fields
+        → Total Amount: 600 (input onChange updates formData.totalAmount)
+        → Installments: 3 (select onChange updates formData.totalInstallments)
+        → Monthly Payment: R$ 200,00 (auto-calculated via useEffect)
+        → First Payment Date: Today (default, user can change)
+      </step>
+      <step id="5">
+        User Submits Form
+        → handleSubmit() called (e.preventDefault())
+        → Frontend validation (Zod schema):
+          - Amount > 0 ✓
+          - Installments 1-60 ✓
+          - First payment date valid ✓
+          - Payment method is Credit Mode ✓
+        → If validation fails: Show inline error messages, prevent submission
+        → If validation passes: Continue to server action call
+      </step>
+      <step id="6">
+        Server Action Call: createInstallment()
+        → Import: import { createInstallment } from '@/lib/actions/installments'
+        → Parameters:
+          - payment_method_id: UUID
+          - description: string
+          - total_amount: number
+          - total_installments: number
+          - merchant: string | null
+          - category_id: string | null
+          - first_payment_date: string (ISO format YYYY-MM-DD)
+        → Server action authenticates user (Supabase auth.getUser())
+        → Verify payment method ownership (SELECT ... WHERE user_id = auth.uid())
+      </step>
+      <step id="7">
+        PostgreSQL RPC Execution: create_installment_plan_atomic()
+        → Call: supabase.rpc('create_installment_plan_atomic', { p_user_id, p_payment_method_id, ... })
+        → Function validates:
+          - Installments 1-60 ✓
+          - Amount > 0 ✓
+          - Payment method is Credit Mode (credit_mode=TRUE) ✓
+        → Creates installment_plan record (status='active')
+        → Creates 3 installment_payments records:
+          - installment_number=1, due_date=Today, amount=200, status='pending'
+          - installment_number=2, due_date=Today+1month, amount=200, status='pending'
+          - installment_number=3, due_date=Today+2months, amount=200, status='pending'
+        → Returns: { plan_id: UUID, success: true, error_message: null }
+      </step>
+      <step id="8">
+        Success Response Handling
+        → Server action returns { success: true, planId: UUID }
+        → Frontend resets form (setFormData to initial state)
+        → Navigation: router.push('/[locale]/installments')
+        → Success toast: toast.success("✅ Parcelamento criado com sucesso! Celular - R$ 600,00 em 3x de R$ 200,00")
+        → Analytics event: trackEvent(AnalyticsEvent.INSTALLMENT_CREATED, { userId, planId, totalAmount: 600, totalInstallments: 3, channel: 'web' })
+      </step>
+      <step id="9">
+        Error Response Handling (if RPC fails)
+        → RPC returns: { plan_id: null, success: false, error_message: "Payment method must be Credit Mode credit card" }
+        → Server action returns { success: false, error: "Payment method must be Credit Mode credit card" }
+        → Frontend shows error toast: toast.error("❌ Erro ao criar parcelamento: Payment method must be Credit Mode credit card")
+        → Form remains visible with data (user can fix and retry)
+        → Analytics event: trackEvent(AnalyticsEvent.INSTALLMENT_CREATION_FAILED, { userId, error, totalAmount, totalInstallments })
+      </step>
+    </flow-diagram>
+
+    <error-handling>
+      <tier id="1" name="Frontend Validation Errors (Inline)">
+        <trigger>Zod schema validation fails</trigger>
+        <examples>
+          - Amount ≤ 0 → "O valor deve ser maior que zero"
+          - Installments &lt; 1 or &gt; 60 → "Número de parcelas deve ser entre 1 e 60"
+          - Empty required field → "Campo obrigatório"
+        </examples>
+        <display>Inline error messages below fields, red borders on invalid inputs</display>
+      </tier>
+      <tier id="2" name="Business Logic Errors (Toast)">
+        <trigger>Server action validation fails or RPC returns error</trigger>
+        <examples>
+          - Payment method not found → "Cartão não encontrado"
+          - Payment method not Credit Mode → "Este cartão não suporta parcelamentos"
+          - RPC constraint violation → "Erro ao criar parcelamento. Verifique os dados."
+        </examples>
+        <display>Error toast with user-friendly message (translated)</display>
+      </tier>
+      <tier id="3" name="System Errors (Toast + Logs)">
+        <trigger>Unexpected exceptions (network timeout, database error, etc.)</trigger>
+        <examples>
+          - Database timeout → "Erro ao criar parcelamento. Tente novamente."
+          - Network error → "Erro de conexão. Verifique sua internet."
+          - Unexpected error → "Erro inesperado. Entre em contato com suporte."
+        </examples>
+        <display>Generic error toast + full stack trace logged to console/monitoring</display>
+      </tier>
+    </error-handling>
+  </data-flow>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 6: ANALYTICS EVENTS -->
+  <!-- ================================================================ -->
+  <analytics-events>
+    <event name="installment_created">
+      <when>Installment plan successfully created via web form</when>
+      <properties>
+        <property name="userId" type="string">Authenticated user ID</property>
+        <property name="planId" type="string">UUID of created installment plan</property>
+        <property name="paymentMethodId" type="string">UUID of payment method</property>
+        <property name="totalAmount" type="number">Total purchase amount</property>
+        <property name="totalInstallments" type="number">Number of installments</property>
+        <property name="monthlyAmount" type="number">Monthly payment amount</property>
+        <property name="hasDescription" type="boolean">Whether description provided</property>
+        <property name="hasMerchant" type="boolean">Whether merchant provided</property>
+        <property name="hasCategory" type="boolean">Whether category selected</property>
+        <property name="channel" type="string" value="web">Always 'web' for this story</property>
+        <property name="locale" type="string" value="pt-br|en">User's locale</property>
+        <property name="timestamp" type="string" format="ISO8601">Event timestamp</property>
+      </properties>
+      <implementation>
+        await trackServerEvent(user.id, AnalyticsEvent.INSTALLMENT_CREATED, {
+          userId: user.id,
+          planId: data.plan_id,
+          paymentMethodId: formData.payment_method_id,
+          totalAmount: formData.total_amount,
+          totalInstallments: formData.total_installments,
+          monthlyAmount: formData.total_amount / formData.total_installments,
+          hasDescription: !!formData.description,
+          hasMerchant: !!formData.merchant,
+          hasCategory: !!formData.category_id,
+          channel: 'web',
+          locale: user.locale || 'pt-br',
+          timestamp: new Date().toISOString()
+        })
+      </implementation>
+    </event>
+
+    <event name="installment_creation_failed">
+      <when>Installment creation fails (validation error, RPC error, network error)</when>
+      <properties>
+        <property name="userId" type="string">Authenticated user ID</property>
+        <property name="error" type="string">Error message</property>
+        <property name="totalAmount" type="number|null">Total amount (if provided)</property>
+        <property name="totalInstallments" type="number|null">Installments (if provided)</property>
+        <property name="channel" type="string" value="web">Always 'web'</property>
+        <property name="locale" type="string" value="pt-br|en">User's locale</property>
+      </properties>
+      <implementation>
+        await trackServerEvent(user.id, AnalyticsEvent.INSTALLMENT_CREATION_FAILED, {
+          userId: user.id,
+          error: error.message,
+          totalAmount: formData.total_amount || null,
+          totalInstallments: formData.total_installments || null,
+          channel: 'web',
+          locale: user.locale || 'pt-br'
+        })
+      </implementation>
+    </event>
+  </analytics-events>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 7: TESTING GUIDANCE -->
+  <!-- ================================================================ -->
+  <testing-guidance>
+    <unit-tests>
+      <test-file>fe/lib/actions/__tests__/installments.test.ts</test-file>
+      <test-cases>
+        <case name="createInstallment with valid inputs">
+          Mock: Supabase RPC returns { plan_id: UUID, success: true, error_message: null }
+          Expected: Returns { success: true, planId: UUID }
+        </case>
+        <case name="createInstallment with invalid amount">
+          Input: amount = 0
+          Expected: Throws error "Amount must be positive"
+        </case>
+        <case name="createInstallment with installments out of range">
+          Input: total_installments = 100
+          Expected: RPC returns error "Installments must be between 1 and 60"
+        </case>
+        <case name="createInstallment with unauthorized payment method">
+          Mock: Payment method not found or user_id mismatch
+          Expected: Throws error "Payment method not found or unauthorized"
+        </case>
+        <case name="createInstallment with Simple Mode card">
+          Mock: Payment method has credit_mode = false
+          Expected: RPC returns error "Payment method must be Credit Mode credit card"
+        </case>
+        <case name="createInstallment with RPC failure">
+          Mock: Supabase RPC throws exception
+          Expected: Returns { success: false, error: "Database error" }
+        </case>
+      </test-cases>
+    </unit-tests>
+
+    <component-tests>
+      <test-file>fe/components/__tests__/transaction-dialog.test.tsx</test-file>
+      <test-cases>
+        <case name="Conditional rendering: Simple Mode card selected">
+          Setup: Mount TransactionDialog with Simple Mode card selected
+          Expected: Installment toggle NOT visible
+        </case>
+        <case name="Conditional rendering: Credit Mode card selected">
+          Setup: Mount TransactionDialog, select Credit Mode card
+          Expected: Installment toggle appears (checkbox "Parcelar esta compra?")
+        </case>
+        <case name="Installment toggle shows/hides fields">
+          Setup: Select Credit Mode card, check installment toggle
+          Expected: Installment fields visible (Total Amount, Installments, Monthly Payment, First Payment Date)
+          Then: Uncheck toggle
+          Expected: Fields hidden
+        </case>
+        <case name="Monthly payment calculation updates">
+          Setup: Check installment toggle, enter amount=600, installments=3
+          Expected: Monthly payment displays "R$ 200,00 / mês"
+          Then: Change installments to 6
+          Expected: Monthly payment updates to "R$ 100,00 / mês"
+        </case>
+        <case name="Form validation: invalid amount">
+          Setup: Enter amount=0, submit form
+          Expected: Inline error "O valor deve ser maior que zero", submission blocked
+        </case>
+        <case name="Form validation: invalid installments">
+          Setup: Enter installments=100, submit form
+          Expected: Inline error "Máximo 60 parcelas", submission blocked
+        </case>
+        <case name="Successful submission: redirect + toast">
+          Setup: Fill valid form, submit
+          Mock: createInstallment returns { success: true, planId: UUID }
+          Expected: Form resets, navigates to /installments, success toast shows
+        </case>
+        <case name="Failed submission: error toast">
+          Setup: Fill form, submit
+          Mock: createInstallment returns { success: false, error: "Payment method not found" }
+          Expected: Error toast shows "❌ Erro ao criar parcelamento: Payment method not found"
+        </case>
+      </test-cases>
+    </component-tests>
+
+    <integration-tests>
+      <test-framework>Playwright or Cypress (optional for Story 2.2)</test-framework>
+      <test-cases>
+        <case name="End-to-end: Create installment via web form">
+          Flow:
+          1. User logs in
+          2. Opens transaction form
+          3. Selects Credit Mode credit card
+          4. Checks installment toggle
+          5. Fills: amount=1200, installments=12, description="Notebook", merchant="Dell"
+          6. Submits form
+          Expected:
+          - Form redirects to /installments
+          - Success toast appears
+          - Database: 1 installment_plan + 12 installment_payments created
+          - Analytics event: installment_created captured in PostHog
+        </case>
+        <case name="Localization: pt-BR and en">
+          Flow:
+          1. User switches locale to pt-BR
+          2. Opens form, sees "Parcelar esta compra?"
+          3. Switches locale to en
+          4. Opens form, sees "Installment purchase?"
+          Expected: All labels, errors, toasts localized correctly
+        </case>
+      </test-cases>
+    </integration-tests>
+
+    <edge-cases>
+      <case name="Rounding edge case: 100 / 3">
+        Input: total_amount=100, total_installments=3
+        Calculation: 100 / 3 = 33.333...
+        Expected: Monthly payment displays "R$ 33,33 / mês"
+        Optional: Show note "(Última parcela: R$ 33,34)" for transparency
+      </case>
+      <case name="Maximum installments: 60">
+        Input: total_amount=60000, total_installments=60
+        Expected: Monthly payment "R$ 1.000,00 / mês", 60 payments created
+        Performance: RPC completes &lt; 500ms (NFR-P1)
+      </case>
+      <case name="Minimum installments: 1">
+        Input: total_amount=500, total_installments=1
+        Expected: Creates plan with 1 payment (edge case, but valid)
+      </case>
+      <case name="First payment date in past">
+        Input: first_payment_date = "2024-01-01" (past date)
+        Expected: Warning "Data no passado. Confirma?" or auto-adjust to today
+      </case>
+      <case name="Credit card with credit_mode=false">
+        Input: Select Simple Mode card, check installment toggle
+        Expected: Form validation error "Este cartão não suporta parcelamentos"
+      </case>
+    </edge-cases>
+
+    <performance-tests>
+      <test name="Installment creation speed (NFR-P1)">
+        Target: &lt; 500ms for creating plan + 60 payments
+        Measurement: Time from RPC call to commit
+        Test: Create installment with 60 installments, measure RPC execution time
+        Expected: ~200-300ms for typical 12 installments
+      </test>
+      <test name="Form responsiveness (NFR-P5)">
+        Target: &lt; 100ms for monthly payment calculation update
+        Measurement: Time from input change to display update
+        Test: Change amount or installments, measure useEffect execution time
+        Expected: ~10-50ms (synchronous calculation, no network call)
+      </test>
+      <test name="Page load time (NFR-P6)">
+        Target: &lt; 2s for transaction form page load
+        Measurement: Time to interactive (TTI)
+        Test: Open transaction dialog, measure initial render time
+        Expected: ~1-1.5s (Next.js 15 Server Components)
+      </test>
+    </performance-tests>
+  </testing-guidance>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 8: IMPLEMENTATION CHECKLIST -->
+  <!-- ================================================================ -->
+  <implementation-checklist>
+    <phase name="Task 1: Update Transaction Form Component">
+      <task id="1.1" file="fe/components/transaction-dialog.tsx">
+        Add state for installment toggle: const [isInstallment, setIsInstallment] = useState(false)
+      </task>
+      <task id="1.2" file="fe/components/transaction-dialog.tsx">
+        Add installment form fields state:
+        - totalAmount: number
+        - totalInstallments: number (default 1)
+        - firstPaymentDate: string (default today in ISO format)
+      </task>
+      <task id="1.3" file="fe/components/transaction-dialog.tsx">
+        Render installment toggle checkbox (conditional on showInstallmentFields):
+        - Label: t('transaction.installment.toggleLabel')
+        - onChange: setIsInstallment(checked)
+      </task>
+      <task id="1.4" file="fe/components/transaction-dialog.tsx">
+        Render installment form fields (conditional on isInstallment === true):
+        - Total Amount: Number input with currency formatting
+        - Installments: Select dropdown (1-60)
+        - Monthly Payment: Read-only display (auto-calculated)
+        - First Payment Date: Date picker (default today)
+      </task>
+      <task id="1.5" file="fe/components/transaction-dialog.tsx">
+        Update Zod schema to include installment validation:
+        - totalAmount: z.number().min(0.01)
+        - totalInstallments: z.number().int().min(1).max(60)
+        - firstPaymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      </task>
+    </phase>
+
+    <phase name="Task 2: Implement Real-Time Monthly Payment Calculation">
+      <task id="2.1" file="fe/components/transaction-dialog.tsx">
+        Create useEffect hook watching [totalAmount, totalInstallments]:
+        - Calculate: monthlyPayment = Math.round((totalAmount / totalInstallments) * 100) / 100
+        - Update state: setMonthlyPayment(calculated value)
+      </task>
+      <task id="2.2" file="fe/components/transaction-dialog.tsx">
+        Display monthly payment:
+        - Format: "R$ {monthlyPayment} / mês"
+        - Read-only field or label
+        - Style: Prominent (larger font, bold)
+      </task>
+      <task id="2.3" file="fe/components/transaction-dialog.tsx">
+        Handle rounding edge cases:
+        - Calculate difference: totalAmount - (monthlyPayment * totalInstallments)
+        - If difference > 0.01: Show note "(Última parcela: R$ {lastPayment})"
+      </task>
+    </phase>
+
+    <phase name="Task 3: Create Installment Server Action">
+      <task id="3.1" file="fe/lib/actions/installments.ts">
+        Create new file with "use server" directive
+      </task>
+      <task id="3.2" file="fe/lib/actions/installments.ts">
+        Implement createInstallment() server action:
+        - Function signature: (data: CreateInstallmentRequest) => Promise&lt;CreateInstallmentResponse&gt;
+        - Validate inputs (Zod double-check server-side)
+        - Get authenticated user (Supabase auth.getUser())
+        - Verify payment method ownership
+      </task>
+      <task id="3.3" file="fe/lib/actions/installments.ts">
+        Call RPC function:
+        - supabase.rpc('create_installment_plan_atomic', { p_user_id, p_payment_method_id, ... })
+        - Parse response: { plan_id, success, error_message }
+      </task>
+      <task id="3.4" file="fe/lib/actions/installments.ts">
+        Handle success/error:
+        - If success: Return { success: true, planId }
+        - If error: Return { success: false, error }
+        - Catch exceptions: Return { success: false, error: "Unexpected error" }
+      </task>
+      <task id="3.5" file="fe/lib/types.ts">
+        Add TypeScript interfaces:
+        - CreateInstallmentRequest
+        - CreateInstallmentResponse
+        - InstallmentPlan
+        - InstallmentPayment
+      </task>
+    </phase>
+
+    <phase name="Task 4: Handle Form Submission and Redirect">
+      <task id="4.1" file="fe/components/transaction-dialog.tsx">
+        Update handleSubmit():
+        - Check if isInstallment === true
+        - If true: Call createInstallment()
+        - If false: Call createTransaction() (existing)
+      </task>
+      <task id="4.2" file="fe/components/transaction-dialog.tsx">
+        Process server action response:
+        - On success: Reset form, navigate to /[locale]/installments, show success toast
+        - On error: Show error toast, keep form visible
+      </task>
+      <task id="4.3" file="fe/components/transaction-dialog.tsx">
+        Implement toast notifications:
+        - Import toast library (Radix Toast or similar)
+        - Success toast: Green, auto-dismiss 5s
+        - Error toast: Red, manual dismiss
+      </task>
+      <task id="4.4" file="fe/components/transaction-dialog.tsx">
+        Implement navigation:
+        - Use Next.js router: router.push('/[locale]/installments')
+        - Preserve locale in URL
+      </task>
+    </phase>
+
+    <phase name="Task 5: Add Localization Strings">
+      <task id="5.1" file="fe/lib/localization/pt-br.ts">
+        Add transaction.installment.* keys (see modifications-needed section above)
+      </task>
+      <task id="5.2" file="fe/lib/localization/en.ts">
+        Translate all pt-BR keys to English
+      </task>
+      <task id="5.3" file="fe/components/transaction-dialog.tsx">
+        Use localization in component:
+        - Import: const t = useTranslations()
+        - Use keys: t('transaction.installment.toggleLabel'), etc.
+      </task>
+    </phase>
+
+    <phase name="Task 6: Analytics and Logging">
+      <task id="6.1" file="fe/lib/actions/installments.ts">
+        Add PostHog event for success:
+        - Event: installment_created
+        - Properties: userId, planId, totalAmount, totalInstallments, monthlyAmount, channel='web', locale
+      </task>
+      <task id="6.2" file="fe/lib/actions/installments.ts">
+        Add PostHog event for failure:
+        - Event: installment_creation_failed
+        - Properties: userId, error, totalAmount, totalInstallments, channel='web', locale
+      </task>
+      <task id="6.3" file="fe/lib/actions/installments.ts">
+        Server-side logging:
+        - Log successful creations (info level)
+        - Log validation errors (warn level)
+        - Log RPC errors (error level with stack trace)
+      </task>
+    </phase>
+
+    <phase name="Task 7: Testing">
+      <task id="7.1" file="fe/lib/actions/__tests__/installments.test.ts">
+        Unit tests for createInstallment (see test-cases above)
+      </task>
+      <task id="7.2" file="fe/components/__tests__/transaction-dialog.test.tsx">
+        Component tests for TransactionDialog (see test-cases above)
+      </task>
+      <task id="7.3" file="optional">
+        Integration tests with Playwright/Cypress (optional)
+      </task>
+      <task id="7.4" file="manual">
+        Manual testing on desktop and mobile browsers
+      </task>
+    </phase>
+
+    <phase name="Task 8: Documentation and Deployment">
+      <task id="8.1" file="fe/components/README.md">
+        Document installment form component (if README exists)
+      </task>
+      <task id="8.2" file="CLAUDE.md">
+        Update with installment form section:
+        - Add to Frontend User Flow
+        - Document conditional rendering pattern
+        - Document RPC usage from frontend
+      </task>
+      <task id="8.3" file="deployment">
+        Deployment checklist:
+        - Verify Story 2.0 migrations applied (041, 042)
+        - Verify create_installment_plan_atomic() exists
+        - Deploy frontend code
+        - Test in production
+        - Monitor logs and PostHog events
+      </task>
+      <task id="8.4" file="docs/sprint-artifacts/sprint-status.yaml">
+        Mark story as done: 2-2-add-installment-purchase-web-frontend: done
+      </task>
+    </phase>
+  </implementation-checklist>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 9: ACCEPTANCE CRITERIA (AUTHORITATIVE) -->
+  <!-- ================================================================ -->
+  <acceptance-criteria>
+    <criterion id="AC2.1" name="Form Conditional Rendering">
+      <requirement>
+        Installment fields visible ONLY when Credit Mode credit card selected
+      </requirement>
+      <scenarios>
+        <scenario name="Simple Mode Card Selected">
+          User opens transaction form → Selects Simple Mode credit card → Installment toggle/fields remain hidden
+        </scenario>
+        <scenario name="Credit Mode Card Selected">
+          User opens transaction form → Selects Credit Mode credit card → Installment toggle appears ("Parcelar esta compra?")
+          → Initially unchecked (default = single transaction) → Checking toggle reveals installment fields
+        </scenario>
+        <scenario name="No Credit Mode Cards Available">
+          User with only Simple Mode cards opens form → No installment toggle shown → Form behaves as standard transaction form
+        </scenario>
+      </scenarios>
+      <validation>
+        - Test with Simple Mode card → No installment fields
+        - Test with Credit Mode card → Installment toggle appears
+        - Test with mixed cards → Conditional behavior works correctly
+      </validation>
+    </criterion>
+
+    <criterion id="AC2.2" name="Form Fields">
+      <requirement>
+        All required installment fields with proper types and defaults
+      </requirement>
+      <fields>
+        <field name="Total Amount">
+          Type: Number input, Validation: &gt; 0, Format: Brazilian currency (R$ with comma separator)
+        </field>
+        <field name="Number of Installments">
+          Type: Select dropdown (1-60), Default: 1, Validation: Integer 1-60
+        </field>
+        <field name="Monthly Payment">
+          Type: Read-only display, Format: "R$ 200,00 / mês", Calculation: total_amount / installments (real-time)
+        </field>
+        <field name="First Payment Date">
+          Type: Date picker, Default: Today, Validation: Required, Format: dd/mm/yyyy (Brazilian)
+        </field>
+      </fields>
+      <validation>
+        - All fields render correctly with proper types
+        - Monthly payment updates when amount or installments change
+        - Form validation prevents submission if required fields empty
+      </validation>
+    </criterion>
+
+    <criterion id="AC2.3" name="Real-Time Calculation">
+      <requirement>
+        Monthly payment updates instantly as user changes amount or installment count
+      </requirement>
+      <scenarios>
+        <scenario name="User Changes Total Amount">
+          Enter: Total Amount = R$ 600,00, Installments = 3 → Monthly Payment shows "R$ 200,00 / mês"
+          → Change: Total Amount = R$ 900,00 → Monthly Payment updates immediately to "R$ 300,00 / mês"
+        </scenario>
+        <scenario name="User Changes Installment Count">
+          Enter: Total Amount = R$ 600,00, Installments = 3 → Monthly Payment shows "R$ 200,00 / mês"
+          → Change: Installments = 6 → Monthly Payment updates immediately to "R$ 100,00 / mês"
+        </scenario>
+        <scenario name="Rounding Display">
+          Enter: Total Amount = R$ 100,00, Installments = 3 → Monthly Payment shows "R$ 33,33 / mês"
+          → Note: "(Última parcela: R$ 33,34)" shown for transparency
+        </scenario>
+      </scenarios>
+      <validation>
+        - Test calculation accuracy (600 / 3 = 200)
+        - Test rounding edge case (100 / 3 = 33.33)
+        - Test UI updates instantly (no lag)
+      </validation>
+    </criterion>
+
+    <criterion id="AC2.4" name="Validation">
+      <requirement>
+        Form validation prevents invalid installment data
+      </requirement>
+      <rules>
+        <rule name="Amount Validation">
+          Amount &gt; 0 → Pass | Amount ≤ 0 → "O valor deve ser maior que zero" | Amount empty → "Campo obrigatório"
+        </rule>
+        <rule name="Installments Validation">
+          Installments 1-60 → Pass | &lt; 1 → "Mínimo 1 parcela" | &gt; 60 → "Máximo 60 parcelas"
+        </rule>
+        <rule name="First Payment Date Validation">
+          Valid date → Pass | Empty → "Campo obrigatório" | Past date → Warning: "Data no passado. Confirma?"
+        </rule>
+        <rule name="Payment Method Validation">
+          Credit Mode card selected → Pass | Simple Mode card with installments → "Este cartão não suporta parcelamentos"
+        </rule>
+      </rules>
+      <validation>
+        - Test all validation rules trigger correctly
+        - Test error messages display inline
+        - Test form submission blocked when invalid
+      </validation>
+    </criterion>
+
+    <criterion id="AC2.5" name="Submission Success">
+      <requirement>
+        Form submission creates installment plan and provides user feedback
+      </requirement>
+      <success-flow>
+        <step>User fills all required fields → Clicks "Salvar" → Form validates (all rules pass)</step>
+        <step>Frontend calls createInstallment() server action with parameters</step>
+        <step>Server calls create_installment_plan_atomic() PostgreSQL function → Creates 1 plan + N payments</step>
+        <step>Server returns { success: true, planId: UUID }</step>
+        <step>Form resets → Redirects to /[locale]/installments → Success toast: "✅ Parcelamento criado com sucesso!"</step>
+        <step>Analytics event: installment_created with userId, planId, totalAmount, totalInstallments, channel='web', locale</step>
+      </success-flow>
+      <error-flow>
+        <step>Server returns error: { success: false, error: "Payment method not found" }</step>
+        <step>Error toast: "❌ Erro ao criar parcelamento: {error}" → Form remains visible with data</step>
+      </error-flow>
+      <validation>
+        - Test successful submission → Verify plan created in database
+        - Test redirect to /installments works
+        - Test success toast displays with correct details
+        - Test error handling → Error toast shows user-friendly message
+      </validation>
+    </criterion>
+  </acceptance-criteria>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 10: LESSONS FROM PRIOR STORIES -->
+  <!-- ================================================================ -->
+  <lessons-from-prior-stories>
+    <lesson from="Story 2.0">
+      <title>Payment Method ID Refactoring Foundation Ready</title>
+      <description>
+        Story 2.0 migrated payment_method from TEXT to payment_method_id UUID, making it possible
+        to query payment method objects and check credit_mode flag for conditional rendering.
+      </description>
+      <application>
+        Use selectedPaymentMethod object (already computed in transaction-dialog.tsx line 58)
+        to access credit_mode flag for showInstallmentFields conditional.
+      </application>
+    </lesson>
+
+    <lesson from="Story 2.0">
+      <title>Atomic Transaction Functions Prevent Partial State</title>
+      <description>
+        create_installment_plan_atomic() wraps multi-table operations in PostgreSQL transaction,
+        ensuring plan + payments are created atomically (all-or-nothing).
+      </description>
+      <application>
+        Always call RPC function instead of separate INSERT statements. If RPC fails, no partial
+        records are created. Test rollback scenarios (invalid installments, constraint violations).
+      </application>
+    </lesson>
+
+    <lesson from="Story 2.1">
+      <title>RPC Function Validated and Working</title>
+      <description>
+        Story 2.1 (WhatsApp) already uses create_installment_plan_atomic() successfully, validating
+        performance (60 installments &lt; 500ms) and correctness (rounding, date calculations).
+      </description>
+      <application>
+        Reuse same RPC function with confidence. No need to duplicate logic. Focus on web UI/UX
+        and form validation. Backend is battle-tested.
+      </application>
+    </lesson>
+
+    <lesson from="Story 1.4">
+      <title>Form Pattern with React Hook Form + Zod</title>
+      <description>
+        Epic 1 Story 1.4 (Credit Mode Selection Web) established pattern for form validation
+        using React Hook Form and Zod schema with localized error messages.
+      </description>
+      <application>
+        Follow same pattern for installment form validation. Define Zod schema with custom error
+        messages, integrate with React Hook Form, display inline errors below fields.
+      </application>
+    </lesson>
+
+    <lesson from="Story 1.5">
+      <title>Code Review and Test Coverage Required</title>
+      <description>
+        Story 1.5 had 0% test coverage and required significant fixes. Epic 2 established 70%+
+        coverage target to prevent regression.
+      </description>
+      <application>
+        Write unit tests for createInstallment() server action (80% target). Write component tests
+        for conditional rendering, validation, submission flow. Test edge cases (rounding, max installments).
+      </application>
+    </lesson>
+
+    <lesson from="Epic 1">
+      <title>Localization Pattern (pt-BR Primary, English Secondary)</title>
+      <description>
+        All Epic 1 stories localized user-facing text in pt-BR and English. Established useTranslations
+        hook pattern with next-intl.
+      </description>
+      <application>
+        Add all installment-related keys to pt-BR and en localization files. Use t('transaction.installment.*')
+        for labels, errors, toasts. Test both locales manually.
+      </application>
+    </lesson>
+
+    <lesson from="Epic 1">
+      <title>Analytics Event Tracking for User Behavior Insights</title>
+      <description>
+        Epic 1 tracked transaction_created, credit_mode_selected, and other events in PostHog to
+        measure feature adoption and identify UX issues.
+      </description>
+      <application>
+        Track installment_created (success) and installment_creation_failed (errors) with detailed
+        properties (amount, installments, channel, locale). Monitor event volume and error rate.
+      </application>
+    </lesson>
+  </lessons-from-prior-stories>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 11: RISKS AND MITIGATION -->
+  <!-- ================================================================ -->
+  <risks>
+    <risk id="RISK-1" severity="medium">
+      <title>Form Complexity - Many Conditional Fields</title>
+      <likelihood>Medium (6 standard fields + 4 installment fields + toggle)</likelihood>
+      <impact>Confusing UX, higher error rate, user frustration</impact>
+      <mitigation>
+        - Use progressive disclosure pattern (hide fields until needed)
+        - Real-time feedback (monthly payment updates instantly)
+        - Clear validation messages (inline errors with localized text)
+        - Extensive usability testing with real users
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-2" severity="low">
+      <title>RPC Function Performance for Long-Term Installments</title>
+      <likelihood>Low (already tested in Story 2.1: 60 installments &lt; 500ms)</likelihood>
+      <impact>Timeout errors for users creating 60-installment plans</impact>
+      <mitigation>
+        - Story 2.1 validated performance (&lt; 500ms for 60 installments)
+        - Monitor RPC execution time in production
+        - Alert if 95th percentile &gt; 500ms
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-3" severity="medium">
+      <title>Conditional Rendering Bugs - State Management Complexity</title>
+      <likelihood>Medium (multiple state variables: isInstallment, showInstallmentFields, formData)</likelihood>
+      <impact>Fields not showing/hiding correctly, form submission errors</impact>
+      <mitigation>
+        - Comprehensive component tests (all scenarios: Simple Mode, Credit Mode, toggle on/off)
+        - Manual testing with different payment method combinations
+        - Use React DevTools to inspect state during development
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-4" severity="medium">
+      <title>Currency Formatting Inconsistencies Across Locales</title>
+      <likelihood>Medium (pt-BR uses comma, en uses period as decimal separator)</likelihood>
+      <impact>User confusion, incorrect data entry, parsing errors</impact>
+      <mitigation>
+        - Use Intl.NumberFormat with locale parameter for all currency displays
+        - Test both pt-BR and en locales manually
+        - Validate number parsing in server action (reject non-numeric input)
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-5" severity="low">
+      <title>Navigation to /installments Page Before Page Exists</title>
+      <likelihood>Low (Story 2.2 can redirect to placeholder or home page if needed)</likelihood>
+      <impact>404 error or blank page after successful creation</impact>
+      <mitigation>
+        - Option 1: Create placeholder /[locale]/installments page (empty state message)
+        - Option 2: Redirect to home page (/) with success toast until Story 2.4 implements full list
+        - Document dependency: Story 2.4 (View All Installments) creates full /installments page
+      </mitigation>
+    </risk>
+  </risks>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 12: PERFORMANCE TARGETS -->
+  <!-- ================================================================ -->
+  <performance-targets>
+    <target id="NFR-P1">
+      <name>Installment Creation Speed</name>
+      <metric>Time from RPC call to database commit</metric>
+      <target>&lt; 500ms for creating plan + 60 payments</target>
+      <expected>~200-300ms for typical 12 installments</expected>
+      <measurement>Monitor RPC execution time in server action logs</measurement>
+    </target>
+
+    <target id="NFR-P5">
+      <name>Form Responsiveness - Monthly Payment Calculation</name>
+      <metric>Time from input change to display update</metric>
+      <target>&lt; 100ms</target>
+      <expected>~10-50ms (synchronous calculation, no network call)</expected>
+      <measurement>Use React DevTools Profiler to measure useEffect execution time</measurement>
+    </target>
+
+    <target id="NFR-P6">
+      <name>Page Load Time - Transaction Form</name>
+      <metric>Time to interactive (TTI)</metric>
+      <target>&lt; 2s</target>
+      <expected>~1-1.5s (Next.js 15 Server Components)</expected>
+      <measurement>Use Lighthouse or WebPageTest for TTI measurement</measurement>
+    </target>
+  </performance-targets>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 13: DOCUMENTATION UPDATES REQUIRED -->
+  <!-- ================================================================ -->
+  <documentation-updates>
+    <update file="CLAUDE.md">
+      <section>Frontend User Flow</section>
+      <changes>
+        Add: "Installment creation via transaction form with conditional rendering based on Credit Mode"
+        Add: "Real-time monthly payment calculation pattern"
+        Add: "Toast notifications for success/error feedback"
+      </changes>
+    </update>
+
+    <update file="CLAUDE.md">
+      <section>Common Development Commands</section>
+      <changes>
+        Add: "npm test -- installments.test.ts  # Test installment server action"
+        Add: "npm test -- transaction-dialog.test.tsx  # Test form component"
+      </changes>
+    </update>
+
+    <update file="fe/components/README.md">
+      <section>TransactionDialog Component (if README exists)</section>
+      <changes>
+        Document: Conditional rendering pattern for installment fields
+        Document: Real-time calculation hook (useEffect pattern)
+        Document: Integration with createInstallment() server action
+      </changes>
+    </update>
+
+    <update file="fe/lib/actions/README.md">
+      <section>Server Actions (if README exists)</section>
+      <changes>
+        Document: createInstallment() function signature and usage
+        Document: RPC function integration pattern
+        Document: Error handling strategy (3-tier: validation, business logic, system)
+      </changes>
+    </update>
+  </documentation-updates>
+
+  <!-- ================================================================ -->
+  <!-- SECTION 14: DEPLOYMENT CHECKLIST -->
+  <!-- ================================================================ -->
+  <deployment-checklist>
+    <pre-deployment>
+      <check>Verify Story 2.0 migrations applied: 041_payment_method_id_refactoring.sql ✓</check>
+      <check>Verify Story 2.0 migrations applied: 042_atomic_transaction_functions.sql ✓</check>
+      <check>Verify create_installment_plan_atomic() exists in Supabase (run SELECT query)</check>
+      <check>Test RPC function manually in Supabase SQL editor with sample data</check>
+      <check>Run all unit tests: npm test -- installments.test.ts (80%+ coverage)</check>
+      <check>Run all component tests: npm test -- transaction-dialog.test.tsx</check>
+      <check>Manual testing: Create installment via web form (both locales)</check>
+      <check>Manual testing: Test validation errors (invalid amount, installments out of range)</check>
+      <check>Manual testing: Test edge cases (rounding, max 60 installments)</check>
+    </pre-deployment>
+
+    <deployment>
+      <step>Deploy frontend code to production (Next.js build + deploy)</step>
+      <step>Verify environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY</step>
+      <step>Clear CDN cache if applicable (force refresh of static assets)</step>
+      <step>Monitor deployment logs for errors (Vercel/Railway logs)</step>
+    </deployment>
+
+    <post-deployment>
+      <check>Test in production: Create installment via web form</check>
+      <check>Verify database: 1 installment_plan + N installment_payments created</check>
+      <check>Verify redirect to /[locale]/installments works (or fallback if page not created)</check>
+      <check>Verify success toast displays correctly</check>
+      <check>Check PostHog events: installment_created captured with correct properties</check>
+      <check>Monitor error rate: &lt; 5% of creation attempts should fail</check>
+      <check>Monitor performance: RPC execution time &lt; 500ms (95th percentile)</check>
+    </post-deployment>
+
+    <rollback-plan>
+      <scenario>Critical bugs discovered in production</scenario>
+      <steps>
+        1. Revert frontend deployment to previous version
+        2. Database rollback NOT needed (RPC function remains, no schema changes)
+        3. Notify users via in-app message: "Installment feature temporarily unavailable"
+        4. Fix bugs in development, re-test, re-deploy
+      </steps>
+    </rollback-plan>
+  </deployment-checklist>
+
+  <!-- ================================================================ -->
+  <!-- END OF STORY CONTEXT -->
+  <!-- ================================================================ -->
+</story-context>

@@ -1,0 +1,1 @@
+../../fe/scripts/021_add_admin_and_category_analytics_policies.sql

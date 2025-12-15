@@ -1,0 +1,1 @@
+../../fe/scripts/031_auto_create_profiles.sql

@@ -1,0 +1,1 @@
+../../fe/scripts/042_1_switch_credit_mode_function.sql

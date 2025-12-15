@@ -1,0 +1,1 @@
+../../fe/scripts/005_user_profiles_and_permissions.sql

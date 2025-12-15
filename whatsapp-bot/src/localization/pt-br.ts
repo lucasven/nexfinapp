@@ -480,9 +480,177 @@ Você tem ${count} parcelamento(s) ativo(s). O que deseja fazer?
 Responda 1, 2 ou 3`,
     mode_switched_keep: 'Modo alterado. Parcelamentos ativos continuam.',
     mode_switched_payoff: (count: number) => `Modo alterado. ${count} parcelamentos marcados como quitados.`,
-    mode_switched_success: 'Modo alterado com sucesso!',
+    mode_switched_success: (cardName: string, mode: 'credit' | 'simple') => {
+      const modeName = mode === 'credit' ? 'Modo Crédito' : 'Modo Simples'
+      return `✅ Cartão ${cardName} agora está em ${modeName}!
+
+${mode === 'credit' ? `Agora você pode:
+• Fazer parcelamentos
+• Acompanhar gastos por fatura
+• Receber lembretes de fechamento` : `Este cartão será tratado como débito.`}`
+    },
     mode_switch_cancelled: 'Mudança de modo cancelada.',
     invalid_switch_option: 'Por favor, responda 1, 2 ou 3.'
+  },
+
+  // Installments (Epic 2 Story 2.1)
+  installment: {
+    created_title: (description: string) => `✅ Parcelamento criado: ${description}`,
+    created_total: (total: number, installments: number, monthly: number) =>
+      `💰 Total: R$ ${total.toFixed(2).replace('.', ',')} em ${installments}x de R$ ${monthly.toFixed(2).replace('.', ',')}`,
+    created_first_payment: (date: string) => `📅 Primeira parcela: ${date}`,
+    created_last_payment: (date: string) => `📅 Última parcela: ${date}`,
+    created_help: 'Use /parcelamentos para ver todos os seus parcelamentos ativos.',
+    blocked_simple_mode: 'Para usar parcelamentos, você precisa ativar o Modo Crédito. Acesse o app web para ativar.',
+    select_card: (cards: string[]) => `Qual cartão você usou?\n\n${cards.map((c, i) => `${i + 1}️⃣ ${c}`).join('\n')}\n\nResponda com o número do cartão.`,
+    clarify_amount: 'Qual foi o valor total da compra?',
+    clarify_installments: 'Em quantas parcelas?',
+    error_validation: 'Erro de validação. Verifique os dados e tente novamente.',
+    error_network: 'Erro de conexão. Verifique sua internet e tente novamente.'
+  },
+
+  // Future Commitments (Epic 2 Story 2.3)
+  futureCommitments: {
+    title: 'Compromissos Futuros',
+    total_next_months: (months: number, total: number) => `Total próximos ${months} meses: R$ ${total.toFixed(2).replace('.', ',')}`,
+    no_active: 'Você não tem parcelamentos ativos.',
+    create_hint: 'Para criar um parcelamento, envie:\n"gastei 600 em 3x no celular"',
+    month_summary: (month: string, year: string, amount: number, count: number) =>
+      `📅 ${month}/${year}: R$ ${amount.toFixed(2).replace('.', ',')} (${count} ${count === 1 ? 'parcela' : 'parcelas'})`,
+    installment_item: (description: string, current: number, total: number, amount: number) =>
+      `  • ${description}: ${current}/${total} - R$ ${amount.toFixed(2).replace('.', ',')}`,
+    empty_state: '📊 Compromissos Futuros\n\nVocê não tem parcelamentos ativos.\n\nPara criar um parcelamento, envie:\n"gastei 600 em 3x no celular"',
+    loading: 'Carregando compromissos...',
+    error: 'Erro ao carregar compromissos.',
+  },
+
+  // Installment Payoff (Epic 2 Story 2.5)
+  installmentPayoff: {
+    list_active: '📋 Seus parcelamentos ativos:',
+    installment_summary: (emoji: string, description: string, paymentMethod: string, amount: number, count: number, paid: number, total: number, remaining: number) =>
+      `${emoji} ${description}\n${paymentMethod}\nR$ ${amount.toFixed(2).replace('.', ',')} em ${count}x\n${paid}/${total} pagas • Restante: R$ ${remaining.toFixed(2).replace('.', ',')}`,
+    select_prompt: (numbers: string) => `Qual parcelamento você quer quitar? Responda com o número (${numbers}) ou descrição.`,
+    confirmation_title: '⚠️ Confirme a quitação:',
+    confirmation_details: (emoji: string, description: string, paymentMethod: string, total: number, count: number, paid: number, paidAmount: number, pending: number, remaining: number) =>
+      `${emoji} ${description}\n${paymentMethod}\n\n💰 Total: R$ ${total.toFixed(2).replace('.', ',')} em ${count}x\n✅ Já pago: R$ ${paidAmount.toFixed(2).replace('.', ',')} (${paid} ${paid === 1 ? 'parcela' : 'parcelas'})\n📊 Restante: R$ ${remaining.toFixed(2).replace('.', ',')} (${pending} ${pending === 1 ? 'parcela' : 'parcelas'})\n\n✅ Parcelamento marcado como quitado\n✅ ${pending} ${pending === 1 ? 'parcela futura cancelada' : 'parcelas futuras canceladas'}\n✅ Parcelas pagas permanecem no histórico\n✅ Compromissos futuros atualizados`,
+    confirm_prompt: 'Confirma a quitação? (sim/não)',
+    success: (emoji: string, description: string, count: number, amount: number) =>
+      `✅ Parcelamento quitado!\n\n${emoji} ${description}\n${count} ${count === 1 ? 'parcela futura removida' : 'parcelas futuras removidas'}\nValor removido: R$ ${amount.toFixed(2).replace('.', ',')}\n\nSeus compromissos futuros foram atualizados.`,
+    cancelled: 'Quitação cancelada. O parcelamento continua ativo.',
+    no_active: 'Você não tem parcelamentos ativos.',
+    invalid_selection: (numbers: string) => `Não entendi. Por favor, responda com o número (${numbers}) ou descrição do parcelamento.`,
+    error: 'Erro ao quitar parcelamento. Tente novamente mais tarde.',
+  },
+
+  // Installment Delete (Epic 2 Story 2.7)
+  installmentDelete: {
+    list_prompt: 'Qual parcelamento você quer deletar?',
+    list_item: (number: string, description: string, total: number, installments: number) =>
+      `${number} ${description} - R$ ${total.toFixed(2).replace('.', ',')} em ${installments}x`,
+    list_status: (paid: number, pending: number) => `   • ${paid} pagas, ${pending} pendentes`,
+    list_footer: 'Responda com o número (ex: 1) ou "cancelar"',
+    no_active: 'Você não tem parcelamentos ativos.',
+    confirmation_title: '⚠️ Confirme a Deleção',
+    confirmation_intro: 'Você vai deletar permanentemente:',
+    confirmation_details: (emoji: string, description: string, total: number, count: number) =>
+      `${emoji} ${description}\n💰 R$ ${total.toFixed(2).replace('.', ',')} em ${count}x`,
+    confirmation_status: 'Status:',
+    confirmation_paid: (paid: number, paidAmount: number) =>
+      `• ${paid} ${paid === 1 ? 'parcela paga' : 'parcelas pagas'} (R$ ${paidAmount.toFixed(2).replace('.', ',')})`,
+    confirmation_pending: (pending: number, pendingAmount: number) =>
+      `• ${pending} ${pending === 1 ? 'parcela pendente' : 'parcelas pendentes'} (R$ ${pendingAmount.toFixed(2).replace('.', ',')})`,
+    confirmation_what_happens: '⚠️ O que vai acontecer:',
+    confirmation_plan_removed: '• Plano removido permanentemente',
+    confirmation_pending_deleted: (count: number) =>
+      `• ${count} ${count === 1 ? 'parcela pendente deletada' : 'parcelas pendentes deletadas'}`,
+    confirmation_paid_preserved: (count: number) =>
+      `• ${count} ${count === 1 ? 'transação paga preservada' : 'transações pagas preservadas'} (sem vínculo)`,
+    confirmation_commitments_updated: (amount: number) =>
+      `• R$ ${amount.toFixed(2).replace('.', ',')} removidos dos compromissos futuros`,
+    confirmation_irreversible: '• Ação irreversível',
+    confirm_prompt: 'Confirmar deleção? Responda: "confirmar" ou "cancelar"',
+    success_title: '✅ Parcelamento Deletado',
+    success_description: (description: string) => `${description} removido permanentemente.`,
+    success_impact: '📊 Impacto:',
+    success_pending_deleted: (count: number) =>
+      `• ${count} ${count === 1 ? 'parcela pendente deletada' : 'parcelas pendentes deletadas'}`,
+    success_paid_preserved: (count: number) =>
+      `• ${count} ${count === 1 ? 'transação paga preservada' : 'transações pagas preservadas'}`,
+    success_commitments_updated: (amount: number) =>
+      `• R$ ${amount.toFixed(2).replace('.', ',')} removidos dos compromissos futuros`,
+    success_footer: 'Seus compromissos futuros foram atualizados.',
+    cancelled: '❌ Deleção cancelada.',
+    timeout: '⏱️ Tempo esgotado. Deleção cancelada por segurança.',
+    invalid_selection: (numbers: string) =>
+      `Número inválido. Por favor, escolha entre ${numbers} ou "cancelar".`,
+    error: '❌ Erro ao deletar parcelamento. Tente novamente mais tarde.',
+    error_not_found: '❌ Parcelamento não encontrado.',
+    error_unauthorized: '❌ Você não tem permissão para deletar este parcelamento.',
+  },
+
+  // Statement Reminder (Epic 3 Story 3.4)
+  statementReminder: {
+    greeting: 'Olá! 👋',
+    closingIn: (paymentMethod: string, days: number, date: string) =>
+      `Sua fatura do *${paymentMethod}* fecha em ${days} dias (${date}).`,
+    period: (start: string, end: string) => `📅 Período atual: ${start} - ${end}`,
+    total: (amount: string) => `💳 Total até agora: ${amount}`,
+    budget: (budget: string, percentage: number) => `📊 Orçamento: ${budget} (${percentage}% usado)`,
+    remaining: (amount: string) => `Restam ${amount} para o seu orçamento mensal.`,
+    exceeded: (amount: string) => `Você está ${amount} acima do planejado para este mês.`,
+    cta: 'Para ver os detalhes, digite "resumo da fatura" ou acesse o app.',
+  },
+
+  // Statement Summary (Epic 3 Story 3.5)
+  statementSummary: {
+    header: (paymentMethod: string) => `💳 *Resumo da Fatura - ${paymentMethod}*`,
+    period: (start: string, end: string) => `📅 Período: ${start} - ${end}`,
+    total: (amount: string) => `💰 Total: ${amount}`,
+    budget: (budget: string, percentage: number) => `📊 Orçamento: ${budget} (${percentage}% usado)`,
+    exceeded: (amount: string) => `⚠️ Você está ${amount} acima do planejado.`,
+    remaining: (amount: string) => `✅ Restam ${amount} do seu orçamento.`,
+    categoryHeader: '*Gastos por categoria:*',
+    categoryLine: (icon: string, name: string, amount: string, percentage: number) =>
+      `${icon} ${name}: ${amount} (${percentage}%)`,
+    transactionCount: (count: number) => `  - ${count} transações`,
+    includesInstallments: 'Inclui parcelamentos:',
+    installmentFormat: (description: string, current: number, total: number, amount: string) =>
+      `${description} parcelado ${current}/${total} (${amount})`,
+    installmentBullet: (description: string, current: number, total: number, amount: string) =>
+      `  • ${description} ${current}/${total} (${amount})`,
+    cta: '💡 *Dica:* Acesse o app para ver mais detalhes e gráficos.',
+    noTransactions: 'Você ainda não tem gastos neste período. Quando adicionar transações, elas aparecerão aqui.',
+    cardSelection: (count: number, list: string) => `Você tem ${count} cartões. Qual deseja ver?\n${list}`,
+    noCards: 'Você não tem cartões de crédito em Modo Crédito. Configure um cartão primeiro.',
+    noClosingDate: 'Seu cartão ainda não tem data de fechamento configurada. Configure a data de fechamento nas configurações.',
+    error: 'Não consegui buscar o resumo agora. Tente novamente em alguns instantes.',
+  },
+
+  // Story 3.6: Statement Period Badge Labels
+  statementPeriod: {
+    currentPeriod: 'atual',
+    nextPeriod: 'próxima',
+    pastPeriod: 'passada',
+    periodContext: 'Fatura {period} ({start} - {end})',
+  },
+
+  // Story 4.2: Payment Due Reminder
+  paymentReminder: {
+    title: '💳 Lembrete: Pagamento do cartão',
+    dueIn: (days: number, date: string) => `Vence em ${days} dias (${date})`,
+    amount: (amount: string) => `💰 Valor: ${amount}`,
+    cardName: (name: string) => `Cartão ${name}`,
+    period: (start: string, end: string) => `Período: ${start} - ${end}`,
+    footer: 'Não esqueça de realizar o pagamento! 😊',
+  },
+
+  autoPayment: {
+    descriptionFormat: (cardName: string, monthYear: string) => `Pagamento Cartão ${cardName} - Fatura ${monthYear}`,
+    jobStarted: 'Iniciando criação de transações de pagamento automáticas',
+    jobCompleted: 'Criação de transações de pagamento concluída',
+    transactionCreated: (cardName: string) => `Transação de pagamento criada para ${cardName}`,
+    transactionSkipped: (cardName: string) => `Transação de pagamento já existe para ${cardName}`,
+    transactionFailed: (cardName: string) => `Erro ao criar transação de pagamento para ${cardName}`,
   }
 }
 

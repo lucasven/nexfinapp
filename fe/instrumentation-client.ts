@@ -7,5 +7,5 @@ posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
   capture_pageview: false, // We'll capture pageviews manually in the provider
   capture_pageleave: true,
   capture_exceptions: true, // This enables capturing exceptions using Error Tracking
-  debug: process.env.NODE_ENV === "development",
+  debug: false, // Set to true to enable PostHog console logs
 });

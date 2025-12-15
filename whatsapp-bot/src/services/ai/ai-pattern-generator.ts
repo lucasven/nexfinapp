@@ -381,6 +381,134 @@ const DELETE_BUDGET_TOOL = {
   }
 }
 
+// NEW: Installment (Parcelamento) Tool for Epic 2 Story 2.1
+const INSTALLMENT_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'create_installment',
+    description: 'Create an installment purchase plan (parcelamento). Used when user mentions buying something in installments like "gastei 600 em 3x" or "comprei 450 parcelado em 9 vezes".',
+    parameters: {
+      type: 'object',
+      properties: {
+        amount: {
+          type: 'number',
+          description: 'Total amount of the installment purchase'
+        },
+        installments: {
+          type: 'integer',
+          description: 'Number of installments (1-60)',
+          minimum: 1,
+          maximum: 60
+        },
+        description: {
+          type: 'string',
+          description: 'Description of what was purchased (e.g., "celular", "notebook")'
+        },
+        merchant: {
+          type: 'string',
+          description: 'Merchant name if mentioned'
+        },
+        first_payment_date: {
+          type: 'string',
+          format: 'date',
+          description: 'First payment date in YYYY-MM-DD format. Defaults to today if not specified.'
+        }
+      },
+      required: ['amount', 'installments']
+    }
+  }
+}
+
+// NEW: Future Commitments Tool for Epic 2 Story 2.3
+const FUTURE_COMMITMENTS_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'view_future_commitments',
+    description: 'View future installment payment commitments. Used when user asks about upcoming installments, future commitments, or wants to see what they\'ll owe in future months. Patterns: "parcelamentos", "/parcelamentos", "próximas parcelas", "future commitments", "/installments".',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  }
+}
+
+// NEW: Payoff Installment Tool for Epic 2 Story 2.5
+const PAYOFF_INSTALLMENT_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'payoff_installment',
+    description: 'Pay off an active installment early (quitação antecipada). Used when user wants to pay off remaining installments early. Patterns: "quitar parcelamento", "pagar resto do notebook", "quitação antecipada", "pay off installment", "quitar parcelas".',
+    parameters: {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+          description: 'Optional description or keyword to identify which installment to pay off (e.g., "celular", "notebook"). If not provided, will show list of all active installments.'
+        }
+      },
+      required: []
+    }
+  }
+}
+
+// NEW: Delete Installment Tool for Epic 2 Story 2.7
+const DELETE_INSTALLMENT_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'delete_installment',
+    description: 'Permanently delete an installment plan. Used when user wants to remove an installment completely. Patterns: "deletar parcelamento", "excluir parcelas do celular", "remover parcelamento", "apagar compra parcelada", "delete installment", "remove installment". Different from payoff - this removes the plan entirely.',
+    parameters: {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+          description: 'Optional description or keyword to identify which installment to delete (e.g., "celular", "notebook", "iPhone"). If not provided, will show list of all installments for user to choose.'
+        }
+      },
+      required: []
+    }
+  }
+}
+
+// NEW: Statement Summary Tool for Epic 3 Story 3.5
+const STATEMENT_SUMMARY_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'view_statement_summary',
+    description: 'View credit card statement summary with category breakdown. Shows current statement period spending by category with installment details. Use when user asks about statement summary, spending breakdown, or where their money went. Patterns: "resumo da fatura", "statement summary", "resumo", "fatura", "resumo do cartão", "gastos por categoria", "onde gastei", "breakdown de gastos", "view statement", "show statement summary".',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  }
+}
+
+// NEW: Credit Mode Switch Tool for Epic 1 Story 1.5
+const CREDIT_MODE_SWITCH_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'switch_credit_mode',
+    description: 'Switch a credit card between Credit Mode and Simple Mode. Credit Mode enables installments, statement tracking, and budget management. Simple Mode is basic expense tracking. Use when user wants to enable/disable credit mode, switch modes, or activate credit card features. Patterns: "mudar para modo crédito", "switch to credit mode", "ativar modo crédito", "enable credit mode", "desativar modo crédito", "disable credit mode", "mudar para modo simples", "switch to simple mode", "credit mode on", "credit mode off".',
+    parameters: {
+      type: 'object',
+      properties: {
+        target_mode: {
+          type: 'string',
+          enum: ['credit', 'simple'],
+          description: 'Target mode: "credit" for Credit Mode (enables installments, budgets, statements), "simple" for Simple Mode (basic tracking)'
+        },
+        payment_method_name: {
+          type: 'string',
+          description: 'Optional: Name of the credit card to switch (e.g., "Nubank", "C6"). If not provided, will prompt user to select if they have multiple cards.'
+        }
+      },
+      required: ['target_mode']
+    }
+  }
+}
+
 /**
  * Parse message with AI using function calling
  */
@@ -433,7 +561,16 @@ export async function parseWithAI(
         QUICK_STATS_TOOL,
         ANALYZE_SPENDING_TOOL,
         UNDO_TOOL,
-        DELETE_BUDGET_TOOL
+        DELETE_BUDGET_TOOL,
+        // Epic 1: Credit Mode
+        CREDIT_MODE_SWITCH_TOOL,
+        // Epic 2: Installments
+        INSTALLMENT_TOOL,
+        FUTURE_COMMITMENTS_TOOL,
+        PAYOFF_INSTALLMENT_TOOL,
+        DELETE_INSTALLMENT_TOOL,
+        // Epic 3: Statement Summary
+        STATEMENT_SUMMARY_TOOL
       ],
       tool_choice: 'auto',
       temperature: 0.1,
@@ -794,7 +931,63 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
         }
       }
       break
-      
+
+    // Epic 2 Story 2.1: Installment creation
+    case 'create_installment':
+      intent = {
+        action: 'create_installment',
+        confidence: 0.95,
+        entities: {
+          amount: args.amount,
+          installments: args.installments,
+          description: args.description,
+          merchant: args.merchant,
+          firstPaymentDate: args.first_payment_date
+        }
+      }
+      break
+
+    // Epic 2 Story 2.3: View future commitments
+    case 'view_future_commitments':
+      intent = {
+        action: 'view_future_commitments',
+        confidence: 0.95,
+        entities: {}
+      }
+      break
+
+    // Epic 2 Story 2.5: Pay off installment early
+    case 'payoff_installment':
+      intent = {
+        action: 'payoff_installment',
+        confidence: 0.95,
+        entities: {
+          description: args.description
+        }
+      }
+      break
+
+    // Epic 3 Story 3.5: View statement summary
+    case 'view_statement_summary':
+      intent = {
+        action: 'view_statement_summary',
+        confidence: 0.95,
+        entities: {}
+      }
+      break
+
+    // Epic 1 Story 1.5: Credit Mode Switch
+    case 'switch_credit_mode':
+      intent = {
+        action: 'switch_credit_mode',
+        confidence: 0.95,
+        entities: {
+          targetMode: args.target_mode,
+          paymentMethodName: args.payment_method_name
+        }
+      }
+      break
+
     default:
       intent = {
         action: 'unknown',
@@ -802,7 +995,7 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
         entities: {}
       }
   }
-  
+
   return intent
 }
 
@@ -880,6 +1073,30 @@ TYPE CONVERSION EXAMPLES (English):
 "change ABC-123 to income" → edit_transaction(transaction_id="ABC-123", type="income")
 "correct XYZ-789 to expense" → edit_transaction(transaction_id="XYZ-789", type="expense")
 "EXP-999 should be income of 750" → edit_transaction(transaction_id="EXP-999", type="income", amount=750)
+
+INSTALLMENT PATTERNS (Portuguese):
+"gastei 600 em 3x no celular" → create_installment(amount=600, installments=3, description="celular")
+"comprei 450 em 9x" → create_installment(amount=450, installments=9)
+"800 parcelado 4x no notebook" → create_installment(amount=800, installments=4, description="notebook")
+"900 dividido em 6 parcelas para tablet" → create_installment(amount=900, installments=6, description="tablet")
+"1200 em 12 vezes sem juros" → create_installment(amount=1200, installments=12)
+"gastei 600 em 3x, primeira parcela dia 15" → create_installment(amount=600, installments=3, first_payment_date="2025-XX-15")
+
+INSTALLMENT PATTERNS (English):
+"spent 600 in 3 installments on phone" → create_installment(amount=600, installments=3, description="phone")
+"bought 450 in 9x" → create_installment(amount=450, installments=9)
+
+PAYOFF INSTALLMENT PATTERNS (Portuguese):
+"quitar parcelamento do celular" → payoff_installment(description="celular")
+"pagar resto do notebook" → payoff_installment(description="notebook")
+"quitação antecipada" → payoff_installment()
+"quitar parcelamento" → payoff_installment()
+"quitar parcelas" → payoff_installment()
+
+PAYOFF INSTALLMENT PATTERNS (English):
+"pay off phone installment" → payoff_installment(description="phone")
+"pay off early" → payoff_installment()
+"settle remaining installments" → payoff_installment()
 
 Call the most appropriate function based on the user's intent.`
 }

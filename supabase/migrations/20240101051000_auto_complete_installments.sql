@@ -1,0 +1,1 @@
+../../fe/scripts/051_auto_complete_installments.sql

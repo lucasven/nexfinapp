@@ -172,12 +172,12 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
                   <SelectValue placeholder={t('recurring.selectPaymentMethod')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">{t('paymentMethods.cash')}</SelectItem>
-                  <SelectItem value="credit_card">{t('paymentMethods.creditCard')}</SelectItem>
-                  <SelectItem value="debit_card">{t('paymentMethods.debitCard')}</SelectItem>
-                  <SelectItem value="bank_transfer">{t('paymentMethods.bankTransfer')}</SelectItem>
-                  <SelectItem value="pix">{t('paymentMethods.pix')}</SelectItem>
-                  <SelectItem value="other">{t('paymentMethods.other')}</SelectItem>
+                  <SelectItem value="cash">{t('paymentMethodTypes.cash')}</SelectItem>
+                  <SelectItem value="credit_card">{t('paymentMethodTypes.creditCard')}</SelectItem>
+                  <SelectItem value="debit_card">{t('paymentMethodTypes.debitCard')}</SelectItem>
+                  <SelectItem value="bank_transfer">{t('paymentMethodTypes.bankTransfer')}</SelectItem>
+                  <SelectItem value="pix">{t('paymentMethodTypes.pix')}</SelectItem>
+                  <SelectItem value="other">{t('paymentMethodTypes.other')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

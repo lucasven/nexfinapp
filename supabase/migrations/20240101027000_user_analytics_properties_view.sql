@@ -1,0 +1,1 @@
+../../fe/scripts/027_user_analytics_properties_view.sql

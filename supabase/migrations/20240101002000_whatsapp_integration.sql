@@ -1,0 +1,1 @@
+../../fe/scripts/002_whatsapp_integration.sql

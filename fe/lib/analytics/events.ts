@@ -102,6 +102,84 @@ export enum AnalyticsEvent {
   CREDIT_MODE_SELECTED = 'credit_mode_selected',
   CREDIT_MODE_SWITCHED = 'credit_mode_switched',
   MODE_SWITCH_CANCELLED = 'mode_switch_cancelled',
+  PAYMENT_METHOD_CREATED = 'payment_method_created',
+  CREDIT_CARD_CREATED = 'credit_card_created',
+  CREDIT_CARD_UPDATED = 'credit_card_updated',
+
+  // Installment Events (Epic 2 - Story 2.2)
+  INSTALLMENT_CREATED = 'installment_created',
+  INSTALLMENT_CREATION_FAILED = 'installment_creation_failed',
+
+  // Future Commitments Events (Epic 2 - Story 2.3)
+  FUTURE_COMMITMENTS_VIEWED = 'future_commitments_viewed',
+  FUTURE_COMMITMENTS_MONTH_EXPANDED = 'future_commitments_month_expanded',
+  FUTURE_COMMITMENTS_EMPTY_STATE_VIEWED = 'future_commitments_empty_state_viewed',
+
+  // Installments Page Events (Epic 2 - Story 2.4)
+  INSTALLMENTS_PAGE_VIEWED = 'installments_page_viewed',
+  INSTALLMENT_DETAILS_VIEWED = 'installment_details_viewed',
+  INSTALLMENTS_TAB_CHANGED = 'installments_tab_changed',
+  INSTALLMENTS_PAGE_CHANGED = 'installments_page_changed',
+  INSTALLMENTS_EMPTY_STATE_VIEWED = 'installments_empty_state_viewed',
+
+  // Installment Payoff Events (Epic 2 - Story 2.5)
+  INSTALLMENT_PAID_OFF_EARLY = 'installment_paid_off_early',
+  INSTALLMENT_PAYOFF_FAILED = 'installment_payoff_failed',
+  INSTALLMENT_PAYOFF_DIALOG_OPENED = 'installment_payoff_dialog_opened',
+  INSTALLMENT_PAYOFF_CANCELLED = 'installment_payoff_cancelled',
+
+  // Installment Edit Events (Epic 2 - Story 2.6)
+  INSTALLMENT_EDIT_DIALOG_OPENED = 'installment_edit_dialog_opened',
+  INSTALLMENT_EDITED = 'installment_edited',
+  INSTALLMENT_EDIT_FAILED = 'installment_edit_failed',
+  INSTALLMENT_EDIT_CANCELLED = 'installment_edit_cancelled',
+
+  // Installment Delete Events (Epic 2 - Story 2.7)
+  INSTALLMENT_DELETE_DIALOG_OPENED = 'installment_delete_dialog_opened',
+  INSTALLMENT_DELETED = 'installment_deleted',
+  INSTALLMENT_DELETE_FAILED = 'installment_delete_failed',
+  INSTALLMENT_DELETE_CANCELLED = 'installment_delete_cancelled',
+
+  // Installment Payment Events (Automatic & Manual Linking)
+  INSTALLMENT_PAYMENT_MARKED_PAID = 'installment_payment_marked_paid',
+  INSTALLMENT_PAYMENT_LINKED_AUTO = 'installment_payment_linked_auto',
+
+  // Installment Transaction Creation Events (Epic 2 - Auto-create transactions)
+  INSTALLMENT_TRANSACTION_CREATED = 'installment_transaction_created',
+  INSTALLMENT_TRANSACTION_CREATION_FAILED = 'installment_transaction_creation_failed',
+  INSTALLMENT_ALL_TRANSACTIONS_CREATED = 'installment_all_transactions_created',
+
+  // Budget with Installments Events (Epic 2 - Story 2.8)
+  BUDGET_VIEWED = 'budget_viewed',
+  BUDGET_QUERY_SLOW = 'budget_query_slow',
+  BUDGET_BREAKDOWN_EXPANDED = 'budget_breakdown_expanded',
+
+  // Statement Settings Events (Epic 3 - Story 3.1)
+  STATEMENT_CLOSING_DAY_SET = 'statement_closing_day_set',
+  STATEMENT_PERIOD_PREVIEW_VIEWED = 'statement_period_preview_viewed',
+  STATEMENT_SETTINGS_ERROR = 'statement_settings_error',
+
+  // Budget Settings Events (Epic 3 - Story 3.2)
+  MONTHLY_BUDGET_SET = 'monthly_budget_set',
+  MONTHLY_BUDGET_REMOVED = 'monthly_budget_removed',
+
+  // Budget Progress Events (Epic 3 - Story 3.3)
+  BUDGET_PROGRESS_VIEWED = 'budget_progress_viewed',
+  BUDGET_STATUS_CHANGED = 'budget_status_changed',
+  BUDGET_PROGRESS_EMPTY_STATE_VIEWED = 'budget_progress_empty_state_viewed',
+
+  // Statement Summary Events (Epic 3 - Story 3.5)
+  STATEMENT_SUMMARY_VIEWED = 'statement_summary_viewed',
+  CATEGORY_BREAKDOWN_EXPANDED = 'category_breakdown_expanded',
+
+  // Payment Due Date Events (Epic 4 - Story 4.1)
+  PAYMENT_DUE_DATE_SET = 'payment_due_date_set',
+  PAYMENT_DUE_DATE_PREVIEW_VIEWED = 'payment_due_date_preview_viewed',
+  PAYMENT_DUE_DATE_ERROR = 'payment_due_date_error',
+
+  // Auto-Payment Events (Epic 4 - Story 4.4)
+  AUTO_PAYMENT_EDITED = 'auto_payment_edited',
+  AUTO_PAYMENT_DELETED = 'auto_payment_deleted',
 }
 
 /**

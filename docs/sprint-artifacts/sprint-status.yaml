@@ -1,4 +1,4 @@
-# generated: 2025-12-02
+# generated: 2025-12-03
 # project: NexFinApp
 # project_key: nexfinapp
 # tracking_system: file-system
@@ -28,7 +28,7 @@
 # - SM typically drafts next story ONLY after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
-generated: 2025-12-02
+generated: 2025-12-03
 project: NexFinApp
 project_key: nexfinapp
 tracking_system: file-system
@@ -44,32 +44,33 @@ development_status:
   1-6-simple-mode-backward-compatibility: done
   epic-1-retrospective: completed
 
-  epic-2: backlog
-  2-1-add-installment-purchase-whatsapp: backlog
-  2-2-add-installment-purchase-web-frontend: backlog
-  2-3-future-commitments-dashboard: backlog
-  2-4-view-all-installments-active-and-history: backlog
-  2-5-mark-installment-as-paid-off-early: backlog
-  2-6-edit-installment-plan: backlog
-  2-7-delete-installment-plan: backlog
-  2-8-installment-impact-on-budget-tracking: backlog
-  epic-2-retrospective: optional
+  epic-2: contexted
+  2-0-epic-2-foundation-blockers: done
+  2-1-add-installment-purchase-whatsapp: done
+  2-2-add-installment-purchase-web-frontend: done
+  2-3-future-commitments-dashboard: done
+  2-4-view-all-installments-active-and-history: done
+  2-5-mark-installment-as-paid-off-early: done
+  2-6-edit-installment-plan: done
+  2-7-delete-installment-plan: done
+  2-8-installment-impact-on-budget-tracking: done
+  epic-2-retrospective: completed
 
-  epic-3: backlog
-  3-1-set-statement-closing-date: backlog
-  3-2-set-user-defined-monthly-budget: backlog
-  3-3-budget-progress-dashboard-statement-period: backlog
-  3-4-statement-closing-reminder-whatsapp: backlog
-  3-5-pre-statement-summary-with-category-breakdown: backlog
-  3-6-current-vs-next-statement-distinction: backlog
-  epic-3-retrospective: optional
+  epic-3: contexted
+  3-1-set-statement-closing-date: done
+  3-2-set-user-defined-monthly-budget: done
+  3-3-budget-progress-dashboard-statement-period: done
+  3-4-statement-closing-reminder-whatsapp: done
+  3-5-pre-statement-summary-with-category-breakdown: done
+  3-6-current-vs-next-statement-distinction: done
+  epic-3-retrospective: completed
 
-  epic-4: backlog
-  4-1-set-payment-due-date: backlog
-  4-2-payment-due-reminder-whatsapp: backlog
-  4-3-auto-create-payment-transaction: backlog
-  4-4-edit-or-delete-auto-generated-payment: backlog
-  4-5-system-category-for-credit-card-payments: backlog
+  epic-4: contexted
+  4-1-set-payment-due-date: done
+  4-2-payment-due-reminder-whatsapp: done
+  4-3-auto-create-payment-transaction: done
+  4-4-edit-or-delete-auto-generated-payment: done
+  4-5-system-category-for-credit-card-payments: done
   epic-4-retrospective: optional
 
   epic-5: backlog

@@ -1,0 +1,437 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3-5</storyId>
+    <title>Pre-Statement Summary with Category Breakdown</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-03</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-5-pre-statement-summary-with-category-breakdown.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Credit Mode user</asA>
+    <iWant>to view a summary of my current statement with spending breakdown by category</iWant>
+    <soThat>I understand where my money is going before the statement closes and can make informed spending decisions</soThat>
+    <tasks>
+      - Task 1: Database Query and Service Layer (statement summary query, service, TypeScript interfaces)
+      - Task 2: WhatsApp Message Formatting (message builder, localization keys)
+      - Task 3: WhatsApp Handler Implementation (handler, intent detection, message routing)
+      - Task 4: Frontend Server Action (getStatementSummary server action, TypeScript types)
+      - Task 5: Frontend Components (statement summary page, category cards, React Query hook)
+      - Task 6: Integration and Cache Invalidation (navigation, cache invalidation)
+      - Task 7: Logging and Analytics (structured logging, PostHog events)
+      - Task 8: Testing (unit, integration, performance, manual tests)
+      - Task 9: Documentation (CLAUDE.md updates, usage guide)
+      - Task 10: Deployment (pre-deployment checklist, production deploy, validation)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    AC5.1: Statement Summary Request (WhatsApp)
+      - User can request summary via triggers: "resumo da fatura", "statement summary", "resumo", "fatura"
+      - AI intent detection: view_statement_summary (Layer 3: OpenAI function calling)
+      - Multi-card flow: If multiple cards, ask "Qual cartão?", wait for selection
+      - Single-card flow: Skip selection, proceed immediately
+      - Edge cases: No credit cards → Graceful error; No closing date → Setup guidance
+      - PostHog event: statement_summary_viewed (source: whatsapp)
+
+    AC5.2: Statement Summary Content (WhatsApp)
+      - Message structure: Header (payment method + period) → Total → Budget status → Category breakdown → CTA
+      - Message includes: Period dates, total spent, budget comparison (if set), top 5 categories with percentages
+      - Category details: Icon, name, amount, percentage, transaction count
+      - Installment context: "Inclui: Celular parcelado 3/12 (R$ 200)" under category
+      - Awareness-first language: "R$ 350 acima do planejado" NOT "OVERSPENT!"
+      - Localized: pt-BR and English with proper date/currency formatting
+      - CTA: "Acesse o app para ver mais detalhes e gráficos"
+
+    AC5.3: Category Breakdown Calculation
+      - Statement period from calculate_statement_period(closing_day, today)
+      - Query transactions + installment_payments grouped by category
+      - Calculate: category_total = SUM(transactions) + SUM(installments)
+      - Calculate: percentage = (category_total / grand_total) * 100
+      - Sort: Top 5 categories by amount DESC, remaining as "Outros"
+      - Include: Transaction count per category, installment details (description, X/Y, amount)
+      - Consistency: Grand total MUST match budget widget (use calculate_statement_budget_spent)
+
+    AC5.4: Statement Summary UI (Web Frontend)
+      - Route: /[locale]/payment-methods/[id]/statement-summary
+      - Access: "View Details" button on budget widget, navigation menu
+      - Components: StatementSummaryHeader, BudgetOverview, CategoryBreakdown, InstallmentSection
+      - Visual design: Category cards with progress bars, responsive mobile layout
+      - Interactions: Expand category → Show transaction list, click installment → Navigate to detail
+      - Loading/error states: Skeleton UI while fetching, error message with retry
+
+    AC5.5: Performance Requirements
+      - Statement summary query: < 500ms (Epic3-P2)
+      - Database query: < 300ms
+      - Data processing: < 100ms
+      - Response formatting: < 100ms
+      - Optimization: Indexed queries, database GROUP BY, React Query 5-minute cache
+
+    AC5.6: Localization and Internationalization
+      - Messages localized for user's language (pt-BR/en)
+      - Date formatting: pt-BR="5 de Janeiro", en="January 5th"
+      - Currency formatting: pt-BR="R$ 1.700,00", en="R$ 1,700.00"
+      - Category names translated (use category-translations.ts)
+      - Number formatting: Percentages with locale awareness
+
+    AC5.7: Installment Context Display
+      - Show installment payments grouped with their category
+      - Format: "Inclui: [Description] parcelado [current]/[total] (R$ [amount])"
+      - Multiple installments: List all under category (• PS5 5/10 (R$ 300), • TV 2/6 (R$ 250))
+      - Distinguish from regular transactions visually
+      - Link to installment detail pages (web only)
+
+    AC5.8: Analytics and Monitoring
+      - PostHog event: statement_summary_viewed (userId, paymentMethodId, source, totalSpent, categoryCount, etc.)
+      - PostHog event: category_breakdown_expanded (web only)
+      - Structured logging: Request, query execution time, errors with context
+      - Monitor: Daily summary views, query performance, error rate
+
+    AC5.9: Error Handling and Edge Cases
+      - No transactions: "Você ainda não tem gastos neste período"
+      - Single category: Show 100% for that category (no "Others")
+      - > 5 categories: Top 5 + "Outros" group
+      - No budget: Show total only (no budget section)
+      - No closing date: Redirect to settings with message
+      - Query timeout: 5-second timeout, error message with retry
+      - Multiple cards with same name: Disambiguate with last 4 digits
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification: Statement-Aware Budgets</title>
+        <section>Statement Summary interfaces, workflows, performance targets</section>
+        <snippet>Defines StatementSummary interface, CategoryBreakdown structure, Workflow 5 (statement summary request flow), Epic3-P2 performance requirement (&lt;500ms query), API signatures for getStatementSummary(), and shared database functions for consistency.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-4-statement-closing-reminder-whatsapp.md</path>
+        <title>Story 3.4: Statement Closing Reminder (DONE)</title>
+        <section>Reminder CTA references statement summary</section>
+        <snippet>Reminder message includes CTA "digite resumo da fatura" to seamlessly flow into Story 3.5. Budget calculation uses shared calculate_statement_budget_spent() function ensuring consistency.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-3-budget-progress-dashboard-statement-period.md</path>
+        <title>Story 3.3: Budget Progress Dashboard (DONE)</title>
+        <section>Budget widget as entry point to statement summary</section>
+        <snippet>Budget widget displays total spent. "View Details" button navigates to statement summary page to show category breakdown. Same budget calculation ensures consistent totals.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>fe/lib/actions/budget.ts</path>
+        <kind>server-action</kind>
+        <symbol>getBudgetForPeriod(), BudgetCategoryBreakdown interface</symbol>
+        <lines>1-288</lines>
+        <reason>Existing budget calculation with category breakdown. Shows pattern for querying transactions + installments grouped by category. Reusable query logic for statement summary. Performance target &lt;300ms. Uses UNION ALL for transactions and installments.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/actions/payment-methods.ts</path>
+        <kind>server-action</kind>
+        <symbol>getPaymentMethod(), updateStatementSettings()</symbol>
+        <lines>N/A</lines>
+        <reason>Extend with getStatementSummary() server action. Follows existing pattern for RLS enforcement, error handling, and analytics tracking.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/scripts/045_budget_calculation_function.sql</path>
+        <kind>database-migration</kind>
+        <symbol>calculate_statement_budget_spent()</symbol>
+        <lines>13-51</lines>
+        <reason>Single source of truth for budget calculations. Use to verify statement summary grand total matches budget widget. Includes transactions + pending installments.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/scripts/044_statement_period_calculation.sql</path>
+        <kind>database-migration</kind>
+        <symbol>calculate_statement_period()</symbol>
+        <lines>13-70</lines>
+        <reason>Statement period calculation function. Use to determine current period boundaries for summary query. Handles edge cases (Feb 31, leap years, month boundaries).</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/utils/statement-period.ts</path>
+        <kind>utility</kind>
+        <symbol>getStatementPeriod(), formatStatementPeriod()</symbol>
+        <lines>48-114</lines>
+        <reason>TypeScript utility for statement period calculation. Use for frontend date formatting and period display in summary components.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/localization/category-translations.ts</path>
+        <kind>localization</kind>
+        <symbol>translateCategoryName(), isDefaultCategory()</symbol>
+        <lines>1-58</lines>
+        <reason>Category name translation utility. Use to localize category names in statement summary (pt-BR/en). Handles both default and custom categories.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/types.ts</path>
+        <kind>types</kind>
+        <symbol>Category, PaymentMethod, Transaction interfaces</symbol>
+        <lines>1-50</lines>
+        <reason>Core type definitions. Extend with StatementSummary, CategoryBreakdown, InstallmentDetail interfaces for type safety.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/handlers/credit-card/future-commitments-handler.ts</path>
+        <kind>handler</kind>
+        <symbol>handleFutureCommitments</symbol>
+        <lines>N/A</lines>
+        <reason>Similar credit card handler pattern (Story 2.3). Reference for conversational flow, multi-card selection, message formatting, and error handling.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/reminders/statement-reminder-query.ts</path>
+        <kind>service</kind>
+        <symbol>getEligibleUsersForReminders()</symbol>
+        <lines>N/A</lines>
+        <reason>Statement reminder eligibility query (Story 3.4). Shows pattern for querying Credit Mode users with statement setup. Reference for similar eligibility checks.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/reminders/reminder-message-builder.ts</path>
+        <kind>service</kind>
+        <symbol>buildReminderMessage()</symbol>
+        <lines>N/A</lines>
+        <reason>Message builder for statement reminders (Story 3.4). Shows pattern for localized messages with awareness-first language, budget status, and period formatting. Reusable patterns for summary messages.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/ai/ai-pattern-generator.ts</path>
+        <kind>service</kind>
+        <symbol>AI prompt generation</symbol>
+        <lines>N/A</lines>
+        <reason>Extend with view_statement_summary intent for AI-based intent detection. Add trigger phrases: "resumo da fatura", "statement summary", "resumo", "fatura".</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>messages object</symbol>
+        <lines>1-100</lines>
+        <reason>Portuguese message templates. Add statementSummary section with all message keys (header, period, total, budget, category breakdown, CTA, error messages).</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>messages object</symbol>
+        <lines>N/A</lines>
+        <reason>English message templates. Add statementSummary section matching pt-BR structure.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/analytics/events.ts</path>
+        <kind>analytics</kind>
+        <symbol>PostHog event definitions</symbol>
+        <lines>N/A</lines>
+        <reason>Add STATEMENT_SUMMARY_VIEWED event with properties: userId, paymentMethodId, source, totalSpent, budgetAmount, categoryCount, hasInstallments.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/budget/budget-progress-widget.tsx</path>
+        <kind>component</kind>
+        <symbol>BudgetProgressWidget</symbol>
+        <lines>N/A</lines>
+        <reason>Budget widget from Story 3.3. Add "View Details" button linking to statement summary page. Shows budget total that must match summary total.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/analytics/events.ts</path>
+        <kind>analytics</kind>
+        <symbol>AnalyticsEvent enum</symbol>
+        <lines>N/A</lines>
+        <reason>Add statement_summary_viewed and category_breakdown_expanded events for frontend tracking.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package name="next" version="15.x" usage="Server actions for getStatementSummary()"/>
+        <package name="react" version="19.x" usage="Statement summary components"/>
+        <package name="@supabase/supabase-js" version="latest" usage="Database queries, RLS enforcement"/>
+        <package name="@tanstack/react-query" version="latest" usage="Statement summary caching, invalidation"/>
+        <package name="next-intl" version="latest" usage="Localization (pt-BR/en)"/>
+        <package name="@radix-ui/react-*" version="latest" usage="UI components (cards, progress bars, collapse)"/>
+        <package name="tailwindcss" version="4.x" usage="Styling, responsive design"/>
+        <package name="date-fns" version="latest" usage="Date formatting with locale"/>
+        <package name="posthog-js" version="latest" usage="Track statement_summary_viewed events"/>
+      </frontend>
+      <whatsapp>
+        <package name="@supabase/supabase-js" version="latest" usage="Statement summary queries"/>
+        <package name="@whiskeysockets/baileys" version="latest" usage="Send WhatsApp summary messages"/>
+        <package name="date-fns" version="latest" usage="Date formatting (pt-BR/en)"/>
+        <package name="posthog-node" version="latest" usage="Event tracking"/>
+      </whatsapp>
+      <database>
+        <dependency name="PostgreSQL 15+" usage="calculate_statement_period(), calculate_statement_budget_spent() functions"/>
+        <dependency name="Indexes" usage="(user_id, payment_method_id, date) for transactions, (user_id, payment_method_id, due_date) for installments"/>
+      </database>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    - MUST use calculate_statement_period() for statement period boundaries (consistency)
+    - MUST use calculate_statement_budget_spent() to verify grand total matches budget widget
+    - MUST achieve &lt;500ms query performance (Epic3-P2)
+    - MUST use awareness-first language (no judgmental tone: "acima do planejado" NOT "OVERSPENT!")
+    - MUST localize for pt-BR and English with proper date/currency formatting
+    - MUST include installment payments in category breakdown with context (description, X/Y)
+    - MUST show top 5 categories sorted by amount DESC, group remaining as "Outros"
+    - MUST handle edge cases gracefully (no transactions, single category, no budget, no closing date)
+    - MUST use AI intent detection (Layer 3: OpenAI function calling) for WhatsApp triggers
+    - MUST support multi-card selection flow (if multiple cards)
+    - MUST invalidate React Query cache on transaction add/edit/delete
+    - MUST track PostHog events for monitoring (statement_summary_viewed, category_breakdown_expanded)
+    - MUST use efficient database queries with GROUP BY (not application-level aggregation)
+    - MUST reuse existing budget query patterns from fe/lib/actions/budget.ts
+    - MUST follow existing WhatsApp handler patterns (multi-identifier lookup, conversation state)
+    - MUST use next-intl for frontend localization, custom localization files for WhatsApp
+    - MUST provide CTA to web app in WhatsApp messages for visual details
+    - MUST respect Credit Mode filter (only available for credit_mode = true)
+    - MUST render separate widgets for multiple credit cards
+    - MUST NOT use red colors for overspending (use neutral gray/blue/yellow)
+
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>StatementSummary</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface StatementSummary {
+  paymentMethodName: string
+  periodStart: Date
+  periodEnd: Date
+  totalSpent: number
+  monthlyBudget: number | null
+  budgetPercentage: number | null
+  categoryBreakdown: CategoryBreakdown[]
+}
+      </signature>
+      <path>fe/lib/types.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>CategoryBreakdown</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface CategoryBreakdown {
+  categoryId: string | null
+  categoryName: string
+  categoryIcon: string | null
+  amount: number
+  percentage: number
+  transactionCount: number
+  includesInstallments: boolean
+  installmentDetails?: InstallmentDetail[]
+}
+      </signature>
+      <path>fe/lib/types.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>InstallmentDetail</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface InstallmentDetail {
+  description: string
+  currentInstallment: number
+  totalInstallments: number
+  amount: number
+}
+      </signature>
+      <path>fe/lib/types.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>getStatementSummary</name>
+      <kind>Server Action</kind>
+      <signature>
+export async function getStatementSummary(
+  paymentMethodId: string
+): Promise&lt;StatementSummary | null&gt;
+      </signature>
+      <path>fe/lib/actions/payment-methods.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>handleStatementSummaryRequest</name>
+      <kind>WhatsApp Handler</kind>
+      <signature>
+export async function handleStatementSummaryRequest(
+  userId: string,
+  remoteJid: string,
+  locale: string
+): Promise&lt;void&gt;
+      </signature>
+      <path>whatsapp-bot/src/handlers/credit-card/statement-summary-handler.ts (NEW)</path>
+    </interface>
+
+    <interface>
+      <name>buildStatementSummaryMessage</name>
+      <kind>Function</kind>
+      <signature>
+export function buildStatementSummaryMessage(
+  summary: StatementSummary,
+  locale: string
+): string
+      </signature>
+      <path>whatsapp-bot/src/services/statement/statement-summary-message-builder.ts (NEW)</path>
+    </interface>
+
+    <interface>
+      <name>getStatementSummaryData</name>
+      <kind>Async function</kind>
+      <signature>
+export async function getStatementSummaryData(
+  userId: string,
+  paymentMethodId: string
+): Promise&lt;StatementSummary&gt;
+      </signature>
+      <path>whatsapp-bot/src/services/statement/statement-summary-service.ts (NEW)</path>
+    </interface>
+
+    <interface>
+      <name>useStatementSummary</name>
+      <kind>React Query Hook</kind>
+      <signature>
+export function useStatementSummary(
+  paymentMethodId: string
+): UseQueryResult&lt;StatementSummary | null&gt;
+      </signature>
+      <path>fe/lib/hooks/useStatementSummary.ts (NEW)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing uses Jest for unit/integration tests. Frontend uses React Testing Library for components.
+      Coverage threshold: 70% (branches, functions, lines, statements).
+      Performance tests validate Epic3-P2 requirement (&lt;500ms query).
+      Manual tests verify awareness-first language, localization, and message formatting.
+    </standards>
+
+    <locations>
+      - whatsapp-bot/src/__tests__/services/statement/ (NEW - unit tests for query, service, message builder)
+      - whatsapp-bot/src/__tests__/handlers/credit-card/statement-summary-handler.test.ts (NEW - handler integration tests)
+      - fe/__tests__/actions/statement-summary.test.ts (NEW - server action tests)
+      - fe/__tests__/components/statement/ (NEW - component tests)
+      - Manual testing: WhatsApp message format, web UI, awareness-first language audit, localization QA
+    </locations>
+
+    <ideas>
+      - AC5.1: Integration test "resumo da fatura" → Verify AI intent detected, summary returned
+      - AC5.1: Integration test multiple cards → Verify selection flow, correct card chosen
+      - AC5.1: Unit test edge cases (no cards, no closing date) → Verify error messages
+      - AC5.2: Unit test message builder (with budget, no budget, pt-BR, en) → Verify message structure matches template
+      - AC5.2: Manual test verify awareness-first language (no judgmental tone)
+      - AC5.3: Unit test category breakdown calculation (transactions + installments) → Verify amounts, percentages correct
+      - AC5.3: Integration test grand total matches budget widget → Query both, compare totals
+      - AC5.3: Unit test top 5 categories sorting → Verify highest amounts first, "Outros" group correct
+      - AC5.4: Component test StatementSummary renders correctly with mock data
+      - AC5.4: Manual test navigate to summary page → Verify all elements displayed
+      - AC5.5: Performance test 1000 transactions, 20 categories → Query completes &lt;500ms (Epic3-P2)
+      - AC5.5: Performance test query execution time logged → Verify logs show timing
+      - AC5.6: Manual test pt-BR and English messages → Verify date/currency formatting, category translations
+      - AC5.7: Integration test category with installments → Verify installment details shown correctly
+      - AC5.7: Unit test multiple installments in one category → Verify all listed
+      - AC5.8: Integration test PostHog events → Verify statement_summary_viewed logged with correct properties
+      - AC5.9: Unit test edge cases (no transactions, single category, > 5 categories) → Verify handling
+      - AC5.9: Integration test query timeout → Mock slow query, verify 5s timeout, error message
+      - Manual test: Create test user, add transactions across categories with installments, request summary via WhatsApp, verify message format and content
+      - Manual test: Web flow - click "View Details" on budget widget, navigate to summary page, verify data matches WhatsApp
+    </ideas>
+  </tests>
+</story-context>

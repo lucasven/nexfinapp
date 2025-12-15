@@ -1,0 +1,1168 @@
+<!-- Story Context: 3.1 - Set Statement Closing Date -->
+<!-- Generated: 2025-12-03 -->
+<!-- Epic: 3 - Statement-Aware Budgets -->
+<!-- Status: ready-for-dev -->
+
+<story-context>
+  <story-info>
+    <id>3-1-set-statement-closing-date</id>
+    <title>Set Statement Closing Date</title>
+    <epic>Epic 3: Statement-Aware Budgets</epic>
+    <status>ready-for-dev</status>
+    <complexity>medium</complexity>
+    <estimated-effort>2-3 days</estimated-effort>
+    <priority>high</priority>
+    <dependencies>
+      <dependency status="complete">Epic 1 Story 1.1 - Database Schema Migration (payment_methods table with statement_closing_day column)</dependency>
+      <dependency status="complete">Epic 1 Story 1.3/1.4 - Credit Mode selection (credit_mode flag)</dependency>
+    </dependencies>
+  </story-info>
+
+  <executive-summary>
+    This story enables Credit Mode users to set their credit card's statement closing date (1-31),
+    establishing the foundation for all Epic 3 statement-aware budget tracking features.
+
+    The statement closing date determines the billing cycle period (e.g., closing day 15 means
+    statement runs from 16th of previous month to 15th of current month). This aligns budget
+    tracking with actual credit card billing cycles rather than arbitrary calendar months.
+
+    The implementation requires:
+    - Frontend UI for selecting closing day (1-31 dropdown)
+    - Real-time preview of statement period based on selected day
+    - PostgreSQL function for consistent period calculation across web and WhatsApp
+    - Edge case handling (Feb 31 → Feb 28/29, leap years, months with &lt; 31 days)
+    - Simple Mode compatibility (no statement features shown to Simple Mode users)
+  </executive-summary>
+
+  <business-value>
+    <value-proposition>
+      Credit card users think in terms of statement periods ("what am I paying this month?")
+      not calendar months. This story enables the mental model shift necessary for effective
+      credit card budget tracking, increasing user trust and engagement.
+    </value-proposition>
+
+    <user-impact>
+      - Credit Mode users can align budget tracking with actual credit card billing cycles
+      - Reduces confusion about "when does my spending count toward this month's bill"
+      - Unblocks Stories 3.2-3.6 (budget setting, reminders, summaries)
+      - Zero impact on Simple Mode users (backward compatible)
+    </user-impact>
+
+    <success-metrics>
+      - 60%+ of Credit Mode users set statement closing date within 7 days
+      - Zero edge case bugs reported in first 30 days (Feb 31, leap years)
+      - &lt; 1% error rate on statement period calculations
+      - Zero Simple Mode regression issues
+    </success-metrics>
+  </business-value>
+
+  <technical-architecture>
+    <database>
+      <schema>
+        <table name="payment_methods">
+          <column name="statement_closing_day" type="INTEGER" nullable="true">
+            CHECK constraint: BETWEEN 1 AND 31
+            NULL for: (a) credit_mode = false OR (b) not yet set by user
+            Comment: "Day of month when statement closes (1-31). NULL for non-credit cards."
+          </column>
+          <column name="credit_mode" type="BOOLEAN" nullable="true">
+            Existing column from Story 1.1
+            TRUE = Credit Mode (statement features enabled)
+            FALSE = Simple Mode (statement features hidden)
+            NULL = Not yet chosen (first transaction flow)
+          </column>
+        </table>
+
+        <indexes>
+          <index>idx_payment_methods_user ON payment_methods(user_id)</index>
+        </indexes>
+
+        <rls-policies>
+          <policy name="payment_methods_user_policy">
+            FOR ALL USING (user_id = auth.uid())
+            Ensures users can only access/modify their own payment methods
+          </policy>
+        </rls-policies>
+      </schema>
+
+      <functions>
+        <function name="calculate_statement_period">
+          <signature>
+            calculate_statement_period(
+              p_closing_day INTEGER,
+              p_reference_date DATE DEFAULT CURRENT_DATE
+            ) RETURNS TABLE(period_start DATE, period_end DATE, next_closing DATE)
+          </signature>
+
+          <purpose>
+            Calculates statement period boundaries for a given closing day and reference date.
+            Single source of truth for period calculations across web and WhatsApp.
+          </purpose>
+
+          <logic>
+            1. Calculate current_month_closing using LEAST(p_closing_day, last_day_of_month)
+               to handle edge cases (Feb 31 → Feb 28/29)
+            2. Calculate prev_month_closing using same logic for previous month
+            3. If p_reference_date &lt;= current_month_closing:
+               - Period: (prev_month_closing + 1 day) to current_month_closing
+               - Next closing: current_month_closing
+            4. Else:
+               - Period: (current_month_closing + 1 day) to next_month_closing
+               - Next closing: next_month_closing
+          </logic>
+
+          <edge-cases>
+            - Feb 31 (non-leap): Adjusts to Feb 28
+            - Feb 31 (leap year): Adjusts to Feb 29
+            - Day 30 in Feb: Adjusts to Feb 28/29
+            - Day 31 in 30-day months (Apr, Jun, Sep, Nov): Adjusts to day 30
+          </edge-cases>
+
+          <performance>
+            Target: &lt; 50ms (NFR Epic3-P1)
+            Expected: ~10-20ms (simple date math in PostgreSQL)
+          </performance>
+        </function>
+      </functions>
+    </database>
+
+    <backend>
+      <server-actions file="fe/lib/actions/payment-methods.ts">
+        <action name="updateStatementSettings">
+          <signature>
+            async function updateStatementSettings(
+              paymentMethodId: string,
+              closingDay: number
+            ): Promise&lt;{ success: boolean; nextClosingDate?: string; error?: string }&gt;
+          </signature>
+
+          <implementation>
+            1. Authenticate user via Supabase auth.getUser()
+            2. Validate inputs:
+               - paymentMethodId is valid UUID
+               - closingDay BETWEEN 1 AND 31
+            3. Update payment_methods table:
+               - SET statement_closing_day = closingDay
+               - WHERE id = paymentMethodId AND user_id = auth.uid() AND credit_mode = true
+               - RLS enforces user ownership
+            4. Call calculate_statement_period() RPC to get next closing date
+            5. Track PostHog event: statement_closing_day_set
+            6. Revalidate paths: /[locale]/transactions, /[locale]/settings
+            7. Return { success: true, nextClosingDate } or error
+          </implementation>
+
+          <security>
+            - RLS policy ensures user_id = auth.uid()
+            - Server-side validation of closingDay range (1-31)
+            - Only Credit Mode payment methods can be updated (credit_mode = true check)
+          </security>
+
+          <analytics>
+            Event: statement_closing_day_set (AnalyticsEvent enum)
+            Properties:
+              - userId: string
+              - paymentMethodId: string
+              - closingDay: number
+              - previousClosingDay: number | null
+              - timestamp: ISO8601
+          </analytics>
+        </action>
+
+        <action name="getStatementPeriodPreview">
+          <signature>
+            async function getStatementPeriodPreview(
+              closingDay: number,
+              referenceDate?: Date
+            ): Promise&lt;{
+              periodStart: Date
+              periodEnd: Date
+              nextClosing: Date
+              daysUntilClosing: number
+            } | null&gt;
+          </signature>
+
+          <implementation>
+            1. Call calculate_statement_period() RPC function
+            2. Calculate daysUntilClosing: nextClosing - today
+            3. Return period dates and days until closing
+            4. Handle errors by returning null (non-critical preview)
+          </implementation>
+
+          <usage>
+            Called on dropdown change for real-time preview
+            Shows: "Current period: Nov 16 - Dec 15"
+            Shows: "Next closing: Dec 15 (14 days)"
+          </usage>
+        </action>
+      </server-actions>
+
+      <rpc-types file="fe/lib/supabase/rpc-types.ts">
+        <type name="CalculateStatementPeriodParams">
+          interface CalculateStatementPeriodParams {
+            p_closing_day: number
+            p_reference_date?: string // ISO date (YYYY-MM-DD)
+          }
+        </type>
+
+        <type name="StatementPeriod">
+          interface StatementPeriod {
+            period_start: string // ISO date
+            period_end: string // ISO date
+            next_closing: string // ISO date
+          }
+        </type>
+      </rpc-types>
+    </backend>
+
+    <frontend>
+      <component name="StatementSettingsUI" file="fe/components/payment-methods/statement-settings.tsx">
+        <purpose>
+          UI component for selecting statement closing day with real-time period preview.
+          Conditionally rendered only for Credit Mode credit cards.
+        </purpose>
+
+        <props>
+          interface StatementSettingsProps {
+            paymentMethod: PaymentMethod
+            onUpdate: () =&gt; void // Callback to refetch payment methods after update
+          }
+        </props>
+
+        <features>
+          - Conditional rendering: Only if creditMode &amp;&amp; type === 'credit'
+          - Radix UI Select dropdown: Days 1-31
+          - Display current value or "Not set" (localized)
+          - Real-time preview on dropdown change (calls getStatementPeriodPreview)
+          - Save button with loading state
+          - Toast notifications (success/error, pt-BR/en)
+          - Localized date formatting (pt-BR: "16 Nov 2025", en: "Nov 16, 2025")
+        </features>
+
+        <ui-structure>
+          &lt;Card&gt;
+            &lt;CardHeader&gt;Statement Settings&lt;/CardHeader&gt;
+            &lt;CardContent&gt;
+              &lt;Select&gt; {/* Days 1-31 */}
+              &lt;PreviewSection&gt;
+                Current period: {periodStart} - {periodEnd}
+                Next closing: {nextClosing} ({daysUntilClosing} days)
+              &lt;/PreviewSection&gt;
+              &lt;Button onClick={handleSave}&gt;Save&lt;/Button&gt;
+            &lt;/CardContent&gt;
+          &lt;/Card&gt;
+        </ui-structure>
+
+        <state-management>
+          - selectedDay: number | null (dropdown value)
+          - preview: StatementPeriod | null (fetched on dropdown change)
+          - isLoading: boolean (save operation)
+          - isFetchingPreview: boolean (preview fetch)
+        </state-management>
+      </component>
+
+      <integration location="fe/components/settings/credit-card-settings.tsx">
+        <context>
+          Existing component lists all user credit cards with mode switching functionality.
+          Add StatementSettingsUI below each Credit Mode credit card.
+        </context>
+
+        <pattern>
+          {creditCards.map((card) =&gt; (
+            &lt;div key={card.id}&gt;
+              {/* Existing mode display and switch button */}
+
+              {/* NEW: Statement settings for Credit Mode cards */}
+              {card.credit_mode === true &amp;&amp; (
+                &lt;StatementSettingsUI
+                  paymentMethod={card}
+                  onUpdate={() =&gt; router.refresh()}
+                /&gt;
+              )}
+            &lt;/div&gt;
+          ))}
+        </pattern>
+      </integration>
+
+      <localization>
+        <file name="fe/lib/localization/pt-br.ts">
+          statementSettings: {
+            title: 'Configurações de Fatura',
+            closingDayLabel: 'Dia de Fechamento',
+            closingDayPlaceholder: 'Selecione o dia',
+            notSet: 'Não definido',
+            currentPeriod: 'Período atual: {{start}} - {{end}}',
+            nextClosing: 'Próximo fechamento: {{date}} ({{days}} dias)',
+            saveButton: 'Salvar',
+            successToast: 'Dia de fechamento definido para o dia {{day}}',
+            errorToast: 'Erro ao salvar configuração. Tente novamente.',
+            validationError: 'Dia de fechamento deve ser entre 1 e 31',
+          }
+        </file>
+
+        <file name="fe/lib/localization/en.ts">
+          statementSettings: {
+            title: 'Statement Settings',
+            closingDayLabel: 'Closing Day',
+            closingDayPlaceholder: 'Select day',
+            notSet: 'Not set',
+            currentPeriod: 'Current period: {{start}} - {{end}}',
+            nextClosing: 'Next closing: {{date}} ({{days}} days)',
+            saveButton: 'Save',
+            successToast: 'Statement closing date set to day {{day}}',
+            errorToast: 'Error saving settings. Please try again.',
+            validationError: 'Closing day must be between 1 and 31',
+          }
+        </file>
+
+        <type-definition file="fe/lib/localization/types.ts">
+          Add to Messages interface:
+
+          statementSettings: {
+            title: string
+            closingDayLabel: string
+            closingDayPlaceholder: string
+            notSet: string
+            currentPeriod: string
+            nextClosing: string
+            saveButton: string
+            successToast: string
+            errorToast: string
+            validationError: string
+          }
+        </type-definition>
+      </localization>
+    </frontend>
+
+    <data-flow>
+      <workflow name="Set Statement Closing Date">
+        <step n="1">User navigates to payment methods settings page</step>
+        <step n="2">For each Credit Mode credit card: StatementSettingsUI component renders</step>
+        <step n="3">User selects closing day from dropdown (e.g., 15)</step>
+        <step n="4">onChange handler calls getStatementPeriodPreview(15)</step>
+        <step n="5">Server action calls calculate_statement_period(15, today) RPC</step>
+        <step n="6">Returns: { periodStart: '2025-11-16', periodEnd: '2025-12-15', nextClosing: '2025-12-15' }</step>
+        <step n="7">UI displays: "Current period: Nov 16 - Dec 15" / "Next closing: Dec 15 (14 days)"</step>
+        <step n="8">User clicks Save button</step>
+        <step n="9">Frontend calls updateStatementSettings(paymentMethodId, 15)</step>
+        <step n="10">Server action validates: 1 &lt;= 15 &lt;= 31 ✓</step>
+        <step n="11">Server action updates: UPDATE payment_methods SET statement_closing_day = 15 WHERE id = ... AND user_id = auth.uid() AND credit_mode = true</step>
+        <step n="12">RLS policy enforces user ownership</step>
+        <step n="13">Server action tracks PostHog event: statement_closing_day_set</step>
+        <step n="14">Server action revalidates paths: /[locale]/transactions, /[locale]/settings</step>
+        <step n="15">Returns: { success: true, nextClosingDate: '2025-12-15' }</step>
+        <step n="16">Frontend shows toast: "Dia de fechamento definido para o dia 15" (pt-BR)</step>
+        <step n="17">Frontend calls onUpdate() callback → router.refresh()</step>
+        <step n="18">UI updates to show new closing day value</step>
+      </workflow>
+
+      <error-scenarios>
+        <scenario name="Invalid closing day (0 or 32)">
+          - Server action validation fails
+          - Returns: { success: false, error: 'Closing day must be between 1 and 31' }
+          - Frontend shows error toast
+          - No database update occurs
+        </scenario>
+
+        <scenario name="Payment method not found">
+          - RLS policy prevents access to non-owned payment method
+          - Server action returns: { success: false, error: 'Payment method not found' }
+          - Frontend shows error toast
+        </scenario>
+
+        <scenario name="Simple Mode payment method">
+          - Server action WHERE clause filters credit_mode = true
+          - No rows updated (WHERE clause fails)
+          - Frontend should never reach this (conditional rendering prevents UI from showing)
+        </scenario>
+
+        <scenario name="Database connection error">
+          - Supabase client throws error
+          - Server action catches error, returns: { success: false, error: 'Database error' }
+          - Frontend shows error toast: "Erro de conexão. Verifique sua internet."
+        </scenario>
+      </error-scenarios>
+    </data-flow>
+  </technical-architecture>
+
+  <edge-cases>
+    <case name="Feb 31 in non-leap year">
+      <scenario>User sets closing day = 31, viewing in February 2025 (non-leap)</scenario>
+      <expected-behavior>
+        - Database stores: statement_closing_day = 31 (unchanged)
+        - calculate_statement_period() adjusts: Feb 28 (LEAST(31, 28))
+        - Preview shows: "Current period: Jan 29 - Feb 28"
+        - Works automatically without user intervention
+      </expected-behavior>
+      <test-coverage>Unit test, Manual QA in February</test-coverage>
+    </case>
+
+    <case name="Feb 31 in leap year">
+      <scenario>User sets closing day = 31, viewing in February 2024 (leap year)</scenario>
+      <expected-behavior>
+        - Database stores: statement_closing_day = 31
+        - calculate_statement_period() adjusts: Feb 29
+        - Preview shows: "Current period: Jan 30 - Feb 29"
+      </expected-behavior>
+      <test-coverage>Unit test with date mocking (2024-02-15)</test-coverage>
+    </case>
+
+    <case name="Day 30 in February">
+      <scenario>User sets closing day = 30, viewing in February</scenario>
+      <expected-behavior>
+        - Database stores: statement_closing_day = 30
+        - February non-leap: Adjusts to Feb 28
+        - February leap: Adjusts to Feb 29
+        - Preview shows adjusted dates
+      </expected-behavior>
+      <test-coverage>Unit test for both leap and non-leap years</test-coverage>
+    </case>
+
+    <case name="Day 31 in 30-day months (April, June, September, November)">
+      <scenario>User sets closing day = 31, viewing in April (30 days)</scenario>
+      <expected-behavior>
+        - Database stores: statement_closing_day = 31
+        - April: Adjusts to Apr 30 (LEAST(31, 30))
+        - Preview shows: "Current period: Mar 31 - Apr 30"
+      </expected-behavior>
+      <test-coverage>Unit test for all 30-day months</test-coverage>
+    </case>
+
+    <case name="Day 15, viewing before closing (Dec 1, closing 15)">
+      <scenario>Today = Dec 1, closing day = 15</scenario>
+      <expected-behavior>
+        - Dec 1 &lt;= Dec 15 → Current period logic
+        - Preview: "Current period: Nov 16 - Dec 15"
+        - Days until closing: 14 days
+      </expected-behavior>
+      <test-coverage>Unit test with mocked date</test-coverage>
+    </case>
+
+    <case name="Day 15, viewing after closing (Dec 20, closing 15)">
+      <scenario>Today = Dec 20, closing day = 15</scenario>
+      <expected-behavior>
+        - Dec 20 &gt; Dec 15 → Next period logic
+        - Preview: "Current period: Dec 16 - Jan 15"
+        - Days until closing: 26 days
+      </expected-behavior>
+      <test-coverage>Unit test with mocked date</test-coverage>
+    </case>
+
+    <case name="Timezone edge case (UTC vs local time)">
+      <scenario>User in Brazil (UTC-3) viewing at 11 PM local time</scenario>
+      <mitigation>
+        - Use CURRENT_DATE (not CURRENT_TIMESTAMP) in PostgreSQL
+        - Date comparisons use DATE type (no time component)
+        - Frontend displays dates in user's locale (pt-BR or en)
+      </mitigation>
+      <test-coverage>Integration test with different timezones (future improvement)</test-coverage>
+    </case>
+  </edge-cases>
+
+  <acceptance-criteria>
+    <criterion id="AC1.1" title="Statement Settings UI Display">
+      <verification>
+        - Navigate to payment methods settings page
+        - For each Credit Mode credit card (credit_mode = true, type = 'credit'):
+          ✓ "Statement Closing Day" section visible
+          ✓ Dropdown shows days 1-31
+          ✓ Shows current value if statement_closing_day set
+          ✓ Shows "Not set" if statement_closing_day is null
+          ✓ Preview updates when day selected
+        - For Simple Mode credit cards (credit_mode = false):
+          ✗ NO statement closing day section displayed
+        - For non-credit payment methods (type != 'credit'):
+          ✗ NO statement closing day section displayed
+      </verification>
+      <test-approach>Manual E2E test, Unit test for conditional rendering</test-approach>
+    </criterion>
+
+    <criterion id="AC1.2" title="Statement Period Preview">
+      <verification>
+        - Select closing day (e.g., 15) from dropdown
+        - Preview displays: "Current period: Nov 16 - Dec 15" (if today is Dec 1)
+        - Preview displays: "Next closing: Dec 15 (14 days)"
+        - Preview updates in real-time as dropdown value changes
+        - Edge cases tested:
+          ✓ Feb 31 → Shows "Current period: Feb 1 - Feb 28" (non-leap)
+          ✓ Feb 31 → Shows "Current period: Feb 1 - Feb 29" (leap year)
+          ✓ Day 30 in Feb → Shows adjusted dates
+          ✓ Day 31 in April → Shows "Current period: Mar 31 - Apr 30"
+      </verification>
+      <test-approach>
+        - Unit test: calculate_statement_period() function with edge cases
+        - E2E test: Select day 5, verify preview shows correct period
+        - Manual QA: Test leap year handling (mock date to 2024-02-15)
+      </test-approach>
+    </criterion>
+
+    <criterion id="AC1.3" title="Closing Day Validation">
+      <verification>
+        - Valid inputs (1-31): Accepted
+        - Invalid inputs:
+          ✗ Day 0 → Error: "Dia de fechamento deve ser entre 1 e 31"
+          ✗ Day 32 → Error: "Dia de fechamento deve ser entre 1 e 31"
+          ✗ Non-numeric → Prevented by dropdown UI
+        - Database CHECK constraint enforces 1 &lt;= statement_closing_day &lt;= 31
+      </verification>
+      <test-approach>
+        - Unit test: Validate inputs 0, 1, 31, 32
+        - Integration test: Attempt to save day 0 → Verify error message
+        - Database test: Verify CHECK constraint active
+      </test-approach>
+    </criterion>
+
+    <criterion id="AC1.4" title="Statement Closing Date Storage">
+      <verification>
+        - User clicks Save with closing day = 15
+        - Frontend calls updateStatementSettings(paymentMethodId, 15)
+        - Server action validates: 1 &lt;= 15 &lt;= 31 ✓
+        - Server action updates database:
+          UPDATE payment_methods
+          SET statement_closing_day = 15
+          WHERE id = paymentMethodId AND user_id = auth.uid() AND credit_mode = true
+        - RLS policy enforces user_id = auth.uid()
+        - Returns: { success: true, nextClosingDate: '2025-12-15' }
+        - Database record updated successfully
+        - User cannot update another user's payment method (RLS prevents)
+      </verification>
+      <test-approach>
+        - Integration test: Update closing day → Verify database record updated
+        - Security test: Attempt to update another user's PM → Verify rejected by RLS
+        - Unit test: Server action validation logic
+      </test-approach>
+    </criterion>
+
+    <criterion id="AC1.5" title="Confirmation and Feedback">
+      <verification>
+        - Success confirmation:
+          ✓ Toast notification (pt-BR): "Dia de fechamento definido para o dia 15"
+          ✓ Toast notification (en): "Statement closing date set to day 15"
+          ✓ Shows next closing date: "Próximo fechamento: 15 Dez 2025"
+          ✓ Preview updates to reflect new period
+        - Error handling:
+          ✓ Update fails → Toast: "Erro ao salvar configuração. Tente novamente."
+          ✓ Network error → Toast: "Erro de conexão. Verifique sua internet."
+          ✓ Validation fails → Toast: "Dia de fechamento deve ser entre 1 e 31"
+        - Analytics:
+          ✓ PostHog event logged: statement_closing_day_set
+          ✓ Properties: userId, paymentMethodId, closingDay, previousClosingDay, timestamp
+      </verification>
+      <test-approach>
+        - Manual test: Save closing day → Verify toast appears in both locales
+        - Analytics test: Verify PostHog event logged (check PostHog dashboard)
+        - Error simulation: Mock database error → Verify error toast
+      </test-approach>
+    </criterion>
+
+    <criterion id="AC1.6" title="Edge Case Handling">
+      <verification>
+        All edge cases tested and verified:
+        ✓ Feb 31 (non-leap) → Feb 28
+        ✓ Feb 31 (leap year 2024) → Feb 29
+        ✓ Day 30 in Feb → Feb 28/29
+        ✓ Day 31 in April → Apr 30
+        ✓ Day 15 before closing (Dec 1) → Period Nov 16 - Dec 15
+        ✓ Day 15 after closing (Dec 20) → Period Dec 16 - Jan 15
+      </verification>
+      <test-approach>
+        - Unit test: calculate_statement_period() with all edge cases
+        - E2E test: Set day 31, mock date to Feb 15 → Verify preview shows Feb 28
+        - Manual QA: Test leap year (2024) vs non-leap year (2025)
+      </test-approach>
+    </criterion>
+
+    <criterion id="AC1.7" title="Statement Period Calculation Consistency">
+      <verification>
+        - Both web frontend and WhatsApp bot use calculate_statement_period() PostgreSQL function
+        - No client-side date math (prevents timezone/logic inconsistencies)
+        - Single source of truth: Database function
+        - Consistency test: Compare web and WhatsApp results for same closing day → Identical
+      </verification>
+      <test-approach>
+        - Integration test: Call function with various dates → Verify period boundaries
+        - Future: WhatsApp bot test when Stories 3.4-3.5 implemented
+      </test-approach>
+    </criterion>
+
+    <criterion id="AC1.8" title="Simple Mode Compatibility (Cross-Cutting)">
+      <verification>
+        - User with credit_mode = false (Simple Mode):
+          ✗ NO statement closing day settings displayed
+          ✗ NO statement period calculations
+          ✓ Existing calendar month tracking works unchanged
+          ✓ Zero performance impact on Simple Mode users
+        - Mode toggle:
+          ✓ Simple → Credit Mode: Statement settings become visible, default value null
+          ✓ Credit → Simple: Statement settings hidden, statement_closing_day value preserved
+        - Performance:
+          ✓ Simple Mode users: Zero additional database queries
+          ✓ Conditional rendering prevents component execution
+      </verification>
+      <test-approach>
+        - Manual test: Simple Mode user → Verify NO statement settings visible
+        - Manual test: Switch to Credit Mode → Verify settings appear
+        - Regression test: Simple Mode calendar month tracking unchanged
+        - Performance test: Verify no statement queries for Simple Mode
+      </test-approach>
+    </criterion>
+  </acceptance-criteria>
+
+  <testing-strategy>
+    <unit-tests>
+      <test-suite name="calculate_statement_period() PostgreSQL function">
+        <test>Feb 31 in non-leap year (2025-02-15) → Returns Feb 28</test>
+        <test>Feb 31 in leap year (2024-02-15) → Returns Feb 29</test>
+        <test>Day 30 in February non-leap → Returns Feb 28</test>
+        <test>Day 30 in February leap → Returns Feb 29</test>
+        <test>Day 31 in April (30-day month) → Returns Apr 30</test>
+        <test>Day 15 before closing (Dec 1, closing 15) → Period Nov 16 - Dec 15</test>
+        <test>Day 15 after closing (Dec 20, closing 15) → Period Dec 16 - Jan 15</test>
+        <test>Day 1 (edge case) → Correct period calculation</test>
+        <test>Day 31 (edge case) → Correct period calculation</test>
+        <coverage>Target: 100% for edge cases</coverage>
+      </test-suite>
+
+      <test-suite name="updateStatementSettings() server action">
+        <test>Valid closing day (15) → Success</test>
+        <test>Invalid closing day (0) → Error: "must be between 1 and 31"</test>
+        <test>Invalid closing day (32) → Error: "must be between 1 and 31"</test>
+        <test>Non-UUID paymentMethodId → Error</test>
+        <test>Unauthenticated user → Error: "Not authenticated"</test>
+        <coverage>Target: 90% for validation logic</coverage>
+      </test-suite>
+
+      <test-suite name="getStatementPeriodPreview() server action">
+        <test>Closing day 15, today Dec 1 → Period Nov 16 - Dec 15, 14 days until closing</test>
+        <test>Closing day 5, today Dec 7 → Period Dec 6 - Jan 5, 29 days until closing</test>
+        <test>Closing day 31, reference Feb 15 → Period adjusted to Feb 28/29</test>
+        <coverage>Target: 80% for preview logic</coverage>
+      </test-suite>
+
+      <test-suite name="StatementSettingsUI component">
+        <test>Conditional rendering: creditMode=true &amp;&amp; type='credit' → Component renders</test>
+        <test>Conditional rendering: creditMode=false → Component does NOT render</test>
+        <test>Conditional rendering: type='debit' → Component does NOT render</test>
+        <test>Dropdown change → Calls getStatementPeriodPreview()</test>
+        <test>Save button click → Calls updateStatementSettings()</test>
+        <test>Success response → Shows success toast</test>
+        <test>Error response → Shows error toast</test>
+        <coverage>Target: 85% for component logic</coverage>
+      </test-suite>
+    </unit-tests>
+
+    <integration-tests>
+      <test name="Full flow: Select day → Preview → Save → Verify database">
+        <steps>
+          1. Load payment methods settings page
+          2. Find Credit Mode credit card
+          3. Select closing day 15 from dropdown
+          4. Verify preview displays: "Current period: [calculated dates]"
+          5. Click Save button
+          6. Verify success toast appears
+          7. Query database: SELECT statement_closing_day FROM payment_methods WHERE id = ...
+          8. Assert: statement_closing_day = 15
+        </steps>
+        <expected>Database updated, UI reflects new value, toast shown</expected>
+      </test>
+
+      <test name="RLS security: User can only update own payment methods">
+        <steps>
+          1. Authenticate as User A
+          2. Create payment method for User B (via admin)
+          3. Attempt: updateStatementSettings(userB_payment_method_id, 15)
+          4. Verify: RLS policy rejects update
+          5. Verify: Returns { success: false, error: "Payment method not found" }
+        </steps>
+        <expected>RLS prevents cross-user updates</expected>
+      </test>
+
+      <test name="Credit Mode check: Cannot update Simple Mode payment method">
+        <steps>
+          1. Create payment method with credit_mode = false
+          2. Attempt: updateStatementSettings(simple_mode_pm_id, 15)
+          3. Verify: WHERE clause filters credit_mode = true
+          4. Verify: No rows updated (UPDATE returns 0 rows)
+          5. Verify: Success response (UPDATE succeeded, just didn't match any rows)
+        </steps>
+        <expected>Simple Mode payment methods unaffected</expected>
+      </test>
+
+      <test name="Analytics: PostHog event logged after save">
+        <steps>
+          1. Mock PostHog client
+          2. Call updateStatementSettings(pm_id, 15)
+          3. Verify: PostHog.capture() called with event "statement_closing_day_set"
+          4. Verify: Event properties include userId, paymentMethodId, closingDay
+        </steps>
+        <expected>Analytics event tracked correctly</expected>
+      </test>
+    </integration-tests>
+
+    <performance-tests>
+      <test name="Statement period calculation: &lt; 50ms (NFR Epic3-P1)">
+        <measurement>Time to execute calculate_statement_period() RPC function</measurement>
+        <target>&lt; 50ms</target>
+        <expected>~10-20ms (simple date math in PostgreSQL)</expected>
+        <approach>
+          1. Create test script: Call function 100 times
+          2. Measure average execution time
+          3. Assert: avg_time &lt; 50ms
+        </approach>
+      </test>
+
+      <test name="Preview fetch: &lt; 100ms">
+        <measurement>Time to fetch getStatementPeriodPreview() including RPC call + network</measurement>
+        <target>&lt; 100ms</target>
+        <expected>~50-80ms on typical connection</expected>
+        <approach>
+          1. Instrument getStatementPeriodPreview() with performance.now()
+          2. Measure roundtrip time
+          3. Log results, monitor for outliers
+        </approach>
+      </test>
+
+      <test name="Save operation: &lt; 200ms">
+        <measurement>Time to complete updateStatementSettings() including update + analytics</measurement>
+        <target>&lt; 200ms</target>
+        <expected>~100-150ms</expected>
+        <approach>
+          1. Instrument server action with performance markers
+          2. Measure: Validation + DB update + RPC call + Analytics
+          3. Assert: total_time &lt; 200ms
+        </approach>
+      </test>
+    </performance-tests>
+
+    <e2e-tests-manual>
+      <test name="Credit Mode credit card → Settings visible">
+        <steps>
+          1. Navigate to /[locale]/settings
+          2. Find credit card with credit_mode = true
+          3. Verify "Statement Closing Day" section visible
+          4. Verify dropdown shows days 1-31
+        </steps>
+        <expected>Settings UI visible for Credit Mode cards</expected>
+      </test>
+
+      <test name="Simple Mode credit card → Settings hidden">
+        <steps>
+          1. Navigate to /[locale]/settings
+          2. Find credit card with credit_mode = false
+          3. Verify NO "Statement Closing Day" section
+        </steps>
+        <expected>Settings UI hidden for Simple Mode cards</expected>
+      </test>
+
+      <test name="Dropdown selection → Preview updates">
+        <steps>
+          1. Select closing day 5 from dropdown
+          2. Wait for preview to load
+          3. Verify preview displays current statement period
+          4. Change to day 15
+          5. Verify preview updates with new period
+        </steps>
+        <expected>Preview updates in real-time on dropdown change</expected>
+      </test>
+
+      <test name="Save → Toast appears, database updated">
+        <steps>
+          1. Select closing day 20
+          2. Click Save button
+          3. Wait for toast notification
+          4. Verify toast: "Dia de fechamento definido para o dia 20"
+          5. Refresh page
+          6. Verify dropdown shows day 20 selected
+        </steps>
+        <expected>Toast shown, database persists value</expected>
+      </test>
+
+      <test name="Both pt-BR and English locales">
+        <steps>
+          1. Set locale to pt-BR
+          2. Save closing day → Verify toast in Portuguese
+          3. Set locale to en
+          4. Save closing day → Verify toast in English
+          5. Verify date formatting: pt-BR "16 Nov 2025" vs en "Nov 16, 2025"
+        </steps>
+        <expected>Localization works for both languages</expected>
+      </test>
+
+      <test name="Edge cases: Select day 31 in February">
+        <steps>
+          1. Mock system date to February 15, 2025 (non-leap)
+          2. Select closing day 31
+          3. Verify preview: "Current period: Feb 1 - Feb 28"
+          4. Mock system date to February 15, 2024 (leap)
+          5. Verify preview: "Current period: Feb 1 - Feb 29"
+        </steps>
+        <expected>Edge case handling works correctly</expected>
+      </test>
+    </e2e-tests-manual>
+
+    <regression-tests>
+      <test name="Simple Mode calendar month tracking unchanged">
+        <verification>
+          - Simple Mode user adds expense
+          - Budget tracking uses calendar month (Jan 1 - Jan 31)
+          - NO statement period calculations run
+          - Performance unchanged
+        </verification>
+      </test>
+
+      <test name="Epic 1 mode switching still works">
+        <verification>
+          - Switch from Simple → Credit Mode
+          - Statement settings appear
+          - Switch from Credit → Simple Mode
+          - Statement settings disappear
+          - statement_closing_day value preserved in database
+        </verification>
+      </test>
+    </regression-tests>
+  </testing-strategy>
+
+  <implementation-notes>
+    <file-locations>
+      <backend>
+        - fe/lib/actions/payment-methods.ts (add updateStatementSettings, getStatementPeriodPreview)
+        - fe/lib/supabase/rpc-types.ts (add CalculateStatementPeriodParams, StatementPeriod)
+        - fe/scripts/[new_migration].sql (create calculate_statement_period function if missing)
+      </backend>
+
+      <frontend>
+        - fe/components/payment-methods/statement-settings.tsx (NEW component)
+        - fe/components/settings/credit-card-settings.tsx (integrate StatementSettingsUI)
+        - fe/lib/localization/pt-br.ts (add statementSettings section)
+        - fe/lib/localization/en.ts (add statementSettings section)
+        - fe/lib/localization/types.ts (add statementSettings to Messages interface)
+      </frontend>
+
+      <tests>
+        - fe/__tests__/actions/payment-methods.test.ts (server action tests)
+        - fe/__tests__/components/statement-settings.test.tsx (component tests)
+        - fe/__tests__/rpc/calculate-statement-period.test.ts (PostgreSQL function tests)
+      </tests>
+    </file-locations>
+
+    <dependencies-already-exist>
+      ✓ payment_methods table (Story 1.1 - Migration 040)
+      ✓ statement_closing_day column (Story 1.1)
+      ✓ credit_mode column (Story 1.1)
+      ✓ RLS policies for payment_methods (Story 1.1)
+      ✓ Radix UI components (@radix-ui/react-select, already used in project)
+      ✓ next-intl localization system (already configured)
+      ✓ PostHog analytics (already integrated)
+      ✓ Supabase client and server utilities (already exist)
+    </dependencies-already-exist>
+
+    <new-dependencies>
+      NONE - All dependencies already exist in project
+    </new-dependencies>
+
+    <database-migration-check>
+      <verification-query>
+        -- Check if calculate_statement_period() function exists
+        SELECT EXISTS (
+          SELECT 1 FROM pg_proc
+          WHERE proname = 'calculate_statement_period'
+        );
+
+        -- Expected: false (function doesn't exist yet, needs to be created)
+        -- If true: Function already exists from tech spec implementation
+      </verification-query>
+
+      <migration-required>
+        YES - Create calculate_statement_period() function if not exists
+        - Location: fe/scripts/044_statement_period_calculation.sql
+        - Content: Function definition from tech spec (lines 90-128)
+        - Verification: Run query above, should return true after migration
+      </migration-required>
+    </database-migration-check>
+
+    <known-patterns>
+      <pattern name="Server action with RLS">
+        Based on existing pattern in payment-methods.ts:
+        - getSupabaseServerClient() for authentication
+        - auth.getUser() to get current user
+        - RLS enforces user_id = auth.uid() automatically
+        - No manual user_id checks needed in WHERE clause (RLS handles it)
+      </pattern>
+
+      <pattern name="Conditional component rendering">
+        Based on credit-card-settings.tsx:
+        - Filter arrays: creditCards.filter(pm =&gt; pm.type === 'credit')
+        - Conditional render: {card.credit_mode === true &amp;&amp; &lt;Component /&gt;}
+        - Map over filtered array for multiple cards
+      </pattern>
+
+      <pattern name="Toast notifications">
+        Using sonner library (already in project):
+        - Success: toast.success(t('successMessage'))
+        - Error: toast.error(t('errorMessage'))
+        - Localized via useTranslations hook
+      </pattern>
+
+      <pattern name="Localization">
+        Using next-intl (already configured):
+        - useTranslations('section_name') hook
+        - t('key') for strings
+        - t('key', { variable: value }) for interpolation
+        - Date formatting with user's locale
+      </pattern>
+
+      <pattern name="Analytics tracking">
+        Based on existing pattern in payment-methods.ts:
+        - trackServerEvent(userId, AnalyticsEvent.EVENT_NAME, properties)
+        - Server-side tracking (not client-side)
+        - Properties from AnalyticsProperty enum
+      </pattern>
+    </known-patterns>
+
+    <code-examples>
+      <example name="Calling RPC function from server action">
+        ```typescript
+        // Pattern from existing codebase
+        const { data: rpcResult, error: rpcError } = await supabase.rpc(
+          'calculate_statement_period',
+          {
+            p_closing_day: closingDay,
+            p_reference_date: referenceDate?.toISOString().split('T')[0]
+          } as CalculateStatementPeriodParams
+        )
+
+        if (rpcError) {
+          console.error('[getStatementPeriodPreview] RPC error:', rpcError)
+          return null
+        }
+
+        const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
+        return {
+          periodStart: new Date(result.period_start),
+          periodEnd: new Date(result.period_end),
+          nextClosing: new Date(result.next_closing),
+          daysUntilClosing: Math.ceil(
+            (new Date(result.next_closing).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+          )
+        }
+        ```
+      </example>
+
+      <example name="Conditional rendering in parent component">
+        ```typescript
+        // In credit-card-settings.tsx
+        {creditCards.map((card) =&gt; (
+          &lt;div key={card.id}&gt;
+            {/* Existing mode display */}
+            &lt;div className="flex items-center gap-3"&gt;
+              &lt;CreditCard className="w-5 h-5" /&gt;
+              &lt;div&gt;
+                &lt;p&gt;{card.name}&lt;/p&gt;
+                &lt;Badge&gt;{card.credit_mode ? 'Credit Mode' : 'Simple Mode'}&lt;/Badge&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            {/* NEW: Statement settings for Credit Mode only */}
+            {card.credit_mode === true &amp;&amp; card.type === 'credit' &amp;&amp; (
+              &lt;StatementSettingsUI
+                paymentMethod={card}
+                onUpdate={() =&gt; router.refresh()}
+              /&gt;
+            )}
+          &lt;/div&gt;
+        ))}
+        ```
+      </example>
+    </code-examples>
+  </implementation-notes>
+
+  <risks-and-mitigations>
+    <risk id="RISK-1" severity="high" likelihood="low">
+      <description>Edge case bugs in period calculation (Feb 31, leap years)</description>
+      <impact>Incorrect periods break budget tracking for entire Epic 3</impact>
+      <mitigation>
+        - Comprehensive unit tests for ALL edge cases
+        - PostgreSQL date functions (well-tested, reliable)
+        - Manual QA with leap years (2024 vs 2025)
+        - Beta testing with real users in February
+      </mitigation>
+      <contingency>
+        If bugs found in production:
+        - Hotfix: Adjust calculate_statement_period() function
+        - Migration: Update function definition
+        - Zero downtime: Function can be updated without schema changes
+      </contingency>
+    </risk>
+
+    <risk id="RISK-2" severity="medium" likelihood="medium">
+      <description>User confusion about statement period vs calendar month</description>
+      <impact>User sets wrong closing day, budget tracking misaligned with actual credit card</impact>
+      <mitigation>
+        - Clear UI copy: "Statement closing day" (not just "closing day")
+        - Real-time preview showing exact period dates
+        - Help text: "This is the day your credit card statement closes each month"
+        - PostHog surveys to measure confusion rate
+      </mitigation>
+      <contingency>
+        If confusion detected:
+        - Add inline help tooltip with example
+        - Add link to FAQ/documentation
+        - Send WhatsApp onboarding message explaining feature
+      </contingency>
+    </risk>
+
+    <risk id="RISK-3" severity="high" likelihood="low">
+      <description>Simple Mode regression (statement features leak to Simple Mode users)</description>
+      <impact>Break existing Simple Mode users, violate backward compatibility promise</impact>
+      <mitigation>
+        - Conditional rendering: {creditMode &amp;&amp; &lt;Component /&gt;}
+        - Server action WHERE clause: credit_mode = true
+        - Regression tests: Verify Simple Mode unchanged
+        - Manual QA: Test Simple Mode user flows
+      </mitigation>
+      <contingency>
+        If regression found:
+        - Immediate rollback of feature
+        - Fix conditional rendering
+        - Re-deploy with regression tests passing
+      </contingency>
+    </risk>
+
+    <risk id="RISK-4" severity="low" likelihood="medium">
+      <description>Performance degradation on dashboard (multiple RPC calls)</description>
+      <impact>Slow page load for users with multiple credit cards</impact>
+      <mitigation>
+        - Target: &lt; 50ms per RPC call (NFR Epic3-P1)
+        - Cache preview results for 5 minutes (future optimization)
+        - Performance tests in CI/CD
+        - Monitor real-user metrics via PostHog
+      </mitigation>
+      <contingency>
+        If performance issues:
+        - Add caching layer (React Query with staleTime)
+        - Batch RPC calls for multiple cards
+        - Lazy load statement settings (collapse by default)
+      </contingency>
+    </risk>
+  </risks-and-mitigations>
+
+  <analytics-and-monitoring>
+    <events>
+      <event name="statement_closing_day_set">
+        <trigger>User saves statement closing day</trigger>
+        <properties>
+          - userId: string
+          - paymentMethodId: string
+          - closingDay: number (1-31)
+          - previousClosingDay: number | null
+          - timestamp: ISO8601
+          - locale: 'pt-br' | 'en'
+        </properties>
+        <target-adoption>60%+ of Credit Mode users set closing day within 7 days</target-adoption>
+      </event>
+
+      <event name="statement_period_preview_viewed">
+        <trigger>User changes dropdown value (debounced)</trigger>
+        <properties>
+          - userId: string
+          - closingDay: number
+          - previewFetchTime: number (ms)
+        </properties>
+        <purpose>Monitor preview performance, user exploration behavior</purpose>
+      </event>
+
+      <event name="statement_settings_error">
+        <trigger>updateStatementSettings() fails</trigger>
+        <properties>
+          - userId: string
+          - errorType: 'validation' | 'database' | 'network'
+          - errorMessage: string
+        </properties>
+        <alert>If error_rate &gt; 1% in 1 hour → Slack alert</alert>
+      </event>
+    </events>
+
+    <dashboards>
+      <dashboard name="Epic 3 Adoption">
+        <metrics>
+          - Total Credit Mode users
+          - Users with statement_closing_day set (%)
+          - Most common closing days (distribution chart)
+          - Time to first closing day set (median, p95)
+        </metrics>
+      </dashboard>
+
+      <dashboard name="Statement Settings Performance">
+        <metrics>
+          - calculate_statement_period() execution time (p50, p95, p99)
+          - updateStatementSettings() execution time
+          - getStatementPeriodPreview() execution time
+          - Error rate (%)
+        </metrics>
+      </dashboard>
+    </dashboards>
+
+    <alerts>
+      <alert name="High error rate">
+        <condition>statement_settings_error events &gt; 1% of total saves in 1 hour</condition>
+        <action>Slack notification to #eng-alerts</action>
+      </alert>
+
+      <alert name="Performance degradation">
+        <condition>calculate_statement_period() p95 &gt; 100ms</condition>
+        <action>Create Jira ticket, investigate database performance</action>
+      </alert>
+
+      <alert name="Low adoption">
+        <condition>After 7 days, &lt; 40% of Credit Mode users set closing day</condition>
+        <action>Product review: Is feature discoverable? Add onboarding prompt?</action>
+      </alert>
+    </alerts>
+  </analytics-and-monitoring>
+
+  <definition-of-done>
+    <checklist>
+      <item>✓ calculate_statement_period() PostgreSQL function created (or verified exists)</item>
+      <item>✓ Server actions implemented: updateStatementSettings(), getStatementPeriodPreview()</item>
+      <item>✓ RPC types defined in fe/lib/supabase/rpc-types.ts</item>
+      <item>✓ StatementSettingsUI component created and integrated</item>
+      <item>✓ Conditional rendering: Only Credit Mode credit cards show settings</item>
+      <item>✓ Localization added for pt-BR and English (all strings)</item>
+      <item>✓ Toast notifications working for success and error cases</item>
+      <item>✓ PostHog analytics event tracked: statement_closing_day_set</item>
+      <item>✓ All unit tests passing (90%+ coverage target)</item>
+      <item>✓ All integration tests passing (RLS, mode check, full flow)</item>
+      <item>✓ Performance tests passing (&lt; 50ms calculation, &lt; 200ms save)</item>
+      <item>✓ Edge cases tested: Feb 31, leap years, day 30/31 in shorter months</item>
+      <item>✓ Manual E2E tests completed (Credit Mode visible, Simple Mode hidden)</item>
+      <item>✓ Regression tests passing (Simple Mode unchanged, Epic 1 compatibility)</item>
+      <item>✓ Code review completed (Senior Dev or Tech Lead approval)</item>
+      <item>✓ Documentation updated: CLAUDE.md, component JSDoc comments</item>
+      <item>✓ Deployment successful (staging and production)</item>
+      <item>✓ PostHog monitoring active, no errors detected in first 24 hours</item>
+      <item>✓ Sprint status updated: 3-1 → ready-for-dev → in-progress → done</item>
+    </checklist>
+  </definition-of-done>
+
+  <next-steps>
+    <immediate>
+      <step>1. Run /dev-story to begin implementation</step>
+      <step>2. Verify calculate_statement_period() function exists (or create migration)</step>
+      <step>3. Implement server actions: updateStatementSettings, getStatementPeriodPreview</step>
+      <step>4. Create StatementSettingsUI component with Radix UI Select</step>
+      <step>5. Add localization strings (pt-BR and English)</step>
+      <step>6. Integrate component into credit-card-settings.tsx</step>
+      <step>7. Write unit tests for all edge cases</step>
+      <step>8. Run integration tests and manual E2E tests</step>
+      <step>9. Code review via /code-review</step>
+      <step>10. Deploy to staging, then production</step>
+    </immediate>
+
+    <after-completion>
+      <step>Mark story done: /story-done (updates sprint-status.yaml)</step>
+      <step>Proceed to Story 3.2: Set Monthly Budget (depends on 3.1)</step>
+      <step>Monitor PostHog for adoption metrics (target: 60%+ within 7 days)</step>
+      <step>Monitor error rates (target: &lt; 1%)</step>
+      <step>Gather user feedback via beta group</step>
+    </after-completion>
+  </next-steps>
+</story-context>

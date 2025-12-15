@@ -1,0 +1,739 @@
+<story-context>
+  <story-id>2-6-edit-installment-plan</story-id>
+  <story-title>Edit Installment Plan</story-title>
+  <epic-id>epic-2</epic-id>
+  <epic-title>Parcelamento Intelligence</epic-title>
+
+  <story-summary>
+    Enable users to edit active installment plan details (description, total amount, installment count, merchant, category) with automatic recalculation of pending monthly payments. This feature allows users to correct data entry mistakes, adjust for actual installment terms, and update plan information without deleting and recreating the entire plan. Preserves paid payment history while recalculating future obligations based on new values.
+  </story-summary>
+
+  <context-why>
+    <problem>
+      Users make mistakes when entering installment details (wrong amount, incorrect installment count, typos in description), or discover discrepancies later when merchants charge different amounts or terms differ from what was initially entered. Traditional expense trackers force users to delete and recreate installment plans to fix errors, which destroys payment history and creates data inconsistencies. Without edit functionality, users must either live with incorrect data or lose their payment tracking progress.
+    </problem>
+
+    <user-need>
+      Users need the ability to correct or update installment plan details with:
+      - Clear visibility into which fields can be edited (description, amount, installments, category, merchant)
+      - Non-editable fields preserved (payment method, first payment date - historical facts)
+      - Automatic recalculation of monthly payments when amount or installment count changes
+      - Paid payment preservation (only pending payments are updated)
+      - Impact preview showing what will happen before saving changes
+      - Real-time monthly payment calculation as user edits
+      - Warning dialogs when adding/removing future payments
+      - Support for description-only edits (no financial recalculation)
+      - Assurance that the edit won't break payment history or create inconsistencies
+    </user-need>
+
+    <epic-context>
+      This is Story 2.6 of Epic 2 (Parcelamento Intelligence), NexFinApp's killer feature for proper Brazilian installment tracking. Story 2.6 enables critical data correction workflows that align with real-world scenarios:
+      - User discovers merchant charged different amount than initially entered
+      - User miscounted installments (thought it was 12x, actually 10x)
+      - User wants to update description or categorization
+      - User needs to fix typos in merchant name
+
+      This story integrates with:
+      - Story 2.4: "Editar" button on installments list page (currently disabled)
+      - Story 2.3: Future commitments dashboard updates when amounts change
+      - Story 2.5: Payoff for termination, Edit for corrections (distinct use cases)
+      - Story 2.0: Recalculation logic follows atomic pattern from foundation story
+    </epic-context>
+  </context-why>
+
+  <context-what>
+    <functional-requirements>
+      <requirement id="FR20">Edit installment plan details</requirement>
+      <requirement id="FR21">Recalculate monthly payments when amount/installments change</requirement>
+      <requirement id="FR13">Future commitments update when amounts change</requirement>
+    </functional-requirements>
+
+    <deliverables>
+      <deliverable>EditInstallmentDialog component with form fields and real-time calculation</deliverable>
+      <deliverable>updateInstallment server action with recalculation logic</deliverable>
+      <deliverable>recalculatePendingPayments function (amount/installment changes)</deliverable>
+      <deliverable>adjustPaymentCount function (add/remove payments when count changes)</deliverable>
+      <deliverable>Impact preview section showing what will happen before save</deliverable>
+      <deliverable>Success toast with updated fields summary</deliverable>
+      <deliverable>Immediate UI updates: installments list + future commitments refresh</deliverable>
+      <deliverable>Enable "Editar" button on installment cards (Story 2.4 integration)</deliverable>
+      <deliverable>PostHog analytics events: INSTALLMENT_EDITED, INSTALLMENT_EDIT_FAILED</deliverable>
+      <deliverable>Localization support for pt-BR and English</deliverable>
+      <deliverable>Error handling for invalid edits (installments < paid count, unauthorized access)</deliverable>
+    </deliverables>
+
+    <acceptance-criteria>
+      <ac id="AC6.1">
+        <title>Editable Fields</title>
+        <requirements>
+          Editable Fields:
+          - Description (TEXT, required, max 200 chars) - Pre-filled with current value
+          - Total Amount (DECIMAL, required, min 0.01, max 999,999.99) - Triggers recalculation
+          - Total Installments (INTEGER, required, range 1-60) - Triggers add/remove payments
+            - Constraint: Cannot reduce below paid payment count
+            - Warning shown: "Isto adicionará/removerá X parcelas futuras"
+          - Merchant (TEXT, optional, max 100 chars) - Pre-filled, can be null
+          - Category (UUID, optional) - Dropdown with user's categories
+
+          Non-Editable Fields (disabled or hidden):
+          - Payment Method - Cannot change card after creation (prevents budget confusion)
+          - First Payment Date - Historical fact, cannot be changed
+          - Status - Managed by system (active/paid_off/cancelled)
+          - Created At - Audit trail, immutable
+
+          Edit Dialog Layout:
+          - Warning when installments < current total (removing payments)
+          - Warning when amount significantly changed
+          - Monthly payment auto-calculated and displayed (read-only)
+          - Impact preview section: "O que vai acontecer:"
+            - X parcelas pagas permanecem inalteradas
+            - Y parcelas pendentes serão recalculadas
+            - Valor mensal: R$ A → R$ B
+            - Compromissos futuros atualizados
+
+          Validation:
+          - Test description required (non-empty)
+          - Test total amount > 0
+          - Test total installments >= paid payment count
+          - Test total installments <= 60
+          - Test category dropdown shows user's categories
+          - Test merchant field accepts empty value
+          - Test payment method and dates are not editable
+        </requirements>
+      </ac>
+
+      <ac id="AC6.2">
+        <title>Recalculation Logic</title>
+        <requirements>
+          Scenario 1: Total Amount Changed (Installments Unchanged)
+          Initial: R$ 1,200 in 12x (R$ 100/month), 3 paid, 9 pending
+          User changes total to R$ 1,500
+          Expected:
+          1. Calculate new total for pending: R$ 1,500 - R$ 300 (paid) = R$ 1,200
+          2. Recalculate monthly: R$ 1,200 / 9 = R$ 133.33
+          3. Update each pending payment to R$ 133.33
+          4. Last payment absorbs rounding: R$ 133.34
+          5. Paid payments remain R$ 100.00 each
+
+          Scenario 2: Total Installments Increased
+          Initial: R$ 1,200 in 12x, 3 paid, 9 pending
+          User changes to 15x
+          Expected:
+          1. Calculate new pending count: 15 - 3 = 12
+          2. Add 3 new pending payments (installments 13, 14, 15)
+          3. Set due dates (monthly increments from last existing date)
+          4. Recalculate monthly: R$ 900 / 12 = R$ 75.00
+          5. Update all 12 pending payments to R$ 75.00
+          Warning: "Adicionar 3 parcelas, Última parcela: Março 2026"
+
+          Scenario 3: Total Installments Decreased
+          Initial: R$ 1,200 in 12x, 3 paid, 9 pending
+          User changes to 10x
+          Expected:
+          1. Validate: 10 >= 3 (paid count) ✅
+          2. Calculate new pending: 10 - 3 = 7
+          3. Delete 2 excess pending payments (installments 11, 12)
+          4. Recalculate monthly: R$ 900 / 7 = R$ 128.57
+          5. Update 7 pending payments, last: R$ 128.59
+          Warning: "Remover 2 parcelas, Valor mensal: R$ 100 → R$ 128.57"
+
+          Scenario 4: Both Amount and Installments Changed
+          - Calculate new pending count
+          - Calculate new remaining amount
+          - Recalculate monthly payment
+          - Update/add/remove pending payments as needed
+          - Show combined warning with all changes
+
+          Validation:
+          - Test amount increase recalculates correctly
+          - Test amount decrease recalculates correctly
+          - Test installment increase adds payments
+          - Test installment decrease removes payments
+          - Test installment decrease blocked if < paid count
+          - Test rounding handled (last payment absorbs)
+          - Test paid payments unchanged in all scenarios
+        </requirements>
+      </ac>
+
+      <ac id="AC6.3">
+        <title>Past Payments Unchanged</title>
+        <requirements>
+          Database Constraint:
+          - Update queries MUST include WHERE status = 'pending'
+          - Never update or delete payments with status = 'paid'
+          - Paid payment amounts are historical facts, immutable
+
+          Test Scenario: Edit Amount with Paid Payments
+          1. Create installment: R$ 1,200 in 12x (R$ 100/month)
+          2. Mark 3 payments as paid (status = 'paid')
+          3. Edit total amount to R$ 1,500
+          4. Verify:
+             - Paid payments still R$ 100.00 each
+             - Pending payments updated to R$ 133.33 each
+             - SUM(paid.amount) = R$ 300 (unchanged)
+             - SUM(pending.amount) = R$ 1,200 (new)
+             - total_amount = R$ 1,500
+
+          Test Scenario: Edit Description Only
+          1. Edit description from "Celular" to "Celular Samsung S24"
+          2. Verify:
+             - Plan description updated
+             - All payments preserve original amounts
+             - No recalculation triggered
+
+          Immutable Fields on Paid Payments:
+          - amount (never updated)
+          - due_date (never updated)
+          - status = 'paid' (never changed)
+          - installment_number (never changed)
+          - transaction_id (preserved)
+
+          Validation:
+          - Test paid payments unchanged after amount edit
+          - Test paid payments unchanged after installment count edit
+          - Test paid payments unchanged after description edit
+          - Test SUM(all payments) matches plan total after edit
+          - Test audit trail: updated_at only on pending payments
+        </requirements>
+      </ac>
+
+      <ac id="AC6.4">
+        <title>Description Propagation</title>
+        <requirements>
+          Option A: Description Updates Plan Only (RECOMMENDED FOR MVP)
+          - Edit description updates installment_plans.description
+          - Linked transactions keep original description
+          - Rationale: Transactions may have been customized by user
+          - Implementation: Single UPDATE query, no cascade
+          - SQL: UPDATE installment_plans SET description = $1 WHERE id = $2 AND user_id = $3
+
+          Option B: Description Propagates to Transactions (Complex - Future Enhancement)
+          - Edit description updates plan + all linked transaction descriptions
+          - Only if transaction description matches plan description (not customized)
+          - Implementation: Check each transaction, update if matches
+          - Risk: Overwrites user customizations
+
+          Recommendation: Implement Option A for MVP
+          - Simpler implementation
+          - Preserves transaction customizations
+          - Future enhancement: Add "Also update linked transactions" checkbox
+
+          Validation:
+          - Test description edit updates plan
+          - Test linked transactions behavior (based on option chosen)
+          - Test category edit does not propagate (each transaction keeps category)
+        </requirements>
+      </ac>
+    </acceptance-criteria>
+  </context-what>
+
+  <context-how>
+    <architecture>
+      <component name="EditInstallmentDialog">
+        <file>fe/components/installments/edit-installment-dialog.tsx</file>
+        <purpose>Edit form dialog with real-time calculation and impact preview</purpose>
+        <dependencies>
+          - Radix Dialog component
+          - React Hook Form + Zod validation
+          - updateInstallment server action
+          - getInstallmentDetails for pre-filling
+        </dependencies>
+        <key-functions>
+          - Fetch plan details on open
+          - Pre-fill form with current values
+          - Watch amount/installments for real-time calculation
+          - Display impact preview ("O que vai acontecer")
+          - Validate inputs (description, amount, installments range)
+          - Show unsaved changes warning on cancel
+          - Handle success/error feedback
+        </key-functions>
+      </component>
+
+      <component name="updateInstallment">
+        <file>fe/lib/actions/installments.ts</file>
+        <purpose>Server action for editing installment plans</purpose>
+        <signature>
+          async function updateInstallment(
+            planId: string,
+            updates: {
+              description?: string
+              total_amount?: number
+              total_installments?: number
+              merchant?: string
+              category_id?: string | null
+            }
+          ): Promise&lt;{ success: boolean; error?: string; updateData?: UpdateResultData }&gt;
+        </signature>
+        <key-logic>
+          - Validate inputs (description non-empty, amount > 0, installments 1-60)
+          - Check total_installments >= paid payment count
+          - Call recalculatePendingPayments if amount or installments changed
+          - Call adjustPaymentCount if installment count changed
+          - Update installment_plans table
+          - Return success/error with update details
+          - Track analytics: INSTALLMENT_EDITED or INSTALLMENT_EDIT_FAILED
+        </key-logic>
+      </component>
+
+      <component name="recalculatePendingPayments">
+        <file>fe/lib/actions/installments.ts</file>
+        <purpose>Recalculate monthly payment amounts for pending payments</purpose>
+        <key-logic>
+          1. Calculate paid amount: SUM(amount) WHERE status = 'paid'
+          2. Calculate remaining amount: newTotalAmount - paidAmount
+          3. Calculate pending count: newTotalInstallments - paidCount
+          4. Calculate new monthly payment: remainingAmount / pendingCount
+          5. Update pending payment amounts
+          6. Handle rounding: Last payment absorbs difference
+          7. Return payments updated count
+        </key-logic>
+        <sql-pattern>
+          UPDATE installment_payments
+          SET amount = $new_monthly_payment, updated_at = NOW()
+          WHERE plan_id = $plan_id AND status = 'pending'
+            AND installment_number &lt; total_installments;
+
+          UPDATE installment_payments
+          SET amount = $new_monthly_payment + $rounding_diff, updated_at = NOW()
+          WHERE plan_id = $plan_id AND status = 'pending'
+            AND installment_number = total_installments;
+        </sql-pattern>
+      </component>
+
+      <component name="adjustPaymentCount">
+        <file>fe/lib/actions/installments.ts</file>
+        <purpose>Add or remove pending payments when installment count changes</purpose>
+        <key-logic>
+          If newTotal > oldTotal: Add new pending payments
+          - Calculate due dates (monthly increments)
+          - Create new installment_payment records
+
+          If newTotal &lt; oldTotal: Remove excess pending payments
+          - Delete payments with installment_number > newTotal AND status = 'pending'
+
+          Return count of payments added/removed
+        </key-logic>
+        <sql-pattern>
+          -- Add payments
+          INSERT INTO installment_payments (plan_id, installment_number, amount, due_date, status)
+          VALUES ($plan_id, $i, $amount, $due_date, 'pending');
+
+          -- Remove payments
+          DELETE FROM installment_payments
+          WHERE plan_id = $plan_id
+            AND installment_number > $new_total
+            AND status = 'pending';
+        </sql-pattern>
+      </component>
+    </architecture>
+
+    <data-flow>
+      <flow name="Edit Amount Only">
+        1. User clicks "Editar" on installment card
+        2. EditInstallmentDialog opens, fetches plan details
+        3. User changes total_amount: 1200 → 1500
+        4. Real-time calculation updates monthly payment display
+        5. Impact preview shows recalculation details
+        6. User clicks "Salvar Alterações"
+        7. updateInstallment(planId, { total_amount: 1500 })
+        8. recalculatePendingPayments():
+           a. paidAmount = SUM(WHERE status='paid') = 300
+           b. remainingAmount = 1500 - 300 = 1200
+           c. pendingCount = 12 - 3 = 9
+           d. newMonthly = 1200 / 9 = 133.33
+           e. UPDATE pending payments SET amount = 133.33
+           f. Last payment: 133.34 (rounding)
+        9. Return success
+        10. Close dialog, show success toast
+        11. Refetch installments list
+        12. Refetch future commitments
+        13. Analytics: INSTALLMENT_EDITED
+      </flow>
+
+      <flow name="Edit Installment Count (Increase)">
+        1. User changes total_installments: 12 → 15
+        2. adjustPaymentCount():
+           a. oldPending = 12 - 3 = 9
+           b. newPending = 15 - 3 = 12
+           c. toAdd = 3
+           d. Calculate due dates for new payments
+           e. INSERT 3 new installment_payment records
+        3. recalculatePendingPayments():
+           a. remainingAmount = 1200 - 300 = 900
+           b. newMonthly = 900 / 12 = 75.00
+           c. UPDATE all 12 pending payments
+        4. Impact preview: "3 parcelas adicionadas, Valor mensal: R$ 100 → R$ 75"
+      </flow>
+
+      <flow name="Edit Installment Count (Decrease)">
+        1. User changes total_installments: 12 → 10
+        2. Validate: 10 >= 3 (paid count) ✅
+        3. adjustPaymentCount():
+           a. oldPending = 9, newPending = 7
+           b. toRemove = 2
+           c. DELETE installment_payments WHERE installment_number > 10 AND status='pending'
+        4. recalculatePendingPayments():
+           a. remainingAmount = 900
+           b. newMonthly = 900 / 7 = 128.57
+           c. UPDATE 7 pending payments
+        5. Impact preview: "2 parcelas removidas, Valor mensal: R$ 100 → R$ 128.57"
+      </flow>
+
+      <flow name="Edit Description Only">
+        1. User changes description: "Celular" → "Celular Samsung S24"
+        2. updateInstallment(planId, { description: "Celular Samsung S24" })
+        3. Simple UPDATE on installment_plans (no recalculation)
+        4. No impact preview needed (non-financial change)
+        5. Success toast: "Descrição atualizada"
+      </flow>
+    </data-flow>
+
+    <integration-points>
+      <integration point="Story 2.4: Installments List">
+        - Enable "Editar" button on InstallmentCard component
+        - onClick → open EditInstallmentDialog with planId
+        - After successful edit → refetch installments list
+        - Installment card displays updated information
+      </integration>
+
+      <integration point="Story 2.3: Future Commitments">
+        - After successful edit → trigger dashboard refresh
+        - Update monthly totals to reflect new payment amounts
+        - Remove/add months if installment count changed
+      </integration>
+
+      <integration point="Story 2.5: Payoff vs Edit">
+        - Payoff: Early termination (mark as paid_off, cancel pending)
+        - Edit: Corrections/updates (recalculate pending, preserve paid)
+        - Distinct use cases, different actions
+      </integration>
+
+      <integration point="Analytics">
+        - INSTALLMENT_EDIT_DIALOG_OPENED: userId, planId, currentAmount, currentInstallments
+        - INSTALLMENT_EDITED: userId, planId, fieldsChanged[], oldAmount, newAmount, oldInstallments, newInstallments, paymentsAdded, paymentsRemoved, channel, timestamp
+        - INSTALLMENT_EDIT_FAILED: userId, planId, errorType, errorMessage, timestamp
+        - INSTALLMENT_EDIT_CANCELLED: userId, planId, hadChanges, timestamp
+      </integration>
+    </integration-points>
+
+    <edge-cases>
+      <case>Edit with All Payments Paid: Only allow description/category/merchant edits, disable amount/installments</case>
+      <case>Reduce Installments Below Paid Count: Validation error, show min constraint</case>
+      <case>Increase to Maximum (60x): Add 48 payments, verify due dates calculated correctly</case>
+      <case>Rounding Precision (R$ 100 / 3): First 2: R$ 33.33, Last: R$ 33.34, SUM = R$ 100.00</case>
+      <case>Concurrent Edit (Race Condition): Check updated_at timestamp, reject stale edits</case>
+      <case>Edit While Details Modal Open: Refresh modal after edit or close it</case>
+      <case>Description Only Edit: Skip recalculation, no payment changes</case>
+      <case>Category/Merchant Edit: Simple UPDATE, no recalculation, no impact preview</case>
+    </edge-cases>
+  </context-how>
+
+  <context-dependencies>
+    <dependency type="blocker" status="complete">
+      <story>Story 2.0: Epic 2 Foundation</story>
+      <reason>Atomic transaction pattern established, test infrastructure ready</reason>
+    </dependency>
+
+    <dependency type="blocker" status="complete">
+      <story>Story 2.3: Future Commitments</story>
+      <reason>Future commitments dashboard exists, can be refreshed after edit</reason>
+    </dependency>
+
+    <dependency type="blocker" status="complete">
+      <story>Story 2.4: View Installments</story>
+      <reason>Installments list page exists with "Editar" button placeholder (currently disabled)</reason>
+    </dependency>
+
+    <dependency type="reference" status="complete">
+      <story>Story 2.5: Payoff Early</story>
+      <reason>Atomic operation pattern can be referenced for recalculation logic</reason>
+    </dependency>
+
+    <dependency type="soft">
+      <story>Story 2.8: Budget Integration</story>
+      <reason>Budget calculations will use updated monthly payment amounts after edit</reason>
+    </dependency>
+
+    <library>date-fns: Due date calculation for new payments</library>
+    <library>Radix UI: Dialog component (web)</library>
+    <library>React Hook Form: Form state management</library>
+    <library>Zod: Form validation</library>
+    <library>next-intl: Internationalization (web)</library>
+    <library>PostHog: Analytics tracking</library>
+  </context-dependencies>
+
+  <context-testing>
+    <test-strategy>
+      <unit-tests>
+        File: fe/__tests__/actions/installments/edit.test.ts
+        Coverage: 80%+
+        Focus:
+        - Edit description only (no recalculation)
+        - Edit amount (recalculates pending payments)
+        - Edit installments - increase (adds payments)
+        - Edit installments - decrease (removes payments)
+        - Edit both amount and installments (combined)
+        - Reject installments &lt; paid count
+        - Reject unauthorized access (cross-user)
+        - Paid payments unchanged after edit
+        - Rounding handled correctly
+        Mock: Supabase client
+      </unit-tests>
+
+      <component-tests>
+        File: fe/__tests__/components/installments/edit-installment-dialog.test.tsx
+        Coverage: 80%+
+        Focus:
+        - Renders dialog with pre-filled values
+        - "Cancelar" dismisses with unsaved changes warning
+        - "Salvar Alterações" triggers update
+        - Monthly payment updates in real-time
+        - Impact preview updates dynamically
+        - Validation errors shown inline
+        - Shows loading state during execution
+        - Shows error message on failure
+        - Closes dialog on success
+        Mock: updateInstallment server action
+      </component-tests>
+
+      <integration-tests>
+        - Click "Editar" → Opens dialog with current values
+        - Edit description → Plan updated in database
+        - Edit amount → Pending payments recalculated
+        - Edit installments (increase) → New payments added
+        - Edit installments (decrease) → Excess payments removed
+        - Paid payments unchanged after any edit
+        - Future commitments updated after amount change
+        Use: Real test database
+      </integration-tests>
+
+      <performance-tests>
+        - Measure edit execution time (target &lt; 300ms)
+        - Test with varying pending payment counts (1, 12, 60)
+        - Test recalculation performance
+        - Document performance results
+      </performance-tests>
+
+      <edge-case-tests>
+        - Edit with 0 paid payments (all pending)
+        - Edit with all paid payments (none pending)
+        - Reduce installments to exactly paid count (minimum boundary)
+        - Amount that doesn't divide evenly (rounding)
+        - Increase from 1x to 60x (maximum)
+        - Concurrent edits (race condition)
+      </edge-case-tests>
+
+      <manual-tests>
+        - Test edit on web (mobile and desktop)
+        - Test both pt-BR and en locales
+        - Test all editable fields
+        - Test all validation errors
+        - Test all recalculation scenarios
+        - Test impact preview accuracy
+        - Test success toast displays
+        - Test analytics events fire
+        - Verify UI updates correctly (list, future commitments)
+      </manual-tests>
+    </test-strategy>
+  </context-testing>
+
+  <context-localization>
+    <locale>pt-BR (primary)</locale>
+    <locale>en (secondary)</locale>
+
+    <keys-required>
+      installments.edit.dialogTitle: 'Editar Parcelamento'
+      installments.edit.description: 'Descrição'
+      installments.edit.category: 'Categoria'
+      installments.edit.merchant: 'Loja/Comerciante'
+      installments.edit.totalAmount: 'Valor Total'
+      installments.edit.totalInstallments: 'Número de Parcelas'
+      installments.edit.monthlyPayment: 'Valor Mensal (recalculado)'
+      installments.edit.minInstallments: 'Mínimo: {{count}} (já pagas) • Máximo: 60'
+      installments.edit.whatHappens: 'O que vai acontecer:'
+      installments.edit.paidUnchanged: '{{count}} parcelas pagas permanecem inalteradas'
+      installments.edit.pendingRecalculated: '{{count}} parcelas pendentes serão recalculadas'
+      installments.edit.paymentsAdded: '{{count}} parcelas adicionadas'
+      installments.edit.paymentsRemoved: '{{count}} parcelas removidas'
+      installments.edit.monthlyChange: 'Valor mensal: {{oldAmount}} → {{newAmount}}'
+      installments.edit.commitmentsUpdated: 'Compromissos futuros atualizados'
+      installments.edit.buttonCancel: 'Cancelar'
+      installments.edit.buttonSave: 'Salvar Alterações'
+      installments.edit.successTitle: 'Parcelamento atualizado!'
+      installments.edit.successFields: 'Campos atualizados: {{fields}}'
+      installments.edit.errorDescriptionRequired: 'Descrição é obrigatória'
+      installments.edit.errorAmountInvalid: 'Valor deve ser maior que zero'
+      installments.edit.errorInstallmentsTooLow: 'Número de parcelas não pode ser menor que {{count}} (já pagas)'
+      installments.edit.errorInstallmentsTooHigh: 'Máximo de 60 parcelas permitido'
+      installments.edit.errorNotFound: 'Parcelamento não encontrado'
+      installments.edit.errorUnauthorized: 'Você não tem permissão para editar este parcelamento'
+      installments.edit.errorGeneric: 'Erro ao editar parcelamento. Tente novamente.'
+      installments.edit.warningUnsavedChanges: 'Você tem alterações não salvas. Descartar?'
+    </keys-required>
+
+    <currency-formatting>
+      pt-BR: "R$ 1.234,56" (period thousands, comma decimals)
+      en: "R$ 1,234.56" (comma thousands, period decimals)
+      Use: Intl.NumberFormat
+    </currency-formatting>
+  </context-localization>
+
+  <context-risks>
+    <risk likelihood="medium" impact="high">
+      <title>Recalculation Logic Complexity</title>
+      <description>Many edge cases (rounding, paid count constraints, add/remove payments)</description>
+      <mitigation>Comprehensive unit tests, validation checks, rounding handling</mitigation>
+      <monitoring>Log recalculation results, alert on SUM mismatch</monitoring>
+    </risk>
+
+    <risk likelihood="low" impact="medium">
+      <title>User Confusion with Impact Preview</title>
+      <description>User makes unintended changes, regrets edit</description>
+      <mitigation>Clear bullet points, show old → new values, allow cancel</mitigation>
+      <acceptance>Support process for reverting edits (manual if within 24 hours)</acceptance>
+    </risk>
+
+    <risk likelihood="low" impact="medium">
+      <title>Performance Degradation with Many Payments</title>
+      <description>Edit takes > 300ms with 60 payments, feels sluggish</description>
+      <mitigation>Performance testing before release, monitoring in production</mitigation>
+      <target>&lt; 300ms for 95th percentile</target>
+    </risk>
+
+    <risk likelihood="very-low" impact="low">
+      <title>Concurrent Edit Conflicts</title>
+      <description>One edit overwrites another, data loss</description>
+      <mitigation>Optimistic locking via updated_at timestamp check</mitigation>
+      <monitoring>Log concurrent edit conflicts</monitoring>
+    </risk>
+  </context-risks>
+
+  <context-nfr>
+    <performance>
+      <target metric="edit-execution-time">
+        &lt; 300ms for editing installment with recalculation
+        Measured: Time from server action call to database commit
+      </target>
+      <target metric="dialog-render-time">
+        &lt; 500ms for fetching plan details and rendering dialog
+        Measured: Time from dialog open to form ready
+      </target>
+    </performance>
+
+    <security>
+      <requirement>Row-Level Security (RLS) enforced - users can only edit their own plans</requirement>
+      <requirement>Input validation: description non-empty, amount > 0, installments 1-60</requirement>
+      <requirement>Installment count >= paid count (prevent data loss)</requirement>
+      <requirement>Payment method ownership verified (cannot edit other user's plans)</requirement>
+    </security>
+
+    <reliability>
+      <requirement>Paid payments NEVER updated (WHERE status = 'pending' in all UPDATE queries)</requirement>
+      <requirement>Data consistency: SUM(payments.amount) matches plan.total_amount (within rounding tolerance)</requirement>
+      <requirement>Graceful error handling: clear user messages, no cryptic DB errors</requirement>
+      <requirement>Transaction rollback on error (no partial state)</requirement>
+    </reliability>
+
+    <observability>
+      <event>INSTALLMENT_EDIT_DIALOG_OPENED: userId, planId, currentAmount, currentInstallments</event>
+      <event>INSTALLMENT_EDITED: userId, planId, fieldsChanged[], oldAmount, newAmount, oldInstallments, newInstallments, paymentsAdded, paymentsRemoved, channel, timestamp</event>
+      <event>INSTALLMENT_EDIT_FAILED: userId, planId, errorType, errorMessage, timestamp</event>
+      <event>INSTALLMENT_EDIT_CANCELLED: userId, planId, hadChanges, timestamp</event>
+      <metric>Edit execution time (log if > 300ms)</metric>
+      <metric>Error rate (alert if > 5% of edit attempts)</metric>
+    </observability>
+  </context-nfr>
+
+  <context-files>
+    <file path="fe/components/installments/edit-installment-dialog.tsx" type="new">
+      EditInstallmentDialog component - Form dialog with real-time calculation and impact preview
+    </file>
+    <file path="fe/lib/actions/installments.ts" type="modify">
+      Add updateInstallment server action, recalculatePendingPayments, adjustPaymentCount functions
+    </file>
+    <file path="fe/app/[locale]/installments/installments-client.tsx" type="modify">
+      Enable "Editar" button, add onClick handler to open EditInstallmentDialog
+    </file>
+    <file path="fe/lib/localization/pt-br.ts" type="modify">
+      Add installments.edit.* localization keys (22 keys)
+    </file>
+    <file path="fe/lib/localization/en.ts" type="modify">
+      Add installments.edit.* English translations
+    </file>
+    <file path="fe/lib/localization/types.ts" type="modify">
+      Add types for installments.edit keys
+    </file>
+    <file path="fe/lib/analytics/events.ts" type="modify">
+      Add INSTALLMENT_EDIT_DIALOG_OPENED, INSTALLMENT_EDITED, INSTALLMENT_EDIT_FAILED, INSTALLMENT_EDIT_CANCELLED events
+    </file>
+    <file path="fe/__tests__/actions/installments/edit.test.ts" type="new">
+      Unit tests for updateInstallment server action (80%+ coverage)
+    </file>
+    <file path="fe/__tests__/components/installments/edit-installment-dialog.test.tsx" type="new">
+      Component tests for EditInstallmentDialog (80%+ coverage)
+    </file>
+
+    <reference-files>
+      <file path="fe/lib/actions/installments.ts">
+        Existing server actions: createInstallment, getInstallmentDetails, payOffInstallment
+        Pattern reference: Error handling, analytics tracking, performance logging
+      </file>
+      <file path="fe/components/installments/payoff-confirmation-dialog.tsx">
+        Dialog pattern reference: Radix Dialog, confirmation flow, analytics
+      </file>
+      <file path="fe/scripts/042_atomic_transaction_functions.sql">
+        Database functions: create_installment_plan_atomic, delete_installment_plan_atomic
+        Pattern reference: Atomic operations, validation, error handling
+      </file>
+      <file path="docs/sprint-artifacts/tech-spec-epic-2.md">
+        Epic 2 Technical Specification - Installment data model, NFRs, test strategy
+      </file>
+      <file path="docs/sprint-artifacts/2-5-mark-installment-as-paid-off-early.md">
+        Story 2.5 reference: Atomic operation pattern, confirmation dialog pattern
+      </file>
+    </reference-files>
+  </context-files>
+
+  <dev-notes>
+    <note priority="high">
+      Recalculation Logic is Core Complexity:
+      - Amount change: Recalculate monthly payment = (newTotal - paidAmount) / pendingCount
+      - Installment increase: Add new payments with calculated due dates
+      - Installment decrease: Delete excess payments, validate >= paid count
+      - Rounding: Last payment absorbs difference (e.g., R$ 100/3 = 33.33, 33.33, 33.34)
+      - Paid payments NEVER updated (WHERE status = 'pending')
+    </note>
+
+    <note priority="high">
+      Impact Preview is Critical UX:
+      - User must understand what will happen before confirming
+      - Show bullet points: paid unchanged, pending recalculated, payments added/removed
+      - Display old → new monthly payment amount
+      - Warning when removing payments
+      - Real-time calculation as user types
+    </note>
+
+    <note priority="medium">
+      Description Propagation Decision:
+      - MVP: Option A (plan only, no cascade to transactions)
+      - Simpler, preserves transaction customizations
+      - Future enhancement: Add "Also update linked transactions" checkbox
+    </note>
+
+    <note priority="medium">
+      WhatsApp Edit Flow Deferred:
+      - Multi-step conversation complexity
+      - Web-only for MVP
+      - WhatsApp users must use web for edits (temporary limitation)
+      - Can be added in Story 2.6.1 (Enhancement)
+    </note>
+
+    <note priority="low">
+      Performance Targets:
+      - Edit execution: &lt; 300ms (NFR)
+      - Dialog render: &lt; 500ms (good UX)
+      - Test with 60 payments (maximum)
+      - Monitor in production, alert if exceeded
+    </note>
+  </dev-notes>
+</story-context>

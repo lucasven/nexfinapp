@@ -1,0 +1,1 @@
+../../fe/scripts/032_user_deletion_function.sql
