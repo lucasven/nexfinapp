@@ -14,7 +14,7 @@ import type { UserIdentifiers } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { recordParsingMetric, ParsingStrategy } from '../../services/monitoring/metrics-tracker.js'
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
-import { checkCacheWithDetails, saveToCache } from '../../services/ai/semantic-cache.js'
+import { checkCacheWithDetails, saveToCache, type CacheResult } from '../../services/ai/semantic-cache.js'
 import { checkDailyLimit } from '../../services/ai/ai-usage-tracker.js'
 import { isTransactionReply, extractTransactionIdFromQuote, injectTransactionIdContext } from '../../services/groups/transaction-id-extractor.js'
 import { getOrCreateSession } from './helpers.js'
@@ -776,8 +776,10 @@ export async function handleTextMessage(
     }
 
     // LAYER 2: Semantic Cache Lookup (low cost)
-    strategy = 'semantic_cache'
-    const cacheResult = await checkCacheWithDetails(session.userId, enhancedMessage)
+    // TODO: TEMPORARILY DISABLED - Re-enable when cache issues are resolved
+    // strategy = 'semantic_cache'
+    // const cacheResult = await checkCacheWithDetails(session.userId, enhancedMessage)
+    const cacheResult: CacheResult = { hit: false } // Bypass cache - always miss
 
     if (cacheResult.hit && cacheResult.intent && cacheResult.intent.action !== 'unknown') {
       const cachedIntent = cacheResult.intent
