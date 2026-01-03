@@ -329,7 +329,7 @@ describe('updateInstallment Server Action', () => {
         data: { user: { id: userId } },
       })
 
-      let updatedPendingAmounts: { [key: string]: number } = {}
+      const updatedPendingAmounts: { [key: string]: number } = {}
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
@@ -632,7 +632,7 @@ describe('updateInstallment Server Action', () => {
         data: { user: { id: userId } },
       })
 
-      let updatedPaymentStatuses: string[] = []
+      const updatedPaymentStatuses: string[] = []
 
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {

@@ -27,7 +27,9 @@ export interface ParsedIntent {
           // Installments (Epic 2)
           'create_installment' | 'view_future_commitments' | 'payoff_installment' |
           // Statement Summary (Epic 3)
-          'view_statement_summary'
+          'view_statement_summary' |
+          // Credit Mode Management
+          'switch_credit_mode'
   confidence: number
   entities: {
     amount?: number
@@ -64,6 +66,9 @@ export interface ParsedIntent {
     installments?: number
     merchant?: string
     firstPaymentDate?: string
+    // Credit Mode Management
+    targetMode?: 'credit' | 'simple'
+    paymentMethodName?: string
   }
 }
 

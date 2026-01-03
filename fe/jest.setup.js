@@ -1,3 +1,4 @@
+/* eslint-env node, jest */
 // Jest setup file for React Testing Library
 require('@testing-library/jest-dom')
 

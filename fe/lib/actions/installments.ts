@@ -2269,7 +2269,7 @@ export async function markInstallmentPaymentAsPaid(
       return { success: false, error: "Payment not found" }
     }
 
-    // @ts-ignore - Type issue with nested select
+    // @ts-expect-error - Type issue with nested select
     if (payment.installment_plans.user_id !== user.id) {
       return { success: false, error: "Unauthorized" }
     }

@@ -31,6 +31,8 @@ export type ParsingStrategy =
   | 'installment_card_selection' // Story 2.1: Installment card selection (AC1.2 Scenario 3)
   | 'delete_conversation' // Story 2.7: Delete installment conversation state
   | 'payoff_conversation' // Story 2.5: Payoff installment conversation state
+  | 'mode_switch_warning_response' // Credit mode switch warning confirmation
+  | 'mode_switch_card_selection' // Credit mode switch card selection
   | 'unknown'
 
 export interface ParsingMetric {

@@ -112,7 +112,7 @@ export function ModeSwitchWarningDialog({
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                !loading && handleConfirm(false)
+                if (!loading) handleConfirm(false)
               }
             }}
             aria-label={t('option_keep_installments')}
@@ -140,7 +140,7 @@ export function ModeSwitchWarningDialog({
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                !loading && handleConfirm(true)
+                if (!loading) handleConfirm(true)
               }
             }}
             aria-label={t('option_pay_off')}
@@ -167,7 +167,7 @@ export function ModeSwitchWarningDialog({
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                !loading && handleCancel()
+                if (!loading) handleCancel()
               }
             }}
             aria-label={t('option_cancel')}

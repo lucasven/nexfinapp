@@ -56,9 +56,7 @@ export default async function InstallmentsPage({
   const counts = countsResult.success ? countsResult.data! : { active: 0, paid_off: 0, cancelled: 0 }
 
   // Fetch installments for current tab and page
-  const queryStartTime = performance.now()
   const installmentsResult = await getInstallmentPlans(user.id, currentTab, currentPage, 20)
-  const queryExecutionTime = performance.now() - queryStartTime
 
   const installments = installmentsResult.success ? installmentsResult.installments! : []
   const total = installmentsResult.success ? installmentsResult.total! : 0
@@ -77,7 +75,6 @@ export default async function InstallmentsPage({
     page: currentPage,
     installmentCount: installments.length,
     totalInstallments: total,
-    queryExecutionTime: Math.round(queryExecutionTime),
     timestamp: new Date().toISOString()
   })
 
