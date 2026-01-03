@@ -10,6 +10,10 @@ import { deleteInstallment } from '@/lib/actions/installments'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { trackServerEvent } from '@/lib/analytics/server-tracker'
 
+// Helper to create typed mock functions for @jest/globals compatibility
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const createMock = (): any => jest.fn()
+
 // Mock dependencies
 jest.mock('@/lib/supabase/server')
 jest.mock('@/lib/analytics/server-tracker')
@@ -54,14 +58,21 @@ describe('deleteInstallment Server Action', () => {
         data: { user: { id: userId } },
       })
 
-      // Track method calls
-      const mockSelect = jest.fn()
-      const mockEq = jest.fn()
-      const mockSingle = jest.fn()
-      const mockNot = jest.fn()
-      const mockUpdate = jest.fn()
-      const mockIn = jest.fn()
-      const mockDelete = jest.fn()
+      // Track method calls - use any to satisfy @jest/globals typing
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockSelect: any = jest.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockEq: any = jest.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockSingle: any = jest.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockNot: any = jest.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockUpdate: any = jest.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockIn: any = jest.fn()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockDelete: any = jest.fn()
 
       // Mock installment_plans fetch (ownership verification)
       mockSupabase.from.mockImplementation((table: string) => {
@@ -132,9 +143,9 @@ describe('deleteInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: null,
               error: { message: 'Plan not found' },
             }),
@@ -166,9 +177,9 @@ describe('deleteInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: {
                 id: planId,
                 user_id: otherUserId, // Different user
@@ -202,16 +213,16 @@ describe('deleteInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: {
                 id: planId,
                 user_id: userId,
               },
               error: null,
             }),
-            delete: jest.fn().mockReturnThis().mockResolvedValue({
+            delete: createMock().mockReturnThis().mockResolvedValue({
               data: null,
               error: null,
             }),
@@ -219,10 +230,10 @@ describe('deleteInstallment Server Action', () => {
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            not: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            not: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: [], // No paid transactions
               error: null,
             }),

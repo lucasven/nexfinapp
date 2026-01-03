@@ -79,8 +79,8 @@ const mockUpdateInstallment = updateInstallment as jest.MockedFunction<typeof up
 
 describe('EditInstallmentDialog', () => {
   const mockCategories: Category[] = [
-    { id: 'cat-1', name: 'Eletrônicos', icon: '📱', user_id: 'user-1' },
-    { id: 'cat-2', name: 'Casa', icon: '🏠', user_id: 'user-1' },
+    { id: 'cat-1', name: 'Eletrônicos', icon: '📱', user_id: 'user-1', type: 'expense', color: '#FF0000', is_custom: true, is_system: false, created_at: '2024-01-01T00:00:00Z' },
+    { id: 'cat-2', name: 'Casa', icon: '🏠', user_id: 'user-1', type: 'expense', color: '#00FF00', is_custom: true, is_system: false, created_at: '2024-01-01T00:00:00Z' },
   ]
 
   const mockPlanDetails: InstallmentPlanDetails = {
@@ -93,22 +93,22 @@ describe('EditInstallmentDialog', () => {
       total_installments: 12,
       merchant: 'Magazine Luiza',
       category_id: 'cat-1',
-      first_payment_date: '2025-01-01',
+      next_payment_date: '2025-01-01',
       status: 'active',
       created_at: '2025-01-01T00:00:00Z',
       updated_at: '2025-01-01T00:00:00Z',
+      payment_method_name: 'Nubank',
+      payment_method_type: 'credit',
+      category_name: 'Eletrônicos',
+      category_emoji: '📱',
+      payments_paid: 3,
+      remaining_amount: 900,
     },
     payments: [],
-    payment_method: {
-      id: 'pm-1',
-      name: 'Nubank',
-      type: 'credit',
-      credit_mode: true,
-    },
     payments_paid_count: 3,
     payments_pending_count: 9,
     total_paid: 300,
-    total_pending: 900,
+    total_remaining: 900,
   }
 
   const defaultProps = {
@@ -410,6 +410,7 @@ describe('EditInstallmentDialog', () => {
       mockUpdateInstallment.mockResolvedValue({
         success: true,
         updateData: {
+          plan_id: 'plan-123',
           fields_changed: ['description'],
           old_amount: 1200,
           new_amount: 1200,
@@ -462,6 +463,7 @@ describe('EditInstallmentDialog', () => {
       mockUpdateInstallment.mockResolvedValue({
         success: true,
         updateData: {
+          plan_id: 'plan-123',
           fields_changed: ['description'],
           old_amount: 1200,
           new_amount: 1200,
@@ -517,6 +519,7 @@ describe('EditInstallmentDialog', () => {
       mockUpdateInstallment.mockResolvedValue({
         success: true,
         updateData: {
+          plan_id: 'plan-123',
           fields_changed: ['description', 'total_amount'],
           old_amount: 1200,
           new_amount: 1500,

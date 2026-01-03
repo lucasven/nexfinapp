@@ -11,6 +11,10 @@ import { updateInstallment } from '@/lib/actions/installments'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { trackServerEvent } from '@/lib/analytics/server-tracker'
 
+// Helper to create typed mock functions for @jest/globals compatibility
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const createMock = (): any => jest.fn()
+
 // Mock dependencies
 jest.mock('@/lib/supabase/server')
 jest.mock('@/lib/analytics/server-tracker')
@@ -71,22 +75,22 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockReturnThis(),
-            limit: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            limit: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: [],
               error: null,
             }),
@@ -120,9 +124,9 @@ describe('updateInstallment Server Action', () => {
       })
 
       mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        select: createMock().mockReturnThis(),
+        eq: createMock().mockReturnThis(),
+        single: createMock().mockResolvedValue({
           data: mockPlan,
           error: null,
         }),
@@ -153,9 +157,9 @@ describe('updateInstallment Server Action', () => {
       })
 
       mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        select: createMock().mockReturnThis(),
+        eq: createMock().mockReturnThis(),
+        single: createMock().mockResolvedValue({
           data: mockPlan,
           error: null,
         }),
@@ -186,9 +190,9 @@ describe('updateInstallment Server Action', () => {
       })
 
       mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        select: createMock().mockReturnThis(),
+        eq: createMock().mockReturnThis(),
+        single: createMock().mockResolvedValue({
           data: mockPlan,
           error: null,
         }),
@@ -238,9 +242,9 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
@@ -248,8 +252,8 @@ describe('updateInstallment Server Action', () => {
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockResolvedValue({
               data: mockPayments,
               error: null,
             }),
@@ -276,9 +280,9 @@ describe('updateInstallment Server Action', () => {
 
       // Plan belongs to different user
       mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        select: createMock().mockReturnThis(),
+        eq: createMock().mockReturnThis(),
+        single: createMock().mockResolvedValue({
           data: null,
           error: { message: 'Not found' },
         }),
@@ -334,22 +338,22 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockReturnThis(),
-            limit: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            limit: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPayments,
               error: null,
             }),
@@ -359,8 +363,8 @@ describe('updateInstallment Server Action', () => {
                 updatedPendingAmounts['all'] = data.amount
               }
               return {
-                eq: jest.fn().mockReturnThis(),
-                in: jest.fn().mockResolvedValue({ data: [], error: null }),
+                eq: createMock().mockReturnThis(),
+                in: createMock().mockResolvedValue({ data: [], error: null }),
               }
             }),
           }
@@ -417,33 +421,33 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockReturnThis(),
-            limit: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            limit: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: lastPayment,
               error: null,
             }),
             insert: jest.fn((payments: any) => {
               insertedPayments = payments
               return {
-                select: jest.fn().mockResolvedValue({ data: payments, error: null }),
+                select: createMock().mockResolvedValue({ data: payments, error: null }),
               }
             }),
-            update: jest.fn().mockReturnThis(),
-            in: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
+            in: createMock().mockReturnThis(),
           }
         }
         return {}
@@ -493,27 +497,27 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockReturnThis(),
-            gt: jest.fn().mockReturnThis(),
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            gt: createMock().mockReturnThis(),
             delete: jest.fn(() => {
               deletedCount = 2 // Simulating deletion of 2 payments
               return { data: [], error: null }
             }),
-            update: jest.fn().mockReturnThis(),
-            in: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
+            in: createMock().mockReturnThis(),
           }
         }
         return {}
@@ -557,22 +561,22 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            order: jest.fn().mockReturnThis(),
-            limit: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            limit: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPayments,
               error: null,
             }),
@@ -581,8 +585,8 @@ describe('updateInstallment Server Action', () => {
                 lastPaymentAmount = data.amount
               }
               return {
-                eq: jest.fn().mockReturnThis(),
-                in: jest.fn().mockResolvedValue({ data: [], error: null }),
+                eq: createMock().mockReturnThis(),
+                in: createMock().mockResolvedValue({ data: [], error: null }),
               }
             }),
           }
@@ -637,18 +641,18 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
+            select: createMock().mockReturnThis(),
             eq: jest.fn((field: string, value: any) => {
               // Track which status is being queried for update
               if (field === 'status' && value === 'pending') {
@@ -657,18 +661,18 @@ describe('updateInstallment Server Action', () => {
                 updatedPaymentStatuses.push('paid')
               }
               return {
-                order: jest.fn().mockReturnThis(),
-                limit: jest.fn().mockReturnThis(),
-                single: jest.fn().mockResolvedValue({
+                order: createMock().mockReturnThis(),
+                limit: createMock().mockReturnThis(),
+                single: createMock().mockResolvedValue({
                   data: [...paidPayments, ...pendingPayments],
                   error: null,
                 }),
-                update: jest.fn().mockReturnThis(),
-                in: jest.fn().mockResolvedValue({ data: [], error: null }),
+                update: createMock().mockReturnThis(),
+                in: createMock().mockResolvedValue({ data: [], error: null }),
               }
             }),
-            order: jest.fn().mockReturnThis(),
-            update: jest.fn().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         return {}
@@ -714,25 +718,25 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockResolvedValue({
               data: [...paidPayments, ...pendingPayments],
               error: null,
             }),
-            order: jest.fn().mockReturnThis(),
-            update: jest.fn().mockReturnThis(),
-            in: jest.fn().mockReturnThis(),
+            order: createMock().mockReturnThis(),
+            update: createMock().mockReturnThis(),
+            in: createMock().mockReturnThis(),
           }
         }
         return {}
@@ -778,9 +782,9 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
@@ -789,8 +793,8 @@ describe('updateInstallment Server Action', () => {
                 planUpdateCalled = true
               }
               return {
-                eq: jest.fn().mockReturnThis(),
-                single: jest.fn().mockResolvedValue({ data: mockPlan, error: null }),
+                eq: createMock().mockReturnThis(),
+                single: createMock().mockResolvedValue({ data: mockPlan, error: null }),
               }
             }),
           }
@@ -800,15 +804,15 @@ describe('updateInstallment Server Action', () => {
             update: jest.fn(() => {
               transactionUpdateCalled = true
               return {
-                eq: jest.fn().mockReturnThis(),
+                eq: createMock().mockReturnThis(),
               }
             }),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockResolvedValue({
               data: [],
               error: null,
             }),
@@ -849,27 +853,27 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'transactions') {
           return {
             update: jest.fn(() => {
               transactionUpdateCalled = true
-              return { eq: jest.fn().mockReturnThis() }
+              return { eq: createMock().mockReturnThis() }
             }),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockResolvedValue({
               data: [],
               error: null,
             }),
@@ -937,9 +941,9 @@ describe('updateInstallment Server Action', () => {
       })
 
       mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        select: createMock().mockReturnThis(),
+        eq: createMock().mockReturnThis(),
+        single: createMock().mockResolvedValue({
           data: mockPlan,
           error: null,
         }),
@@ -970,9 +974,9 @@ describe('updateInstallment Server Action', () => {
       })
 
       mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        select: createMock().mockReturnThis(),
+        eq: createMock().mockReturnThis(),
+        single: createMock().mockResolvedValue({
           data: mockPlan,
           error: null,
         }),
@@ -1005,19 +1009,19 @@ describe('updateInstallment Server Action', () => {
       mockSupabase.from.mockImplementation((table: string) => {
         if (table === 'installment_plans') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockReturnThis(),
+            single: createMock().mockResolvedValue({
               data: mockPlan,
               error: null,
             }),
-            update: jest.fn().mockReturnThis(),
+            update: createMock().mockReturnThis(),
           }
         }
         if (table === 'installment_payments') {
           return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
+            select: createMock().mockReturnThis(),
+            eq: createMock().mockResolvedValue({
               data: [],
               error: null,
             }),

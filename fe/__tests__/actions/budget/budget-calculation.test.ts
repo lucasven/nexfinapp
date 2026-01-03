@@ -18,8 +18,9 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import { getBudgetForPeriod } from '@/lib/actions/budget'
 
-// Mock Supabase client
-const mockSupabaseClient = {
+// Mock Supabase client with proper typing for @jest/globals
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockSupabaseClient: any = {
   auth: {
     getUser: jest.fn(),
   },
