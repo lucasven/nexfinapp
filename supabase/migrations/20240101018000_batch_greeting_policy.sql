@@ -1,0 +1,1 @@
+../../fe/scripts/018_batch_greeting_policy.sql

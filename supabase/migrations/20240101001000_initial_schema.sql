@@ -1,0 +1,1 @@
+../../fe/scripts/001_initial_schema.sql

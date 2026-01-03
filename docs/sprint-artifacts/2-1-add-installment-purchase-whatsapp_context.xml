@@ -1,0 +1,698 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>2-1-add-installment-purchase-whatsapp</story-id>
+    <story-title>Add Installment Purchase (WhatsApp)</story-title>
+    <epic-id>2</epic-id>
+    <epic-title>Parcelamento Intelligence</epic-title>
+    <status>ready-for-dev</status>
+    <complexity>high</complexity>
+    <estimated-effort>3-5 days</estimated-effort>
+    <generated-date>2025-12-03</generated-date>
+    <generated-by>SM Agent (BMAD Workflow)</generated-by>
+  </metadata>
+
+  <story-overview>
+    <summary>
+      Enable WhatsApp users with Credit Mode to create installment purchases using natural language (e.g., "gastei 600 em 3x no celular").
+      This is the first user-facing feature of Epic 2, building on the foundation from Story 2.0.
+    </summary>
+
+    <business-value>
+      - WhatsApp is the primary interface for Brazilian users to log expenses
+      - Natural language input ("600 em 3x") matches cultural patterns
+      - Automatically creates installment plan + all monthly payment records
+      - Differentiates NexFinApp from generic expense trackers (killer feature)
+    </business-value>
+
+    <dependencies>
+      <blocker>
+        <dependency-id>story-2-0</dependency-id>
+        <description>Epic 2 Foundation &amp; Blockers Resolution</description>
+        <status>done</status>
+        <provides>
+          - create_installment_plan_atomic() PostgreSQL function
+          - payment_method_id UUID refactoring
+          - RPC types in fe/lib/supabase/rpc-types.ts
+          - Credit Mode detection in transaction flow
+        </provides>
+      </blocker>
+
+      <dependency>
+        <dependency-id>epic-1</dependency-id>
+        <description>Credit Mode Foundation</description>
+        <status>complete</status>
+        <provides>
+          - installment_plans and installment_payments tables
+          - payment_methods.credit_mode flag
+          - Credit Mode selection via WhatsApp (Story 1.3)
+        </provides>
+      </dependency>
+
+      <dependency>
+        <dependency-id>epic-8</dependency-id>
+        <description>AI-First Architecture</description>
+        <status>complete</status>
+        <provides>
+          - AI pattern generator (services/ai/ai-pattern-generator.ts)
+          - OpenAI function calling integration
+          - GPT-4o-mini for intent extraction
+        </provides>
+      </dependency>
+    </dependencies>
+  </story-overview>
+
+  <technical-context>
+    <architecture-decisions>
+      <decision id="1">
+        <title>AI-First Intent Extraction (Not NLP Patterns)</title>
+        <rationale>Epic 8 established AI-first approach for 95%+ accuracy vs 60% with NLP patterns</rationale>
+        <implementation>OpenAI GPT-4o-mini function calling via services/ai/ai-pattern-generator.ts</implementation>
+        <alternative-rejected>Extend NLP intent parser (marked legacy in Epic 8)</alternative-rejected>
+        <benefit>Handles variations naturally: "3x", "3 vezes", "três parcelas", "three installments"</benefit>
+        <tradeoff>~$0.002 per installment creation (acceptable, covered by user AI budget)</tradeoff>
+      </decision>
+
+      <decision id="2">
+        <title>Atomic RPC Function (Not Sequential Queries)</title>
+        <rationale>Story 2.0 established atomic transaction pattern to prevent partial state</rationale>
+        <implementation>create_installment_plan_atomic() creates plan + all payments in single transaction</implementation>
+        <alternative-rejected>Create plan, then loop to create payments (risk of partial state)</alternative-rejected>
+        <benefit>Database guarantees all-or-nothing (if payments fail, plan rolls back)</benefit>
+        <tradeoff>Slightly more complex testing (need to test RPC calls)</tradeoff>
+      </decision>
+
+      <decision id="3">
+        <title>Default First Payment Date = Today</title>
+        <rationale>Most users start installments immediately</rationale>
+        <alternative-rejected>Always prompt for date (adds friction)</alternative-rejected>
+        <benefit>Single-turn conversation for most cases</benefit>
+        <enhancement>Allow optional date parsing ("primeira parcela dia 15") for power users</enhancement>
+      </decision>
+
+      <decision id="4">
+        <title>Category Optional in WhatsApp</title>
+        <rationale>Balance friction vs completeness</rationale>
+        <alternative-rejected>Always prompt for category (too many turns)</alternative-rejected>
+        <benefit>Quick installment creation, users can add category later via web edit</benefit>
+        <enhancement>AI can suggest category if inferable (e.g., "celular" → Eletrônicos)</enhancement>
+      </decision>
+    </architecture-decisions>
+
+    <database-schema>
+      <table name="installment_plans">
+        <description>Parent table for installment purchases (already exists from Epic 1)</description>
+        <columns>
+          - id UUID PRIMARY KEY
+          - user_id UUID NOT NULL REFERENCES auth.users(id)
+          - description TEXT NOT NULL
+          - total_amount DECIMAL(10,2) NOT NULL
+          - total_installments INTEGER NOT NULL CHECK (1-60)
+          - status TEXT NOT NULL ('active', 'paid_off', 'cancelled')
+          - merchant TEXT
+          - category_id UUID REFERENCES categories(id)
+          - payment_method_id UUID REFERENCES payment_methods(id)
+          - created_at TIMESTAMPTZ
+          - updated_at TIMESTAMPTZ
+        </columns>
+      </table>
+
+      <table name="installment_payments">
+        <description>Child table for monthly payment records (already exists from Epic 1)</description>
+        <columns>
+          - id UUID PRIMARY KEY
+          - plan_id UUID NOT NULL REFERENCES installment_plans(id) ON DELETE CASCADE
+          - transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL
+          - installment_number INTEGER NOT NULL CHECK (&gt; 0)
+          - amount DECIMAL(10,2) NOT NULL
+          - due_date DATE NOT NULL
+          - status TEXT NOT NULL ('pending', 'paid', 'cancelled')
+          - created_at TIMESTAMPTZ
+          - updated_at TIMESTAMPTZ
+          - UNIQUE(plan_id, installment_number)
+        </columns>
+      </table>
+
+      <rpc-function name="create_installment_plan_atomic">
+        <description>Atomically creates installment plan + all monthly payments</description>
+        <location>fe/scripts/042_atomic_transaction_functions.sql</location>
+        <parameters>
+          - p_user_id UUID
+          - p_payment_method_id UUID
+          - p_description TEXT
+          - p_total_amount DECIMAL(10,2)
+          - p_total_installments INTEGER
+          - p_merchant TEXT
+          - p_category_id UUID
+          - p_first_payment_date DATE
+        </parameters>
+        <returns>
+          TABLE(plan_id UUID, success BOOLEAN, error_message TEXT)
+        </returns>
+        <validations>
+          - Installments must be 1-60
+          - Total amount must be &gt; 0
+          - Payment method must be Credit Mode credit card
+          - Payment method must belong to user
+        </validations>
+        <error-handling>
+          - Automatic rollback on any error (PostgreSQL transaction semantics)
+          - Returns error_message for user-friendly display
+        </error-handling>
+      </rpc-function>
+    </database-schema>
+
+    <ai-integration>
+      <service>
+        <name>AI Pattern Generator</name>
+        <file>whatsapp-bot/src/services/ai/ai-pattern-generator.ts</file>
+        <model>GPT-4o-mini</model>
+        <function-calling>OpenAI function calling for structured extraction</function-calling>
+        <cost>~$0.002 per extraction (500 tokens average)</cost>
+        <accuracy-target>95%+ for installment patterns</accuracy-target>
+      </service>
+
+      <function-schema>
+        <name>extract_installment_details</name>
+        <description>Extract installment purchase details from natural language</description>
+        <parameters>
+          - amount: number | null
+          - installments: number | null
+          - description: string | null
+          - merchant: string | null
+          - first_payment_date: string | null (ISO date)
+        </parameters>
+        <examples>
+          - "gastei 600 em 3x no celular" → {amount: 600, installments: 3, description: "celular"}
+          - "comprei 450 em 9x" → {amount: 450, installments: 9, description: null}
+          - "800 parcelado 4x no notebook" → {amount: 800, installments: 4, description: "notebook"}
+        </examples>
+      </function-schema>
+
+      <fallback-strategy>
+        <condition>AI extraction returns null for amount or installments</condition>
+        <action>Multi-turn clarification flow</action>
+        <prompts>
+          - Amount missing: "Qual foi o valor total da compra?"
+          - Installments missing: "Em quantas parcelas?"
+          - Both missing: Ask for amount first, then installments
+        </prompts>
+        <state-management>Store conversation state for multi-turn clarification</state-management>
+      </fallback-strategy>
+    </ai-integration>
+
+    <whatsapp-integration>
+      <message-flow>
+        <step n="1">User sends: "gastei 600 em 3x no celular"</step>
+        <step n="2">WhatsApp Bot receives message (handlers/core/message-handler.ts)</step>
+        <step n="3">AI extracts: amount=600, installments=3, description="celular"</step>
+        <step n="4">Check: User has credit_mode=true credit card?</step>
+        <step n="5">If 1 credit card: Auto-select. If 2+: Prompt user to select</step>
+        <step n="6">Call create_installment_plan_atomic() via Supabase RPC</step>
+        <step n="7">Send confirmation message with details</step>
+        <step n="8">Track analytics event: installment_created</step>
+      </message-flow>
+
+      <handler-location>
+        <new-file>whatsapp-bot/src/handlers/credit-card/installment-handler.ts</new-file>
+        <integration-point>whatsapp-bot/src/handlers/core/message-handler.ts</integration-point>
+        <intent-detection>AI-based (not NLP pattern matching)</intent-detection>
+      </handler-location>
+
+      <localization>
+        <primary>pt-BR (Brazilian Portuguese)</primary>
+        <secondary>en (English)</secondary>
+        <files>
+          - whatsapp-bot/src/localization/pt-br.ts
+          - whatsapp-bot/src/localization/en.ts
+        </files>
+        <new-keys-needed>
+          - installment.created_title
+          - installment.created_total
+          - installment.created_first_payment
+          - installment.created_last_payment
+          - installment.created_help
+          - installment.blocked_simple_mode
+          - installment.select_card
+          - installment.clarify_amount
+          - installment.clarify_installments
+          - installment.error_validation
+          - installment.error_network
+        </new-keys-needed>
+      </localization>
+
+      <confirmation-message>
+        <format-pt-br>
+          ✅ Parcelamento criado: {description}
+
+          💰 Total: R$ {total} em {installments}x de R$ {monthly}
+          📅 Primeira parcela: {first_date}
+          📅 Última parcela: {last_date}
+
+          Use /parcelamentos para ver todos os seus parcelamentos ativos.
+        </format-pt-br>
+
+        <format-en>
+          ✅ Installment created: {description}
+
+          💰 Total: R$ {total} in {installments}x of R$ {monthly}
+          📅 First payment: {first_date}
+          📅 Last payment: {last_date}
+
+          Use /installments to view all your active installments.
+        </format-en>
+
+        <date-formatting>Use date-fns with user's locale (pt-BR vs en)</date-formatting>
+        <currency-formatting>Always R$ (Brazilian Real) with 2 decimals</currency-formatting>
+      </confirmation-message>
+    </whatsapp-integration>
+
+    <credit-mode-gating>
+      <requirement>Only Credit Mode users can create installments</requirement>
+
+      <scenario name="Simple Mode User">
+        <condition>User has no Credit Mode credit cards</condition>
+        <action>Send redirect message</action>
+        <message-pt-br>Para usar parcelamentos, você precisa ativar o Modo Crédito. Deseja ativar agora?</message-pt-br>
+        <message-en>To use installments, you need to activate Credit Mode. Would you like to activate it now?</message-en>
+        <analytics-event>installment_blocked_simple_mode</analytics-event>
+      </scenario>
+
+      <scenario name="Single Credit Card">
+        <condition>User has exactly 1 Credit Mode credit card</condition>
+        <action>Auto-select card, proceed to creation</action>
+        <ux-benefit>No prompt needed (better UX)</ux-benefit>
+      </scenario>
+
+      <scenario name="Multiple Credit Cards">
+        <condition>User has 2+ Credit Mode credit cards</condition>
+        <action>Prompt user to select card</action>
+        <prompt-format>Qual cartão você usou? (1) Nubank (2) Itaú</prompt-format>
+        <state-management>Store selected card in conversation state</state-management>
+      </scenario>
+    </credit-mode-gating>
+
+    <error-handling>
+      <tier-1 name="Validation Errors">
+        <description>Friendly user messages for input validation</description>
+        <examples>
+          - Amount ≤ 0 → "O valor deve ser maior que zero"
+          - Installments &lt; 1 → "Número de parcelas deve ser pelo menos 1"
+          - Installments &gt; 60 → "Número de parcelas não pode ser maior que 60"
+          - No Credit Mode card → "Para usar parcelamentos, ative o Modo Crédito"
+        </examples>
+      </tier-1>
+
+      <tier-2 name="Business Logic Errors">
+        <description>Actionable messages for business rule violations</description>
+        <examples>
+          - Payment method not found → "Cartão não encontrado. Verifique suas configurações."
+          - RPC constraint violation → "Erro ao criar parcelamento. Verifique os dados."
+        </examples>
+      </tier-2>
+
+      <tier-3 name="System Errors">
+        <description>Generic messages + detailed logs</description>
+        <examples>
+          - Database timeout → "Erro ao criar parcelamento. Tente novamente."
+          - Network error → "Erro de conexão. Verifique sua internet."
+          - Unexpected error → "Erro inesperado. Entre em contato com suporte."
+        </examples>
+        <logging>Error-level logs with full context (stack trace, user_id, message, params)</logging>
+      </tier-3>
+    </error-handling>
+
+    <analytics>
+      <events>
+        <event name="installment_created">
+          <channel>whatsapp</channel>
+          <properties>
+            - userId: string
+            - planId: string (UUID)
+            - paymentMethodId: string (UUID)
+            - totalAmount: number
+            - totalInstallments: number
+            - monthlyAmount: number
+            - hasDescription: boolean
+            - hasMerchant: boolean
+            - channel: 'whatsapp'
+            - locale: 'pt-br' | 'en'
+            - timestamp: ISO8601
+          </properties>
+          <destination>PostHog</destination>
+        </event>
+
+        <event name="installment_creation_failed">
+          <properties>
+            - userId: string
+            - error: string
+            - totalAmount: number | null
+            - totalInstallments: number | null
+            - channel: 'whatsapp'
+          </properties>
+        </event>
+
+        <event name="installment_blocked_simple_mode">
+          <properties>
+            - userId: string
+            - channel: 'whatsapp'
+          </properties>
+        </event>
+      </events>
+    </analytics>
+  </technical-context>
+
+  <implementation-guidance>
+    <file-structure>
+      <new-files>
+        - whatsapp-bot/src/handlers/credit-card/installment-handler.ts (main handler)
+        - whatsapp-bot/__tests__/handlers/installment-handler.test.ts (unit tests)
+      </new-files>
+
+      <modified-files>
+        - whatsapp-bot/src/handlers/core/message-handler.ts (add intent routing)
+        - whatsapp-bot/src/localization/pt-br.ts (add installment keys)
+        - whatsapp-bot/src/localization/en.ts (add installment keys)
+        - whatsapp-bot/src/services/ai/ai-pattern-generator.ts (add installment extraction)
+      </modified-files>
+    </file-structure>
+
+    <key-patterns>
+      <pattern name="AI Intent Extraction">
+        <description>Use OpenAI function calling for structured data extraction</description>
+        <file>whatsapp-bot/src/services/ai/ai-pattern-generator.ts</file>
+        <method>Add new function schema for installment extraction</method>
+        <example-usage>
+          const extracted = await extractInstallmentDetails(message, userId, locale)
+          if (!extracted.amount || !extracted.installments) {
+            // Multi-turn clarification flow
+          }
+        </example-usage>
+      </pattern>
+
+      <pattern name="RPC Function Call">
+        <description>Call PostgreSQL RPC function for atomic transaction</description>
+        <file>whatsapp-bot/src/handlers/credit-card/installment-handler.ts</file>
+        <example-usage>
+          const { data, error } = await supabase.rpc('create_installment_plan_atomic', {
+            p_user_id: userId,
+            p_payment_method_id: paymentMethodId,
+            p_description: description,
+            p_total_amount: amount,
+            p_total_installments: installments,
+            p_merchant: merchant,
+            p_category_id: categoryId,
+            p_first_payment_date: firstPaymentDate
+          })
+
+          if (error || !data[0]?.success) {
+            // Handle error
+          }
+
+          const planId = data[0].plan_id
+        </example-usage>
+      </pattern>
+
+      <pattern name="Localization">
+        <description>Use localization keys for all user messages</description>
+        <file>whatsapp-bot/src/localization/{pt-br,en}.ts</file>
+        <example-usage>
+          import { getUserLocale } from '../utils/locale'
+          import { messages as ptBR } from '../localization/pt-br'
+          import { messages as en } from '../localization/en'
+
+          const locale = await getUserLocale(userId)
+          const messages = locale === 'pt-br' ? ptBR : en
+
+          const confirmationMessage = messages.installment.created_title
+            .replace('{{description}}', description)
+        </example-usage>
+      </pattern>
+
+      <pattern name="Conversation State Management">
+        <description>Store multi-turn conversation state for clarification</description>
+        <storage>In-memory cache or Redis (if scaling needed)</storage>
+        <key-structure>user_id → { step, amount?, installments?, description?, timestamp }</key-structure>
+        <expiration>5 minutes</expiration>
+        <cancellation>User sends "cancelar" → Clear state</cancellation>
+      </pattern>
+    </key-patterns>
+
+    <testing-strategy>
+      <unit-tests>
+        <framework>Jest</framework>
+        <file>whatsapp-bot/__tests__/handlers/installment-handler.test.ts</file>
+        <coverage-target>75%+</coverage-target>
+        <test-cases>
+          - AI extraction with various inputs (10+ variations)
+          - Credit Mode validation (Simple vs Credit Mode users)
+          - RPC call with mocked Supabase client
+          - Confirmation message formatting
+          - Error handling (validation, AI failures, RPC errors)
+        </test-cases>
+      </unit-tests>
+
+      <integration-tests>
+        <framework>Jest + Real Test Database</framework>
+        <test-cases>
+          - End-to-end: Message → Extraction → RPC → Confirmation
+          - Simple Mode user → Verify redirect message
+          - Credit Mode user → Verify plan + payments created
+          - Multi-turn conversation (clarification)
+          - Multiple credit cards selection flow
+        </test-cases>
+      </integration-tests>
+
+      <manual-tests>
+        <environment>Staging WhatsApp</environment>
+        <test-cases>
+          - Send 10+ natural language variations
+          - Verify AI extraction accuracy ≥ 95%
+          - Verify confirmation messages render correctly
+          - Verify database records created (inspect via Supabase)
+          - Test both pt-BR and English locale users
+          - Test error scenarios (invalid amounts, no credit cards)
+        </test-cases>
+      </manual-tests>
+    </testing-strategy>
+
+    <performance-targets>
+      <nfr-p1>
+        <name>Installment Creation Speed</name>
+        <target>&lt; 500ms for creating plan + 60 payments</target>
+        <measurement>Time from RPC call to commit</measurement>
+        <expected>~200-300ms for 12 installments (typical case)</expected>
+      </nfr-p1>
+
+      <nfr-p2>
+        <name>AI Extraction Speed</name>
+        <target>&lt; 2s for OpenAI function calling</target>
+        <measurement>Time from message receive to extraction complete</measurement>
+        <expected>~1-1.5s for GPT-4o-mini</expected>
+        <cost>~$0.002 per extraction</cost>
+      </nfr-p2>
+
+      <end-to-end>
+        <target>&lt; 3s total (AI + RPC + formatting)</target>
+        <measurement>Message receive → Confirmation sent</measurement>
+      </end-to-end>
+    </performance-targets>
+  </implementation-guidance>
+
+  <acceptance-criteria>
+    <ac id="AC1.1">
+      <title>Natural Language Parsing</title>
+      <requirement>Bot extracts installment details from natural language messages</requirement>
+      <supported-patterns>
+        - Portuguese: "gastei 600 em 3x no celular", "comprei 450 em 9x", "800 parcelado 4x no notebook"
+        - English: "spent 600 in 3 installments on phone", "bought 450 in 9x"
+      </supported-patterns>
+      <edge-cases>
+        - Malformed: "gastei xyz em abc" → AI extraction fails, bot asks clarifying question
+        - Exceeds limit: "600 em 100x" → Error: exceeds 60-installment limit
+        - Negative: "gastei -500 em 2x" → Error: negative amount
+      </edge-cases>
+      <validation>
+        - Test with 10+ natural language variations (pt-BR and en)
+        - Verify extraction accuracy ≥ 95%
+      </validation>
+    </ac>
+
+    <ac id="AC1.2">
+      <title>Credit Mode Gating</title>
+      <requirement>Only Credit Mode users can create installments</requirement>
+      <scenarios>
+        - Simple Mode user → Receives redirect message to activate Credit Mode
+        - Single Credit Mode card → Auto-selects card, proceeds to creation
+        - Multiple Credit Mode cards → Prompts user to select card
+      </scenarios>
+      <validation>
+        - Test with Simple Mode user → Verify redirect message
+        - Test with Credit Mode user → Verify installment creation succeeds
+      </validation>
+    </ac>
+
+    <ac id="AC1.3">
+      <title>Installment Plan Creation</title>
+      <requirement>Create installment plan + monthly payments atomically</requirement>
+      <operations>
+        1. Call create_installment_plan_atomic() PostgreSQL function
+        2. Create 1 installment_plans record (status='active')
+        3. Create N installment_payments records (status='pending')
+        4. Commit transaction atomically (all-or-nothing)
+      </operations>
+      <calculation>
+        - Monthly payment = total_amount / total_installments (rounded to 2 decimals)
+        - Rounding case: R$ 100 / 3 = R$ 33.33, R$ 33.33, R$ 33.34 (last absorbs difference)
+      </calculation>
+      <error-handling>
+        - Amount ≤ 0 → "O valor deve ser maior que zero"
+        - Installments &lt; 1 or &gt; 60 → "Número de parcelas deve ser entre 1 e 60"
+        - Payment method not found → "Cartão não encontrado"
+      </error-handling>
+      <validation>
+        - Create 3-installment plan → Verify 1 plan + 3 payments in database
+        - Create 12-installment plan → Verify 1 plan + 12 payments
+        - Test rounding: 100 / 3 → Verify payments sum to 100.00
+        - Test rollback: Simulate constraint violation → Verify no partial records
+      </validation>
+    </ac>
+
+    <ac id="AC1.4">
+      <title>Confirmation Message</title>
+      <requirement>Bot sends detailed confirmation after successful creation</requirement>
+      <contents>
+        - Success indicator (emoji + text)
+        - Description (from user message or prompted)
+        - Total amount and monthly breakdown
+        - First payment date (formatted in user's locale)
+        - Last payment date (formatted in user's locale)
+        - Help text for viewing all installments
+      </contents>
+      <localization>
+        - Use whatsapp-bot/src/localization/{pt-br,en}.ts
+        - Format dates using date-fns with user's locale
+        - Format currency as BRL (R$) with 2 decimals
+      </localization>
+      <validation>
+        - Create installment → Verify confirmation message contains all required fields
+        - Verify dates formatted correctly for pt-BR and en
+        - Verify currency formatted as R$ with 2 decimals
+      </validation>
+    </ac>
+  </acceptance-criteria>
+
+  <risks-and-mitigation>
+    <risk id="RISK-1">
+      <description>AI Extraction Accuracy Below 95%</description>
+      <likelihood>Low (Epic 8 already validated AI-first approach)</likelihood>
+      <impact>Users frustrated by clarification prompts</impact>
+      <mitigation>
+        - Extensive testing with real user messages
+        - Tune AI prompts for installment-specific patterns
+        - Multi-turn clarification flow handles ambiguous cases
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-2">
+      <description>RPC Function Performance with 60 Installments</description>
+      <likelihood>Low (PostgreSQL handles 60 INSERTs efficiently)</likelihood>
+      <impact>Timeout errors for long-term installments</impact>
+      <mitigation>
+        - Performance testing before release (Story 2.0 Task 3.8)
+        - Target: &lt; 500ms for 60 installments (NFR-P1)
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-3">
+      <description>Multiple Credit Cards UX Complexity</description>
+      <likelihood>Medium (users with 2+ credit cards common)</likelihood>
+      <impact>Extra conversation turn, potential confusion</impact>
+      <mitigation>
+        - Clear card selection prompt with numbered options
+        - Enhancement: Remember last-used card for future (Post-MVP)
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-4">
+      <description>Conversation State Loss</description>
+      <likelihood>Medium (if bot restarts during multi-turn flow)</likelihood>
+      <impact>User must restart conversation</impact>
+      <mitigation>
+        - In-memory state with 5-minute expiration
+        - Clear cancellation command ("cancelar")
+        - Enhancement: Persist state in Redis for high availability (if needed)
+      </mitigation>
+    </risk>
+  </risks-and-mitigation>
+
+  <reference-files>
+    <epic-context>
+      <file>docs/sprint-artifacts/tech-spec-epic-2.md</file>
+      <sections>
+        - Overview (Epic 2 objectives and scope)
+        - Detailed Design → APIs (create_installment_plan_atomic)
+        - Workflows (WhatsApp installment creation flow)
+        - NFR → Performance (NFR-P1, NFR-P2)
+      </sections>
+    </epic-context>
+
+    <foundation-story>
+      <file>docs/sprint-artifacts/2-0-epic-2-foundation-blockers.md</file>
+      <sections>
+        - AC3.2: create_installment_plan_atomic() implementation
+        - PostgreSQL function signatures and validation
+        - RPC types (fe/lib/supabase/rpc-types.ts)
+      </sections>
+    </foundation-story>
+
+    <migration-scripts>
+      <file>fe/scripts/042_atomic_transaction_functions.sql</file>
+      <description>PostgreSQL RPC functions for atomic installment operations</description>
+    </migration-scripts>
+
+    <ai-service>
+      <file>whatsapp-bot/src/services/ai/ai-pattern-generator.ts</file>
+      <description>OpenAI function calling for intent extraction (extend for installments)</description>
+    </ai-service>
+
+    <message-handler>
+      <file>whatsapp-bot/src/handlers/core/message-handler.ts</file>
+      <description>Main message router (add installment intent detection)</description>
+    </message-handler>
+
+    <existing-handlers>
+      <file>whatsapp-bot/src/handlers/transactions/expenses.ts</file>
+      <description>Transaction creation handler (reference for RPC patterns)</description>
+    </existing-handlers>
+
+    <localization>
+      <file>whatsapp-bot/src/localization/pt-br.ts</file>
+      <description>Portuguese localization keys (add installment keys)</description>
+    </localization>
+
+    <project-docs>
+      <file>CLAUDE.md</file>
+      <sections>
+        - WhatsApp Bot Message Flow
+        - AI/NLP System (AI-first approach)
+        - Database Architecture
+      </sections>
+    </project-docs>
+  </reference-files>
+
+  <success-criteria>
+    <criteria>
+      <item>✅ Natural language parsing works for 10+ variations (95%+ accuracy)</item>
+      <item>✅ Credit Mode gating: Simple Mode users see redirect, Credit Mode users proceed</item>
+      <item>✅ Installment plan + payments created atomically (1 plan + N payments)</item>
+      <item>✅ Confirmation message shows all required details (total, monthly, dates)</item>
+      <item>✅ Analytics events tracked (installment_created, creation_failed, blocked_simple_mode)</item>
+      <item>✅ Unit tests pass (75%+ coverage)</item>
+      <item>✅ Integration tests pass (end-to-end flow)</item>
+      <item>✅ Manual tests on staging WhatsApp successful</item>
+      <item>✅ Documentation updated (CLAUDE.md, handler docs)</item>
+      <item>✅ Code deployed to production WhatsApp bot</item>
+    </criteria>
+  </success-criteria>
+</story-context>

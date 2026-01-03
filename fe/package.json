@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -29,7 +32,7 @@
     "@radix-ui/react-radio-group": "1.2.2",
     "@radix-ui/react-scroll-area": "1.2.2",
     "@radix-ui/react-select": "2.1.4",
-    "@radix-ui/react-separator": "1.1.1",
+    "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slider": "1.2.2",
     "@radix-ui/react-slot": "1.1.1",
     "@radix-ui/react-switch": "1.1.2",
@@ -39,6 +42,7 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/ssr": "0.7.0",
+    "@tanstack/react-query": "^5.90.11",
     "@vercel/analytics": "1.3.1",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
@@ -69,8 +73,12 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.39.1",
+    "@jest/globals": "^30.2.0",
     "@next/eslint-plugin-next": "^16.0.5",
     "@tailwindcss/postcss": "^4.1.9",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -78,8 +86,11 @@
     "eslint-config-next": "^16.0.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
+    "ts-jest": "^29.4.6",
     "tw-animate-css": "1.3.3",
     "typescript": "^5",
     "typescript-eslint": "^8.48.0"

@@ -1,0 +1,696 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>4-2-payment-due-reminder-whatsapp</story-id>
+    <story-title>Payment Due Reminder - WhatsApp</story-title>
+    <epic-id>4</epic-id>
+    <epic-title>Payment Reminders &amp; Auto-Accounting</epic-title>
+    <status>ready-for-dev</status>
+    <generated-date>2025-12-03</generated-date>
+    <dependencies>
+      <dependency status="complete">Story 4.1 - Set Payment Due Date</dependency>
+      <dependency status="complete">Epic 3 - Statement Period Calculation</dependency>
+      <dependency status="complete">Epic 3 - Statement Total Calculation (Story 3.5)</dependency>
+      <dependency status="complete">Epic 3 - Statement Reminders Infrastructure (Story 3.4)</dependency>
+    </dependencies>
+  </metadata>
+
+  <technical-context>
+    <architecture-overview>
+      <description>
+        Story 4.2 implements WhatsApp payment reminders sent 2 days before payment is due.
+        This story reuses the proven reminder architecture from Story 3.4 (statement closing reminders)
+        with the following key components:
+
+        1. Daily cron job at 9 AM Brazil time (12:00 UTC)
+        2. Eligibility query: Credit Mode cards with payment_due_day set, due in 2 days
+        3. Statement total calculation: Reuse Epic 3 functions
+        4. Message builder: Localized (pt-BR/en) with awareness-first language
+        5. Delivery with retry: Multi-identifier cascade (JID → LID → phone), exponential backoff
+        6. PostHog event tracking: Delivery status, job metrics
+
+        Architecture Pattern:
+        - Extends existing Railway cron infrastructure (railway.cron.yml)
+        - In-process scheduler (requires WhatsApp socket access)
+        - Batch processing: 10 users in parallel
+        - Individual failure isolation: One failure doesn't halt batch
+      </description>
+
+      <key-patterns>
+        <pattern name="Reminder Eligibility Query">
+          - SQL query with JOINs: payment_methods, users, authorized_whatsapp_numbers, user_preferences
+          - WHERE clauses: credit_mode=true, payment_due_day IS NOT NULL, due_date = TODAY + 2 days
+          - Multi-identifier support: Returns JID, LID, phone number
+          - Opt-out respect: Filters users with payment_reminders_enabled = false
+        </pattern>
+
+        <pattern name="Statement Total Calculation">
+          - Reuses Epic 3 function: calculate_statement_period()
+          - Reuses Epic 3 logic from Story 3.5 (statement summary)
+          - Total = Regular expenses + Installment payments in period
+          - Performance target: &lt; 500ms (NFR-Epic4-P2)
+        </pattern>
+
+        <pattern name="Multi-Identifier Cascade Delivery">
+          - Attempt 1: Try JID (most reliable)
+          - Wait 1s, Attempt 2: Try LID (WhatsApp Business)
+          - Wait 5s, Attempt 3: Try phone number (fallback)
+          - Success rate target: 99.5% (NFR8)
+        </pattern>
+
+        <pattern name="Batch Processing">
+          - Process 10 users in parallel (Promise.all)
+          - Sequential batches to limit concurrency
+          - Individual error isolation: try-catch per user
+          - Total execution target: &lt; 30 seconds (NFR6)
+        </pattern>
+      </key-patterns>
+    </architecture-overview>
+
+    <database-schema>
+      <tables>
+        <table name="payment_methods">
+          <relevant-columns>
+            <column name="id" type="uuid" description="Primary key" />
+            <column name="user_id" type="uuid" description="Owner of payment method" />
+            <column name="name" type="text" description="User-defined card name (e.g., 'Nubank')" />
+            <column name="credit_mode" type="boolean" description="Credit Mode enabled (Story 1.1)" />
+            <column name="statement_closing_day" type="integer" description="Day of month statement closes (Story 3.1)" />
+            <column name="payment_due_day" type="integer" description="Days after closing when payment due (Story 4.1, NEW)" />
+          </relevant-columns>
+          <constraints>
+            <constraint>payment_due_day BETWEEN 1 AND 60 (CHECK constraint)</constraint>
+            <constraint>payment_due_day NULL by default (user must explicitly set)</constraint>
+          </constraints>
+          <migration>046_payment_due_date.sql (Story 4.1 - complete)</migration>
+        </table>
+
+        <table name="users">
+          <relevant-columns>
+            <column name="id" type="uuid" description="Primary key" />
+            <column name="whatsapp_jid" type="text" description="WhatsApp Jabber ID (most reliable)" />
+            <column name="whatsapp_lid" type="text" description="WhatsApp Business Long ID" />
+            <column name="whatsapp_number" type="text" description="Phone number (fallback)" />
+          </relevant-columns>
+          <notes>Multi-identifier system for WhatsApp delivery cascade</notes>
+        </table>
+
+        <table name="user_profiles">
+          <relevant-columns>
+            <column name="user_id" type="uuid" description="FK to users" />
+            <column name="locale" type="text" description="User language (pt-BR or en)" />
+            <column name="statement_reminders_enabled" type="boolean" description="Epic 3 opt-out (reuse for payment reminders)" />
+          </relevant-columns>
+          <notes>
+            Opt-out mechanism:
+            - NULL or true: Reminders enabled
+            - false: User opted out, NO reminders sent
+            - Future Story: AI handler for "STOP" / "RESUME" commands
+          </notes>
+        </table>
+      </tables>
+
+      <functions>
+        <function name="calculate_statement_period">
+          <signature>
+            calculate_statement_period(p_closing_day INTEGER, p_reference_date DATE)
+            RETURNS TABLE(period_start DATE, period_end DATE)
+          </signature>
+          <description>
+            Database function from Story 3.1 that calculates statement period boundaries.
+            Used to determine which statement period contains today's date.
+          </description>
+          <usage-in-story>
+            - Calculate current statement period for total calculation
+            - Determine period dates to display in reminder message
+          </usage-in-story>
+        </function>
+
+        <function name="calculate_statement_budget_spent">
+          <signature>
+            calculate_statement_budget_spent(
+              p_user_id UUID,
+              p_payment_method_id UUID,
+              p_period_start DATE,
+              p_period_end DATE
+            ) RETURNS DECIMAL
+          </signature>
+          <description>
+            Database function from Story 2.8/3.3 that calculates total spent including installments.
+            Returns: Regular expenses + Installment payments in period.
+          </description>
+          <usage-in-story>
+            - Calculate statement total for reminder message
+            - Display amount user needs to pay
+          </usage-in-story>
+        </function>
+      </functions>
+    </database-schema>
+
+    <existing-code-reference>
+      <section name="Statement Reminder Infrastructure (Epic 3 Story 3.4)">
+        <file path="whatsapp-bot/src/services/reminders/statement-reminder-query.ts">
+          <purpose>Eligibility query for statement closing reminders (3 days before)</purpose>
+          <reuse-pattern>
+            Story 4.2 will create SIMILAR file: payment-reminder-query.ts
+            - Same structure: getEligibleUsersForPaymentReminders()
+            - Different WHERE clause: Due in 2 days (not closing in 3 days)
+            - Additional field: payment_due_day
+            - Same multi-identifier support: JID, LID, phone
+          </reuse-pattern>
+          <key-learnings>
+            - Month boundary handling: Use date arithmetic (not day-of-month comparison only)
+            - Opt-out check: statement_reminders_enabled != false
+            - Multi-identifier: Return all identifiers (JID, LID, phone) for cascade
+          </key-learnings>
+        </file>
+
+        <file path="whatsapp-bot/src/services/reminders/reminder-message-builder.ts">
+          <purpose>Builds localized reminder messages with awareness-first language</purpose>
+          <reuse-pattern>
+            Story 4.2 will create NEW function in SAME file: buildPaymentReminderMessage()
+            - Different message structure (see AC4.2.3)
+            - Same localization approach: Get messages from pt-br.ts / en.ts
+            - Same formatters: formatCurrencyForReminder(), formatClosingDate()
+            - Same awareness-first principles: Neutral, informational, supportive
+          </reuse-pattern>
+        </file>
+
+        <file path="whatsapp-bot/src/services/reminders/reminder-sender.ts">
+          <purpose>Delivers reminders via WhatsApp with multi-identifier cascade and retry</purpose>
+          <reuse-pattern>
+            Story 4.2 will REUSE EXISTING function: sendReminderWithRetry()
+            - NO CHANGES NEEDED (same delivery logic)
+            - Multi-identifier cascade: JID → LID → phone
+            - Exponential backoff: 0s, 1s, 5s
+            - Returns: SendResult { success, attempts, error, errorCategory }
+          </reuse-pattern>
+        </file>
+
+        <file path="whatsapp-bot/src/services/scheduler/statement-reminders-job.ts">
+          <purpose>Daily job for statement closing reminders</purpose>
+          <reuse-pattern>
+            Story 4.2 will create SIMILAR file: payment-reminders.ts
+            - Same job structure: runPaymentRemindersJob()
+            - Same batch processing: 10 users in parallel
+            - Same error isolation: try-catch per user
+            - Same PostHog tracking: Job completion metrics
+            - Different cron schedule: 12:00 UTC (same time, different job name)
+          </reuse-pattern>
+          <performance-targets>
+            - Job execution: &lt; 30 seconds (NFR6)
+            - Success rate: 99.5% (NFR8)
+            - Batch size: 10 concurrent
+          </performance-targets>
+        </file>
+      </section>
+
+      <section name="Statement Total Calculation (Epic 3 Story 3.5)">
+        <file path="whatsapp-bot/src/services/statement/statement-summary-service.ts">
+          <purpose>Calculates statement total with category breakdown</purpose>
+          <reuse-pattern>
+            Story 4.2 will EXTRACT statement total calculation logic into shared function
+            - New file: whatsapp-bot/src/services/reminders/statement-total-calculator.ts
+            - Function: calculateStatementTotal(userId, paymentMethodId, periodStart, periodEnd)
+            - Returns: number (total spent)
+            - Reuses: calculate_statement_period(), aggregate transactions + installments
+            - Performance: &lt; 500ms (NFR-Epic4-P2)
+          </reuse-pattern>
+          <implementation-notes>
+            - Query transactions in period: SUM(amount) WHERE date BETWEEN period_start AND period_end
+            - Query installment payments in period: SUM(amount_per_installment) WHERE due_date BETWEEN...
+            - Total = transactions + installment_payments
+            - NO category breakdown needed for reminder (just total)
+          </implementation-notes>
+        </file>
+      </section>
+
+      <section name="Localization System">
+        <file path="whatsapp-bot/src/localization/pt-br.ts">
+          <purpose>Portuguese (Brazil) message templates</purpose>
+          <additions-needed>
+            Add payment_reminder section:
+            {
+              title: '💳 Lembrete: Pagamento do cartão',
+              due_in_days: 'Vence em {days} dias ({date})',
+              amount: 'Valor: R$ {amount}',
+              card_name: 'Cartão {name}',
+              period: 'Período: {start} - {end}',
+              footer: 'Não esqueça de realizar o pagamento! 😊'
+            }
+          </additions-needed>
+        </file>
+
+        <file path="whatsapp-bot/src/localization/en.ts">
+          <purpose>English message templates</purpose>
+          <additions-needed>
+            Add payment_reminder section:
+            {
+              title: '💳 Reminder: Credit card payment',
+              due_in_days: 'Due in {days} days ({date})',
+              amount: 'Amount: R$ {amount}',
+              card_name: '{name} card',
+              period: 'Period: {start} - {end}',
+              footer: 'Don\'t forget to make your payment! 😊'
+            }
+          </additions-needed>
+        </file>
+
+        <file path="whatsapp-bot/src/localization/types.ts">
+          <purpose>TypeScript interfaces for localization</purpose>
+          <additions-needed>
+            Add payment_reminder to Messages interface:
+            interface Messages {
+              // ... existing fields
+              payment_reminder: {
+                title: string
+                due_in_days: (days: number, date: string) => string
+                amount: (amount: string) => string
+                card_name: (name: string) => string
+                period: (start: string, end: string) => string
+                footer: string
+              }
+            }
+          </additions-needed>
+        </file>
+      </section>
+
+      <section name="Analytics Events">
+        <file path="whatsapp-bot/src/analytics/events.ts">
+          <purpose>PostHog event definitions</purpose>
+          <additions-needed>
+            export const PAYMENT_REMINDER_SENT = 'payment_reminder_sent'
+            export const PAYMENT_REMINDER_FAILED = 'payment_reminder_failed'
+            export const PAYMENT_REMINDER_JOB_COMPLETED = 'payment_reminder_job_completed'
+          </additions-needed>
+          <event-properties>
+            payment_reminder_sent:
+            - userId, paymentMethodId, cardName, statementTotal, dueDate
+            - deliveryAttempts (1-3), identifierUsed ('jid'|'lid'|'phone')
+            - success: true, timestamp
+
+            payment_reminder_failed:
+            - userId, paymentMethodId, errorType, attempts, lastError
+            - timestamp
+
+            payment_reminder_job_completed:
+            - eligibleUsers, sentCount, failedCount, successRate, duration
+            - date, timestamp
+          </event-properties>
+        </file>
+      </section>
+
+      <section name="Railway Cron Configuration">
+        <file path="railway.cron.yml">
+          <purpose>Railway cron job configuration</purpose>
+          <additions-needed>
+            jobs:
+              - name: payment-reminders
+                schedule: "0 12 * * *"  # 9 AM Brazil time (12 UTC)
+                command: "node dist/scheduler/payment-reminders.js"
+          </additions-needed>
+          <notes>
+            - Same time as statement-reminders job (12:00 UTC)
+            - Separate job entry point (different script)
+            - Railway TZ=America/Sao_Paulo environment variable (existing)
+          </notes>
+        </file>
+      </section>
+    </existing-code-reference>
+
+    <implementation-guidance>
+      <new-files-to-create>
+        <file path="whatsapp-bot/src/services/reminders/payment-reminder-query.ts">
+          <purpose>Query users eligible for payment reminders (due in 2 days)</purpose>
+          <structure>
+            - Interface: EligiblePaymentReminder (see types.ts additions)
+            - Function: getEligiblePaymentReminders(): Promise&lt;EligiblePaymentReminder[]&gt;
+            - Query logic: Similar to statement-reminder-query.ts but different WHERE clause
+            - Due date calculation: closing_day + payment_due_day = CURRENT_DATE + 2 days
+          </structure>
+          <key-implementation-notes>
+            - Use Supabase service key (bypass RLS)
+            - JOIN payment_methods with users, user_profiles
+            - Filter: credit_mode=true, payment_due_day IS NOT NULL
+            - Calculate due date: Use date arithmetic for month boundaries
+            - Opt-out check: WHERE (payment_reminders_enabled IS NULL OR payment_reminders_enabled = true)
+          </key-implementation-notes>
+        </file>
+
+        <file path="whatsapp-bot/src/services/reminders/statement-total-calculator.ts">
+          <purpose>Calculate statement total (regular + installments)</purpose>
+          <structure>
+            - Function: calculateStatementTotal(userId, paymentMethodId, periodStart, periodEnd)
+            - Returns: number (total amount)
+            - Reuse: calculate_statement_budget_spent() database function OR manual query
+          </structure>
+          <implementation-options>
+            Option 1: Use existing database function calculate_statement_budget_spent()
+            - PRO: Already tested, consistent with web dashboard
+            - CON: May include budget calculation overhead
+
+            Option 2: Custom query (transactions + installments)
+            - PRO: Minimal query (just SUM)
+            - CON: Duplication of logic, maintenance burden
+
+            RECOMMENDATION: Option 1 (reuse database function)
+          </implementation-options>
+        </file>
+
+        <file path="whatsapp-bot/src/scheduler/payment-reminders.ts">
+          <purpose>Daily job entry point for payment reminders</purpose>
+          <structure>
+            - Export: runPaymentRemindersJob(): Promise&lt;PaymentRemindersJobResult&gt;
+            - Batch processing: 10 users in parallel
+            - Error isolation: try-catch per user
+            - PostHog tracking: Job completion metrics
+            - Main entry point: main() function for Railway cron execution
+          </structure>
+          <job-flow>
+            1. Check WhatsApp socket connected
+            2. Query eligible users (getEligiblePaymentReminders)
+            3. For each batch of 10 users:
+               a. Calculate statement total
+               b. Build reminder message
+               c. Send via WhatsApp (sendReminderWithRetry)
+               d. Track PostHog event
+            4. Report metrics: eligible, sent, failed, success rate, duration
+            5. Track job completion event
+            6. Alert if success rate &lt; 99% or duration &gt; 30s
+          </job-flow>
+        </file>
+
+        <file path="whatsapp-bot/src/__tests__/services/reminders/payment-reminder-query.test.ts">
+          <purpose>Unit tests for eligibility query</purpose>
+          <test-cases>
+            - User with closing_day=5, payment_due_day=10, today=Jan 13 → Eligible (due Jan 15)
+            - User with closing_day=5, payment_due_day=10, today=Jan 12 → NOT eligible (due in 3 days)
+            - Simple Mode user → NOT eligible
+            - User opted out (payment_reminders_enabled=false) → NOT eligible
+            - User without payment_due_day → NOT eligible
+            - Month boundary: closing_day=28, payment_due_day=5, today=Dec 1 → Eligible if due Dec 3
+          </test-cases>
+        </file>
+
+        <file path="whatsapp-bot/src/__tests__/services/reminders/statement-total-calculator.test.ts">
+          <purpose>Unit tests for statement total calculation</purpose>
+          <test-cases>
+            - Period with regular expenses only → Correct sum
+            - Period with installments only → Correct sum
+            - Period with both regular + installments → Correct sum
+            - Period with no expenses → R$ 0.00
+            - Period with negative total (refunds &gt; expenses) → Negative amount
+            - Large total (&gt; R$ 10,000) → Format with thousands separator
+          </test-cases>
+        </file>
+
+        <file path="whatsapp-bot/src/__tests__/scheduler/payment-reminders.test.ts">
+          <purpose>Integration tests for job execution</purpose>
+          <test-cases>
+            - Job queries eligible users → Verify correct results
+            - Job processes batch of 10 users → All processed
+            - One user fails → Others continue successfully
+            - Job completes and reports metrics
+            - PostHog events tracked correctly
+          </test-cases>
+        </file>
+      </new-files-to-create>
+
+      <files-to-modify>
+        <file path="whatsapp-bot/src/localization/pt-br.ts">
+          <changes>Add payment_reminder section to messages object</changes>
+        </file>
+        <file path="whatsapp-bot/src/localization/en.ts">
+          <changes>Add payment_reminder section to messages object</changes>
+        </file>
+        <file path="whatsapp-bot/src/localization/types.ts">
+          <changes>Add payment_reminder to Messages interface</changes>
+        </file>
+        <file path="whatsapp-bot/src/analytics/events.ts">
+          <changes>Add PAYMENT_REMINDER_* event constants</changes>
+        </file>
+        <file path="railway.cron.yml">
+          <changes>Add payment-reminders job configuration</changes>
+        </file>
+        <file path="whatsapp-bot/src/services/reminders/reminder-message-builder.ts">
+          <changes>Add buildPaymentReminderMessage() function (new export in existing file)</changes>
+        </file>
+        <file path="whatsapp-bot/src/types.ts">
+          <changes>Add EligiblePaymentReminder interface</changes>
+        </file>
+        <file path="CLAUDE.md">
+          <changes>Document Payment Reminder System in WhatsApp Bot section</changes>
+        </file>
+      </files-to-modify>
+    </implementation-guidance>
+
+    <performance-targets>
+      <target id="NFR6" metric="Reminder job execution time" value="&lt; 30 seconds" critical="true">
+        Measurement: Job start timestamp to completion timestamp
+        Expected: ~10-20 seconds for 100 users
+        Optimization: Batch processing (10 concurrent users)
+      </target>
+
+      <target id="NFR8" metric="Reminder delivery success rate" value="99.5%" critical="true">
+        Measurement: sentCount / eligibleUsers
+        Expected: 99%+ with multi-identifier cascade + retry
+        Optimization: Exponential backoff (3 attempts: 0s, 1s, 5s)
+      </target>
+
+      <target id="NFR-Epic4-P2" metric="Statement total query" value="&lt; 500ms" critical="true">
+        Measurement: Query execution time
+        Expected: ~200-300ms
+        Optimization: Reuse tested database function from Epic 3
+      </target>
+
+      <target id="Per-user processing" metric="Processing time per user" value="&lt; 3 seconds" critical="false">
+        Measurement: Time from eligibility check to delivery completion
+        Expected: ~1-2 seconds (includes retry if needed)
+        Optimization: Parallel batch processing
+      </target>
+    </performance-targets>
+
+    <edge-cases>
+      <case id="EC1" title="Payment Due on Weekend or Holiday">
+        <scenario>Payment due on Sunday Jan 15</scenario>
+        <behavior>Reminder sent Friday Jan 13 (2 days before)</behavior>
+        <rationale>Brazilian credit cards due on calendar day (not business day)</rationale>
+        <implementation>No weekend adjustment needed in query</implementation>
+      </case>
+
+      <case id="EC2" title="User Changes Payment Due Day Mid-Period">
+        <scenario>User changes payment_due_day from 10 to 15 on Jan 12</scenario>
+        <behavior>Reminder sent based on CURRENT payment_due_day setting</behavior>
+        <rationale>Query uses current settings (not historical)</rationale>
+        <implementation>Eligibility query always reads latest payment_due_day value</implementation>
+      </case>
+
+      <case id="EC3" title="Statement Total Changes Between Query and Send">
+        <scenario>User adds expense after eligibility query but before reminder sent</scenario>
+        <behavior>Reminder amount based on total at calculation time</behavior>
+        <acceptable-discrepancy>&lt; 5 minute window, close enough for reminder</acceptable-discrepancy>
+        <implementation>No real-time recalculation needed</implementation>
+      </case>
+
+      <case id="EC4" title="User Has No WhatsApp Identifier (Deleted Account)">
+        <scenario>User authorized WhatsApp, then deleted account</scenario>
+        <behavior>Eligibility query returns user, delivery fails all attempts</behavior>
+        <handling>Log warning, skip user, track failed event, continue to next user</handling>
+        <implementation>Delivery function handles missing identifier gracefully</implementation>
+      </case>
+
+      <case id="EC5" title="Job Runs Late (Railway Delay)">
+        <scenario>Cron job runs at 12:05 UTC instead of 12:00 UTC (5-minute delay)</scenario>
+        <behavior>Eligibility query still finds users due in 2 days (uses CURRENT_DATE)</behavior>
+        <impact>Reminders still sent correctly (5-minute delay acceptable)</impact>
+        <implementation>Query uses CURRENT_DATE, not hard-coded time</implementation>
+      </case>
+
+      <case id="EC6" title="User Has Multiple Cards with Same Due Date">
+        <scenario>User has 2 cards both due on Jan 15</scenario>
+        <behavior>Two separate messages sent (one per card)</behavior>
+        <rationale>Different statement totals, different periods, simpler implementation</rationale>
+        <implementation>Eligibility query returns multiple rows per user (one per card)</implementation>
+      </case>
+
+      <case id="EC7" title="Month Boundary Due Date">
+        <scenario>closing_day=28, payment_due_day=5 → Due on 2nd or 3rd of next month</scenario>
+        <behavior>Correct due date calculation using date arithmetic</behavior>
+        <implementation>Use JavaScript Date or SQL date functions (not simple addition)</implementation>
+        <example>Dec 28 + 5 days = Jan 2 (not Dec 33)</example>
+      </case>
+    </edge-cases>
+
+    <awareness-first-messaging>
+      <principles>
+        <principle>Neutral Tone: "Lembrete" (reminder) not "AVISO!" (warning)</principle>
+        <principle>Informational: State facts (due date, amount) without judgment</principle>
+        <principle>Friendly Emoji: 😊 (supportive, not alarming)</principle>
+        <principle>NO RED colors or urgent language</principle>
+        <principle>NO judgmental phrases ("You're late!", "Pay now!")</principle>
+      </principles>
+
+      <message-structure>
+        <part order="1">Greeting: "💳 Lembrete: Pagamento do cartão"</part>
+        <part order="2">Due date: "Vence em 2 dias (15 de Janeiro)"</part>
+        <part order="3">Amount: "💰 Valor: R$ 1.450,00"</part>
+        <part order="4">Card name: "Cartão Nubank"</part>
+        <part order="5">Period: "Período: 6 Dez - 5 Jan"</part>
+        <part order="6">Call-to-action: "Não esqueça de realizar o pagamento! 😊"</part>
+      </message-structure>
+
+      <examples>
+        <example locale="pt-BR">
+          💳 Lembrete: Pagamento do cartão
+
+          Vence em 2 dias (15 de Janeiro)
+          💰 Valor: R$ 1.450,00
+
+          Cartão Nubank
+          Período: 6 Dez - 5 Jan
+
+          Não esqueça de realizar o pagamento! 😊
+        </example>
+
+        <example locale="en">
+          💳 Reminder: Credit card payment
+
+          Due in 2 days (January 15)
+          💰 Amount: R$ 1,450.00
+
+          Nubank card
+          Period: Dec 6 - Jan 5
+
+          Don't forget to make your payment! 😊
+        </example>
+      </examples>
+    </awareness-first-messaging>
+
+    <testing-strategy>
+      <unit-tests>
+        <test-file>payment-reminder-query.test.ts</test-file>
+        <test-file>statement-total-calculator.test.ts</test-file>
+        <test-file>reminder-message-builder.test.ts (add new tests for payment reminder)</test-file>
+      </unit-tests>
+
+      <integration-tests>
+        <test-file>payment-reminders.test.ts (job execution)</test-file>
+        <test-coverage>
+          - End-to-end job flow: Query → Calculate → Build → Send (mock WhatsApp)
+          - RLS enforcement: Service key can query all users
+          - Opt-out mechanism: Opted-out user NOT in results
+          - Batch processing: 10 users in parallel
+          - Error isolation: One failure doesn't halt batch
+        </test-coverage>
+      </integration-tests>
+
+      <performance-tests>
+        <test name="Job execution time">
+          Load: 100 eligible users
+          Target: &lt; 30 seconds total
+          Method: Time job start to completion
+        </test>
+        <test name="Statement total query">
+          Setup: User with 100 transactions + 10 installments
+          Target: &lt; 500ms
+          Method: Database query logging
+        </test>
+      </performance-tests>
+
+      <manual-tests>
+        <test>Receive reminder on regular WhatsApp account</test>
+        <test>Receive reminder on WhatsApp Business account</test>
+        <test>Verify message formatting (pt-BR)</test>
+        <test>Verify message formatting (en)</test>
+        <test>Test opted-out user (no message received)</test>
+        <test>Test user with multiple cards (separate reminders)</test>
+        <test>Check PostHog dashboard (verify events)</test>
+      </manual-tests>
+    </testing-strategy>
+
+    <deployment-checklist>
+      <item status="prerequisite">Verify Migration 046 applied (payment_due_day column exists)</item>
+      <item status="prerequisite">Verify Story 4.1 complete (payment due date can be set via UI)</item>
+      <item status="prerequisite">Verify Epic 3 functions available (calculate_statement_period, calculate_statement_budget_spent)</item>
+      <item>Run all unit tests (70% coverage target)</item>
+      <item>Run integration tests</item>
+      <item>Test job manually on staging: node dist/scheduler/payment-reminders.js</item>
+      <item>Verify Railway cron config updated (railway.cron.yml)</item>
+      <item>Deploy WhatsApp bot code to Railway</item>
+      <item>Verify cron job appears in Railway dashboard</item>
+      <item>Monitor first job execution (next day at 12:00 UTC)</item>
+      <item>Check Railway logs for job completion</item>
+      <item>Check PostHog for payment_reminder_job_completed event</item>
+      <item>Verify success rate ≥ 99.5% (NFR8)</item>
+      <item>Verify job duration &lt; 30 seconds (NFR6)</item>
+      <item>Update CLAUDE.md documentation</item>
+    </deployment-checklist>
+  </technical-context>
+
+  <acceptance-criteria-summary>
+    <ac id="AC4.2.1">Payment reminder eligibility query correctly identifies users due in 2 days</ac>
+    <ac id="AC4.2.2">Statement total calculation includes regular expenses + installments</ac>
+    <ac id="AC4.2.3">Reminder message is localized (pt-BR/en) with awareness-first language</ac>
+    <ac id="AC4.2.4">WhatsApp delivery with multi-identifier cascade and retry (99.5% success)</ac>
+    <ac id="AC4.2.5">Daily cron job runs at 9 AM Brazil time, completes &lt; 30 seconds</ac>
+    <ac id="AC4.2.6">Reminder opt-out mechanism respected (payment_reminders_enabled=false)</ac>
+    <ac id="AC4.2.7">Multi-card support: Separate reminders for each card</ac>
+    <ac id="AC4.2.8">Analytics: PostHog events tracked (sent, failed, job completed)</ac>
+    <ac id="AC4.2.9">Simple Mode compatibility: Excluded from reminders</ac>
+    <ac id="AC4.2.10">Edge cases handled: Weekends, month boundaries, deleted accounts</ac>
+  </acceptance-criteria-summary>
+
+  <risks-and-mitigations>
+    <risk id="RISK-1" likelihood="medium" impact="high">
+      <description>WhatsApp delivery failures prevent reminders</description>
+      <mitigation>Multi-identifier cascade (JID→LID→phone), exponential backoff, 99.5% target, monitoring alerts</mitigation>
+    </risk>
+
+    <risk id="RISK-2" likelihood="low" impact="medium">
+      <description>Job timing issues (timezone, DST)</description>
+      <mitigation>Railway TZ=America/Sao_Paulo, date-fns timezone-aware, extensive edge case testing</mitigation>
+    </risk>
+
+    <risk id="RISK-3" likelihood="low" impact="medium">
+      <description>Statement total calculation mismatch</description>
+      <mitigation>Reuse tested Epic 3 function, validation logging (discrepancy &gt; R$ 1 warns), audit trail</mitigation>
+    </risk>
+
+    <risk id="RISK-4" likelihood="low" impact="high">
+      <description>Railway cron job failures</description>
+      <mitigation>Stateless job design (restartable), Railway auto-restart, alert on consecutive failures</mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <developer-notes>
+    <note priority="high">
+      REUSE Epic 3 Infrastructure: This story is 80% code reuse from Story 3.4 (statement closing reminders).
+      Copy-paste-modify approach is ENCOURAGED to maintain consistency and reduce risk.
+    </note>
+
+    <note priority="high">
+      Multi-Identifier Cascade: ALWAYS try JID first (most reliable), then LID (Business accounts), then phone.
+      This pattern is proven and tested in Epic 3. Do NOT change the order.
+    </note>
+
+    <note priority="medium">
+      Statement Total Calculation: Prefer database function reuse over custom query.
+      Use calculate_statement_budget_spent() from Epic 3 to ensure consistency with web dashboard.
+    </note>
+
+    <note priority="medium">
+      Awareness-First Language: Review all message text with the user if unclear.
+      The tone is neutral, informational, supportive - NOT urgent, judgmental, or alarming.
+    </note>
+
+    <note priority="low">
+      Performance Logging: Log warnings if query &gt; 500ms or job &gt; 30s.
+      These are NOT hard errors, but indicate potential optimization needed.
+    </note>
+
+    <note priority="low">
+      Opt-Out Mechanism: Current story uses database column check only.
+      Future story will add AI handler for "STOP" / "RESUME" commands. Keep implementation simple for now.
+    </note>
+  </developer-notes>
+</story-context>

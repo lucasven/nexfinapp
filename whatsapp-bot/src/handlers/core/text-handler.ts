@@ -9,6 +9,15 @@ import { handleLogin } from '../auth/auth.js'
 import { messages } from '../../localization/pt-br.js'
 import { hasPendingTransaction, handleDuplicateConfirmation, isDuplicateReply, extractDuplicateIdFromQuote } from '../transactions/duplicate-confirmation.js'
 import { hasPendingOcrTransactions, handleOcrConfirmation, handleOcrCancel, handleOcrEdit, applyOcrEdit } from '../transactions/ocr-confirmation.js'
+import { hasPendingTransactionContext } from '../../services/conversation/pending-transaction-state.js'
+import { hasPendingInstallmentContext } from '../../services/conversation/pending-installment-state.js'
+import { hasPendingPayoff } from '../../services/conversation/pending-payoff-state.js'
+import { handleModeSelection } from '../credit-card/mode-selection.js'
+import { handleCardSelection } from '../credit-card/installment-handler.js'
+import { handlePayoffRequest } from '../credit-card/installment-payoff-handler.js'
+import { handleModeSwitchWarningResponse, handleModeSwitchCardSelection } from '../credit-card/mode-switch.js'
+import { getConversationState } from '../../services/conversation/state-manager.js'
+import { getUserLocale } from '../../localization/i18n.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
 import type { UserIdentifiers } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
@@ -136,6 +145,118 @@ export async function handleTextMessage(
         })
 
         return result
+      }
+
+      // Check for credit mode selection (Story 1.3)
+      if (hasPendingTransactionContext(whatsappNumber)) {
+        strategy = 'credit_mode_selection'
+        logger.info('User has pending credit mode selection', { whatsappNumber, message })
+
+        // Get user session for mode selection
+        session = await getOrCreateSession(whatsappNumber)
+
+        if (!session) {
+          logger.warn('Failed to get session for mode selection', { whatsappNumber })
+          return messages.notAuthenticated
+        }
+
+        const result = await handleModeSelection(message, whatsappNumber, session.userId)
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+
+      // Check for installment card selection (Story 2.1 - AC1.2 Scenario 3)
+      if (hasPendingInstallmentContext(whatsappNumber)) {
+        strategy = 'installment_card_selection'
+        logger.info('User has pending installment card selection', { whatsappNumber, message })
+
+        const result = await handleCardSelection(whatsappNumber, message)
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+
+      // Check for payoff conversation (Story 2.5)
+      if (hasPendingPayoff(whatsappNumber)) {
+        strategy = 'payoff_conversation'
+        logger.info('User has pending payoff conversation', { whatsappNumber, message })
+
+        const result = await handlePayoffRequest(whatsappNumber, message)
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+
+      // Check for mode switch warning response (Story 1.5 - installment cleanup choice)
+      session = session || await getOrCreateSession(whatsappNumber)
+      if (session) {
+        const modeSwitchConfirmState = await getConversationState(session.userId, 'mode_switch_confirm')
+        if (modeSwitchConfirmState) {
+          strategy = 'mode_switch_warning_response'
+          logger.info('User has pending mode switch warning response', { whatsappNumber, message })
+
+          const locale = await getUserLocale(session.userId)
+          const result = await handleModeSwitchWarningResponse(session.userId, message, locale)
+
+          await recordParsingMetric({
+            whatsappNumber,
+            messageText: message,
+            messageType: 'text',
+            strategyUsed: strategy,
+            success: true,
+            parseDurationMs: Date.now() - startTime
+          })
+
+          return result
+        }
+
+        // Check for mode switch card selection (Story 1.5 - multi-card selection)
+        const modeSwitchSelectState = await getConversationState(session.userId, 'mode_switch_select')
+        if (modeSwitchSelectState) {
+          strategy = 'mode_switch_card_selection'
+          logger.info('User has pending mode switch card selection', { whatsappNumber, message })
+
+          const locale = await getUserLocale(session.userId)
+          const result = await handleModeSwitchCardSelection(session.userId, message, locale)
+
+          if (result) {
+            await recordParsingMetric({
+              whatsappNumber,
+              messageText: message,
+              messageType: 'text',
+              strategyUsed: strategy,
+              success: true,
+              parseDurationMs: Date.now() - startTime
+            })
+
+            return result
+          }
+        }
       }
 
       // Check for duplicate confirmation (without reply context)

@@ -1,0 +1,1 @@
+../../fe/scripts/007_semantic_cache.sql

@@ -1,0 +1,432 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3.3</storyId>
+    <title>Budget Progress Dashboard Statement Period</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-03</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-3-budget-progress-dashboard-statement-period.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Credit Mode user with a statement closing date and monthly budget set</asA>
+    <iWant>to see my budget progress in real-time on the dashboard for the current statement period</iWant>
+    <soThat>I can track how much of my budget I've used and make informed spending decisions throughout the billing cycle</soThat>
+    <tasks>
+      <task id="1" title="Database Function for Budget Calculation">
+        <subtask>Create calculate_statement_budget_spent() function in migration 045</subtask>
+        <subtask>Add RPC type definition for BudgetProgress interface</subtask>
+      </task>
+      <task id="2" title="Server Action for Budget Progress">
+        <subtask>Create getBudgetProgress() in fe/lib/actions/budget.ts</subtask>
+        <subtask>Create getAllBudgetProgress() for multiple cards</subtask>
+        <subtask>Add error handling, logging, and analytics tracking</subtask>
+      </task>
+      <task id="3" title="Budget Progress Widget Component">
+        <subtask>Create BudgetProgressWidget in fe/components/budget/</subtask>
+        <subtask>Create BudgetProgressBar component with status-based colors</subtask>
+        <subtask>Create empty state widgets (no budget, no closing date)</subtask>
+      </task>
+      <task id="4" title="Dashboard Integration">
+        <subtask>Add budget widgets to dashboard (fe/app/[locale]/page.tsx)</subtask>
+        <subtask>Add loading and error states</subtask>
+        <subtask>Add conditional rendering for Credit Mode only</subtask>
+      </task>
+      <task id="5" title="React Query Setup">
+        <subtask>Create useBudgetProgress() hook</subtask>
+        <subtask>Add cache invalidation on transaction mutations</subtask>
+        <subtask>Implement optimistic updates</subtask>
+      </task>
+      <task id="6" title="Localization">
+        <subtask>Add budget progress keys to pt-BR and en localization files</subtask>
+        <subtask>Add date and currency formatting utilities</subtask>
+      </task>
+      <task id="7" title="Styling">
+        <subtask>Define awareness-first color palette (blue/yellow/gray, NO red)</subtask>
+        <subtask>Add progress bar animations</subtask>
+        <subtask>Implement responsive design</subtask>
+      </task>
+      <task id="8" title="Testing">
+        <subtask>Unit tests for budget calculation function</subtask>
+        <subtask>Integration tests for getBudgetProgress()</subtask>
+        <subtask>Performance tests (< 200ms NFR5, < 300ms Epic3-P3)</subtask>
+        <subtask>E2E tests for real-time updates</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC3.1" title="Budget Progress Widget Display">
+      <requirement>Dashboard displays budget progress widget for Credit Mode credit cards with budget set</requirement>
+      <scenarios>
+        <scenario>Credit Mode user with budget → Shows Budget Progress Widget with all details</scenario>
+        <scenario>Credit Mode user without budget → Shows Spending Summary Widget with CTA</scenario>
+        <scenario>Credit Mode user without closing date → Shows Setup Prompt Widget</scenario>
+        <scenario>Simple Mode user → NO statement budget widgets displayed</scenario>
+        <scenario>Multiple credit cards → Shows separate widgets for each card</scenario>
+      </scenarios>
+      <validation>Manual testing, conditional rendering checks</validation>
+    </criterion>
+
+    <criterion id="AC3.2" title="Budget Progress Calculation Accuracy">
+      <requirement>Budget progress calculations are accurate and include all relevant transactions</requirement>
+      <logic>
+        <step>Get current statement period from calculate_statement_period(closing_day, today)</step>
+        <step>Query all transactions WHERE payment_method_id = card.id AND type = 'expense' AND date in period</step>
+        <step>Include installment payments from Epic 2 where payment_date in period</step>
+        <step>Calculate: spent = SUM(transactions) + SUM(installment_payments)</step>
+        <step>Calculate: remaining = budget - spent, percentage = (spent / budget) * 100</step>
+        <step>Determine status: on-track (<80%), near-limit (80-100%), exceeded (>100%)</step>
+      </logic>
+      <validation>Unit tests, integration tests with installments, edge case tests</validation>
+    </criterion>
+
+    <criterion id="AC3.3" title="Real-Time Budget Updates">
+      <requirement>Budget progress updates immediately when user adds/edits/deletes expenses</requirement>
+      <updateFlow>
+        <step>User adds new expense via transaction form</step>
+        <step>Transaction saved to database</step>
+        <step>Frontend invalidates budget progress query</step>
+        <step>Budget progress widget refetches data</step>
+        <step>Widget displays updated amounts with animation</step>
+        <step>Update completes in < 300ms (Epic3-P3)</step>
+      </updateFlow>
+      <validation>E2E test, performance test (< 300ms)</validation>
+    </criterion>
+
+    <criterion id="AC3.4" title="Budget Status and Progress Bar">
+      <requirement>Budget status determined by percentage used, with visual progress bar</requirement>
+      <statuses>
+        <status name="on-track" range="0-79%" color="Blue" message="No caminho certo / Sobraram R$ X"/>
+        <status name="near-limit" range="80-99%" color="Yellow/Amber" message="Próximo do limite / Restam R$ X"/>
+        <status name="at-limit" range="100%" color="Orange" message="Orçamento atingido"/>
+        <status name="exceeded" range=">100%" color="Gray (NOT red)" message="R$ X acima do planejado"/>
+      </statuses>
+      <validation>Manual test for colors, screen reader test</validation>
+    </criterion>
+
+    <criterion id="AC3.5" title="Awareness-First Language">
+      <requirement>All budget messaging uses neutral, non-judgmental language and design</requirement>
+      <principles>
+        <principle>Neutral colors: Blue, yellow, orange, gray (NO RED)</principle>
+        <principle>Informational tone: "R$ 200 acima do planejado" NOT "OVERSPENT!"</principle>
+        <principle>Positive framing: "Sobraram R$ 1.200" NOT "You have R$ 1,200 left"</principle>
+        <principle>No pressure: "No caminho certo" NOT "Good job! Keep it up!"</principle>
+      </principles>
+      <validation>Manual review, user testing</validation>
+    </criterion>
+
+    <criterion id="AC3.6" title="Days Until Statement Closing">
+      <requirement>Widget displays days remaining until statement closes</requirement>
+      <displayLogic>
+        <display condition="14+ days">14 dias até fechamento</display>
+        <display condition="7-13 days">7 dias até fechamento (neutral)</display>
+        <display condition="3-6 days">3 dias até fechamento (reminder)</display>
+        <display condition="1-2 days">2 dias até fechamento (closing soon)</display>
+        <display condition="today">Fecha hoje</display>
+        <display condition="tomorrow">Fecha amanhã</display>
+      </displayLogic>
+      <validation>Unit test, localization test</validation>
+    </criterion>
+
+    <criterion id="AC3.7" title="Performance Optimization">
+      <requirement>Budget progress calculation completes in < 200ms (NFR5 - critical path)</requirement>
+      <targets>
+        <target metric="Budget calculation" threshold="< 200ms" importance="CRITICAL (shown on every expense add)"/>
+        <target metric="Dashboard load (5 widgets)" threshold="< 1 second"/>
+        <target metric="Widget individual load" threshold="< 300ms (Epic3-P3)"/>
+      </targets>
+      <strategies>
+        <strategy>Use PostgreSQL function calculate_statement_budget_spent() for single query</strategy>
+        <strategy>Cache budget progress for 5 minutes (React Query)</strategy>
+        <strategy>Parallel queries with Promise.all() for multiple cards</strategy>
+        <strategy>Indexed queries on (user_id, payment_method_id, date)</strategy>
+      </strategies>
+      <validation>Performance tests with 1000 transactions, load tests with 10+ cards</validation>
+    </criterion>
+
+    <criterion id="AC3.8" title="Empty States and Edge Cases">
+      <requirement>Graceful handling of empty states and edge cases</requirement>
+      <cases>
+        <case>No transactions in period → Show 0% progress, "Sobraram R$ 2.000"</case>
+        <case>No budget set → Show spending summary with CTA "Definir orçamento"</case>
+        <case>No closing date → Show setup prompt with CTA "Configurar"</case>
+        <case>Budget = 0 → Show "Sem limite definido", no progress bar</case>
+        <case>Very high percentage (500%) → Progress bar full, show overage</case>
+      </cases>
+      <validation>Unit tests, manual tests</validation>
+    </criterion>
+
+    <criterion id="AC3.9" title="Simple Mode Compatibility">
+      <requirement>Simple Mode users unaffected by statement budget features</requirement>
+      <behavior>
+        <point>User with credit_mode = false → NO budget widgets visible</point>
+        <point>NO budget progress features accessible</point>
+        <point>Existing calendar month tracking unchanged</point>
+        <point>Zero performance impact on Simple Mode users</point>
+      </behavior>
+      <validation>Regression test, performance test</validation>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification: Statement-Aware Budgets</title>
+        <section>Overview, Data Models, APIs, Workflows, NFRs</section>
+        <snippet>Comprehensive tech spec covering statement period calculation, budget progress interfaces (BudgetProgress type), server actions (getBudgetProgress, getAllBudgetProgress), database functions (calculate_statement_budget_spent), performance targets (NFR5: < 200ms), and awareness-first design principles.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture-overview.md</path>
+        <title>Architecture Overview - NexFinApp</title>
+        <section>System Architecture, Frontend/Backend Integration</section>
+        <snippet>Multi-part application with Next.js 15 frontend and Node.js WhatsApp bot sharing PostgreSQL database. Server actions for mutations, Supabase RLS for security, PostHog for analytics.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-1-set-statement-closing-date.md</path>
+        <title>Story 3.1: Set Statement Closing Date (DONE)</title>
+        <section>Statement closing date configuration</section>
+        <snippet>Implemented statement_closing_day column in payment_methods table, calculate_statement_period() function, and settings UI. Foundation for budget period calculation in Story 3.3.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-2-set-user-defined-monthly-budget.md</path>
+        <title>Story 3.2: Set User-Defined Monthly Budget (DONE)</title>
+        <section>Monthly budget configuration</section>
+        <snippet>Implemented monthly_budget column in payment_methods table, budget settings UI, and awareness-first language patterns. Foundation for budget progress tracking in Story 3.3.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>fe/lib/actions/budget.ts</path>
+        <kind>server-action</kind>
+        <symbol>getBudgetForPeriod(), getCurrentBudget()</symbol>
+        <lines>92-288</lines>
+        <reason>Existing budget calculation implementation to extend for Story 3.3. Currently queries get_budget_for_period RPC function, includes installment payments, tracks performance. Need to add getBudgetProgress() wrapper that includes statement period metadata and status determination.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/utils/statement-period.ts</path>
+        <kind>utility</kind>
+        <symbol>getStatementPeriod(), formatStatementPeriod()</symbol>
+        <lines>48-114</lines>
+        <reason>Statement period calculation utility used throughout Story 3.3 for determining current period boundaries. Already handles edge cases (month boundaries, year boundaries, leap years).</reason>
+      </artifact>
+      <artifact>
+        <path>fe/scripts/044_statement_period_calculation.sql</path>
+        <kind>migration</kind>
+        <symbol>calculate_statement_period()</symbol>
+        <lines>13-70</lines>
+        <reason>PostgreSQL function for consistent statement period calculation. Single source of truth. Handles edge cases (Feb 31, leap years, 30-day months). Used in budget progress calculation.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/settings/statement-settings.tsx</path>
+        <kind>component</kind>
+        <symbol>StatementSettings</symbol>
+        <lines>1-end</lines>
+        <reason>Story 3.1 implementation showing statement closing date UI pattern. Reference for consistent settings UI design.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/settings/budget-settings.tsx</path>
+        <kind>component</kind>
+        <symbol>BudgetSettings</symbol>
+        <lines>1-end</lines>
+        <reason>Story 3.2 implementation showing budget configuration UI with awareness-first language. Reference for budget-related component design patterns.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/budget/budget-breakdown.tsx</path>
+        <kind>component</kind>
+        <symbol>BudgetBreakdown</symbol>
+        <lines>1-end</lines>
+        <reason>Existing budget display component (Story 2.8). May be reusable or reference for progress widget design.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/analytics/events.ts</path>
+        <kind>analytics</kind>
+        <symbol>AnalyticsEvent, AnalyticsProperty</symbol>
+        <lines>1-end</lines>
+        <reason>Analytics event definitions. Need to add BUDGET_PROGRESS_VIEWED, BUDGET_STATUS_CHANGED events for Story 3.3 tracking.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>Messages (pt-BR)</symbol>
+        <lines>1-end</lines>
+        <reason>Portuguese localization file. Need to add budgetProgress section with awareness-first messages ("Sobraram R$ X", "acima do planejado", etc.)</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>Messages (English)</symbol>
+        <lines>1-end</lines>
+        <reason>English localization file. Need to add budgetProgress section matching pt-BR structure.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/app/[locale]/page.tsx</path>
+        <kind>page</kind>
+        <symbol>Dashboard Page</symbol>
+        <lines>1-end</lines>
+        <reason>Main dashboard page where budget progress widgets will be rendered. Need to integrate getAllBudgetProgress() query and render BudgetProgressWidget components.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package name="next" version="15.x" usage="Server actions for getBudgetProgress()"/>
+        <package name="react" version="19.x" usage="Budget progress widget components"/>
+        <package name="@supabase/supabase-js" version="latest" usage="Database queries, RLS enforcement"/>
+        <package name="@tanstack/react-query" version="latest" usage="Budget progress data caching, invalidation"/>
+        <package name="next-intl" version="latest" usage="Localization (pt-BR/en)"/>
+        <package name="react-hook-form" version="latest" usage="Form validation (if adding settings)"/>
+        <package name="zod" version="latest" usage="Schema validation"/>
+        <package name="posthog-js" version="latest" usage="Track budget_progress_viewed events"/>
+        <package name="@radix-ui/react-progress" version="1.1.1" usage="Progress bar component"/>
+        <package name="@radix-ui/react-dialog" version="1.1.4" usage="Budget widget modals (optional)"/>
+        <package name="tailwindcss" version="4.x" usage="Styling, awareness-first color palette"/>
+        <package name="date-fns" version="latest" usage="Date formatting utilities"/>
+      </frontend>
+      <database>
+        <dependency name="PostgreSQL 15+" usage="calculate_statement_budget_spent() function"/>
+        <dependency name="Supabase RLS" usage="User-level budget data isolation"/>
+        <dependency name="Indexes" usage="(user_id, payment_method_id, date) for fast queries"/>
+      </database>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">
+      <rule>Budget progress calculation MUST complete in < 200ms (NFR5 - critical path, shown on every expense add)</rule>
+      <rule>Dashboard load with 5 budget widgets MUST complete in < 1 second</rule>
+      <rule>Individual widget load MUST complete in < 300ms (Epic3-P3)</rule>
+      <implementation>Use PostgreSQL function for single query, React Query caching (5 minutes), parallel queries for multiple cards</implementation>
+    </constraint>
+    <constraint type="design">
+      <rule>MUST use awareness-first language: NO judgmental terms like "OVERSPENT", "WARNING", red colors</rule>
+      <rule>Neutral colors ONLY: Blue (on-track), Yellow/Amber (near-limit), Gray (exceeded) - NO RED</rule>
+      <rule>Positive framing: "Sobraram R$ X" NOT "You have R$ X left"</rule>
+      <rule>Informational tone: "R$ X acima do planejado" NOT "BUDGET EXCEEDED!"</rule>
+      <implementation>Define color palette in Tailwind config, audit all messages in localization files, user testing for tone</implementation>
+    </constraint>
+    <constraint type="architecture">
+      <rule>Budget calculation MUST use calculate_statement_budget_spent() PostgreSQL function for consistency across web and WhatsApp</rule>
+      <rule>MUST include installment payments from Epic 2 in budget totals</rule>
+      <rule>MUST respect Simple Mode compatibility: NO statement features for credit_mode = false</rule>
+      <rule>MUST use existing payment_methods columns: statement_closing_day, monthly_budget (from Stories 3.1, 3.2)</rule>
+      <implementation>Extend existing budget.ts server actions, conditional rendering based on credit_mode flag</implementation>
+    </constraint>
+    <constraint type="data-integrity">
+      <rule>Budget progress MUST reflect real-time transaction changes (cache invalidation on add/edit/delete)</rule>
+      <rule>Statement period calculation MUST handle edge cases: Feb 31, leap years, 30-day months</rule>
+      <rule>Budget calculations MUST exclude income transactions (type = 'income')</rule>
+      <rule>RLS policies MUST enforce user can only see own budget data</rule>
+      <implementation>React Query invalidateQueries after mutations, comprehensive edge case unit tests</implementation>
+    </constraint>
+    <constraint type="localization">
+      <rule>MUST support pt-BR and English (en) for all budget messages</rule>
+      <rule>Date formatting MUST be locale-aware: "6 Dez - 5 Jan" (pt-BR), "Dec 6 - Jan 5" (en)</rule>
+      <rule>Currency formatting MUST use Brazilian Real: "R$ 2.000,00" (pt-BR), "R$ 2,000.00" (en)</rule>
+      <implementation>Use date-fns with locale, Intl.NumberFormat for currency, next-intl for message strings</implementation>
+    </constraint>
+    <constraint type="testing">
+      <rule>Unit tests MUST cover: budget calculation accuracy, status determination, edge cases (budget = 0, no transactions, high percentage)</rule>
+      <rule>Integration tests MUST verify: real-time updates, installment inclusion, RLS enforcement</rule>
+      <rule>Performance tests MUST validate: < 200ms budget calculation (1000 transactions), < 1s dashboard load (5 widgets)</rule>
+      <rule>Accessibility tests MUST pass: screen reader support, WCAG AA color contrast, keyboard navigation</rule>
+      <implementation>Jest for unit/integration, manual E2E testing, lighthouse for accessibility</implementation>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>BudgetProgress</name>
+      <kind>TypeScript interface</kind>
+      <signature>
+interface BudgetProgress {
+  paymentMethodId: string
+  paymentMethodName: string
+  monthlyBudget: number
+  spentAmount: number
+  remainingAmount: number
+  percentageUsed: number
+  status: 'on-track' | 'near-limit' | 'exceeded'
+  periodStart: Date
+  periodEnd: Date
+  daysUntilClosing: number
+}
+      </signature>
+      <path>fe/lib/supabase/rpc-types.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>getBudgetProgress</name>
+      <kind>Server Action</kind>
+      <signature>
+export async function getBudgetProgress(
+  paymentMethodId: string
+): Promise&lt;BudgetProgress | null&gt;
+      </signature>
+      <path>fe/lib/actions/budget.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>getAllBudgetProgress</name>
+      <kind>Server Action</kind>
+      <signature>
+export async function getAllBudgetProgress(): Promise&lt;BudgetProgress[]&gt;
+      </signature>
+      <path>fe/lib/actions/budget.ts (to be added)</path>
+    </interface>
+
+    <interface>
+      <name>calculate_statement_budget_spent</name>
+      <kind>PostgreSQL function</kind>
+      <signature>
+CREATE OR REPLACE FUNCTION calculate_statement_budget_spent(
+  p_payment_method_id UUID,
+  p_user_id UUID,
+  p_start_date DATE,
+  p_end_date DATE
+) RETURNS DECIMAL(10,2)
+      </signature>
+      <path>fe/scripts/045_budget_calculation_function.sql (to be created)</path>
+    </interface>
+
+    <interface>
+      <name>useBudgetProgress</name>
+      <kind>React Query Hook</kind>
+      <signature>
+export function useBudgetProgress(
+  paymentMethodId: string
+): UseQueryResult&lt;BudgetProgress | null&gt;
+      </signature>
+      <path>fe/lib/hooks/useBudgetProgress.ts (to be created)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Frontend testing uses Jest + React Testing Library for unit/integration tests. Coverage threshold: 70% (branches, functions, lines, statements). Test files co-located with source: __tests__/ directories. Performance tests validate NFR targets. Accessibility tests ensure WCAG AA compliance.
+    </standards>
+
+    <locations>
+      <location>fe/__tests__/actions/budget/ - Budget action tests</location>
+      <location>fe/__tests__/components/budget/ - Widget component tests</location>
+      <location>fe/__tests__/utils/statement-period.test.ts - Period calculation tests</location>
+      <location>fe/__tests__/hooks/ - React Query hook tests</location>
+    </locations>
+
+    <ideas>
+      <idea ac="AC3.1">Test conditional rendering: Credit Mode with budget → Shows widget, Simple Mode → No widget</idea>
+      <idea ac="AC3.2">Test budget calculation accuracy: Create 10 transactions + 3 installment payments → Verify total includes both</idea>
+      <idea ac="AC3.2">Test edge cases: Budget = 0 → Show "Sem limite definido", No transactions → Show 0% progress</idea>
+      <idea ac="AC3.3">Test real-time updates: Add expense → Invalidate query → Widget refetches → Display updates in < 300ms</idea>
+      <idea ac="AC3.4">Test status determination: 40% spent → on-track (blue), 85% spent → near-limit (yellow), 120% spent → exceeded (gray)</idea>
+      <idea ac="AC3.5">Test awareness-first language: Audit all budget messages → NO "OVERSPENT", "WARNING", red colors</idea>
+      <idea ac="AC3.6">Test days until closing: Today = 3 days before closing → Display "3 dias até fechamento"</idea>
+      <idea ac="AC3.7">Performance test: Budget calculation with 1000 transactions → Complete in < 200ms (NFR5 critical)</idea>
+      <idea ac="AC3.8">Test empty states: No budget set → Show CTA "Definir orçamento", No closing date → Show "Configurar"</idea>
+      <idea ac="AC3.9">Regression test: Simple Mode user opens dashboard → NO budget widgets visible, calendar tracking unchanged</idea>
+    </ideas>
+  </tests>
+</story-context>

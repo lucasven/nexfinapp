@@ -187,6 +187,7 @@ export default function LoginPage() {
                     <Link
                       href="/auth/forgot-password"
                       className="text-xs text-primary hover:underline"
+                      tabIndex={-1}
                     >
                       {t("auth.forgotPassword.label", { defaultValue: "Forgot password?" })}
                     </Link>

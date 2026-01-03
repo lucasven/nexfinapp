@@ -1,0 +1,22 @@
+-- Rollback Migration 047: Remove System Category for Credit Card Payments
+-- Story 4.5: System Category for Credit Card Payments
+-- Date: 2025-12-03
+
+-- Drop RLS policies
+DROP POLICY IF EXISTS "Users cannot delete system categories" ON categories;
+DROP POLICY IF EXISTS "Users cannot modify system categories" ON categories;
+DROP POLICY IF EXISTS "Users can view their own categories and system categories" ON categories;
+
+-- Recreate original policy (users can only view their own categories)
+CREATE POLICY "Users can view their own categories" ON categories
+  FOR SELECT
+  USING (user_id = auth.uid());
+
+-- Delete system categories
+DELETE FROM categories WHERE is_system = true AND name IN ('Pagamento Cartão de Crédito', 'Credit Card Payment');
+
+-- Drop index
+DROP INDEX IF EXISTS idx_categories_is_system;
+
+-- Remove is_system column
+ALTER TABLE categories DROP COLUMN IF EXISTS is_system;

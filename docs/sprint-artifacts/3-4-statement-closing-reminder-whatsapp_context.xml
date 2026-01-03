@@ -1,0 +1,322 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3-4</storyId>
+    <title>Statement Closing Reminder WhatsApp</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-03</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-4-statement-closing-reminder-whatsapp.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Credit Mode user with a statement closing date set</asA>
+    <iWant>to receive a WhatsApp reminder 3 days before my statement closes</iWant>
+    <soThat>I'm aware of my upcoming statement total and can make informed spending decisions before the closing date</soThat>
+    <tasks>
+      - Task 1: Database Schema and Query (Create eligibility query for users with closing date in 3 days)
+      - Task 2: Reminder Message Formatting (Build localized messages with awareness-first language)
+      - Task 3: Budget Calculation Integration (Use shared calculate_statement_budget_spent function)
+      - Task 4: WhatsApp Delivery with Retry Logic (Exponential backoff, max 3 attempts)
+      - Task 5: Cron Job Implementation (Daily 9 AM Brazil time, complete in &lt;30s)
+      - Task 6: Logging and Analytics (PostHog events, structured logging)
+      - Task 7: Testing (Unit, integration, performance tests)
+      - Task 8: Documentation (Update CLAUDE.md, deployment guide)
+      - Task 9: Deployment (Pre-deployment checklist, production deploy, validation)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    AC4.1: Reminder Timing and Eligibility
+      - Reminders sent 3 days before statement closing date
+      - Eligibility: Credit Mode + closing_day set + WhatsApp authorized + not opted out
+      - Daily cron job runs at 9 AM Brazil time
+      - Job completes in &lt; 30 seconds for all users (NFR6)
+      - Handle month boundaries (Dec 29 → Jan 1)
+      - Handle multiple credit cards (one reminder per card closing soon)
+
+    AC4.2: Reminder Message Content and Format
+      - Message includes: greeting, closing date, period, total spent, budget status, awareness-first closing, CTA
+      - Localized (pt-BR/en) with proper date/currency formatting
+      - Awareness-first language: "R$ 400 acima do planejado" NOT "OVERSPENT!"
+      - Conditional budget section (only if budget set)
+      - Dynamic content: payment method name, formatted dates, currency amounts, budget percentage
+
+    AC4.3: Budget Calculation Consistency
+      - Use shared database function: calculate_statement_budget_spent()
+      - Same calculation as web dashboard (Story 3.3)
+      - Include regular expenses + pending installment payments
+      - Exclude income transactions and out-of-period transactions
+      - Same decimal precision (2 decimal places)
+
+    AC4.4: Reminder Delivery Success Rate
+      - 99.5% delivery success rate target (NFR8)
+      - Retry logic: exponential backoff (1s, 5s, 15s), max 3 attempts
+      - Error classification: transient (retry) vs permanent (skip)
+      - Monitoring: Track success/failure rates, alert if &lt;99%
+      - Graceful handling: Don't halt entire job on single failure
+
+    AC4.5: Cron Job Execution Performance
+      - Job execution time: &lt; 30 seconds total (NFR6)
+      - Per-user processing: &lt; 300ms average
+      - Database query time: &lt; 5 seconds
+      - Parallel processing: Batches of 10 users concurrently
+      - Early exit if no eligible users
+
+    AC4.6: Localization and Internationalization
+      - Messages localized for user's language (pt-BR or en)
+      - Date formatting: pt-BR="5 de Janeiro", en="January 5th"
+      - Currency formatting: pt-BR="R$ 1.700,00", en="R$ 1,700.00"
+      - Awareness-first tone preserved in both languages
+
+    AC4.7: Analytics and Monitoring
+      - PostHog event: statement_reminder_sent (per user, success/failure details)
+      - PostHog event: statement_reminder_job_completed (daily summary)
+      - Structured logging: Job start, per-user success/failure, job completion
+      - Monitor delivery success rate, execution time, error types
+
+    AC4.8: Error Handling and Edge Cases
+      - Edge case: No eligible users → Exit gracefully with log
+      - Edge case: Month boundary (Dec 29 → Jan 1) → Correct date calculation
+      - Edge case: Feb 31 → Adjust to Feb 28/29
+      - Edge case: Multiple cards → One reminder per card closing soon
+      - Edge case: No transactions → Show R$ 0 total (neutral tone)
+      - Edge case: Budget = R$ 0 → Hide budget section
+      - Edge case: WhatsApp session expired → Log error, alert if &gt;10% auth failures
+      - Edge case: User blocked bot → Permanent failure, don't retry
+
+    AC4.9: Opt-Out and User Preferences (Future-Ready)
+      - Infrastructure ready for opt-out feature (future story)
+      - Query checks statement_reminders_enabled flag (default: true)
+      - No UI or commands for opt-out in this story
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification: Statement-Aware Budgets</title>
+        <section>Statement Reminder Scheduler</section>
+        <snippet>Daily cron job (9 AM) queries eligible users (credit_mode=true, closing_day set, 3 days before closing), calculates budget spent, formats localized message, sends via WhatsApp with retry logic. Target: 99.5% delivery success rate.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Workflow 4: Daily Statement Reminder Job</section>
+        <snippet>Query users WHERE credit_mode=true AND closing_day IS NOT NULL. For each: calculate days_until_closing, if =3 days: get identifiers, calculate period, query spent, get budget, format message, send via Baileys, log, track PostHog. Retry failures with exponential backoff.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>NFR8: Reminder Delivery Success Rate</section>
+        <snippet>99.5% delivery success rate required. Missed reminders damage user trust. Implement retry logic with exponential backoff, monitor daily success rate, alert if below target.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>NFR6: Statement Reminder Job Execution</section>
+        <snippet>Job must complete in &lt;30 seconds for all users. Use parallel processing (batches of 10), efficient queries, early exit if no eligible users. Monitor execution duration.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>whatsapp-bot/src/scheduler.ts</path>
+        <kind>scheduler</kind>
+        <symbol>startScheduler, jobs array</symbol>
+        <lines>1-186</lines>
+        <reason>Centralized cron scheduler where new statement reminder job will be registered. Shows pattern for in-process handlers that need WhatsApp socket.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/scheduler/payment-reminders-job.ts</path>
+        <kind>scheduler-job</kind>
+        <symbol>runPaymentRemindersJob</symbol>
+        <lines>N/A</lines>
+        <reason>Similar reminder job pattern (payment reminders). Reference for job structure, error handling, and WhatsApp message sending.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/scheduler/message-sender.ts</path>
+        <kind>service</kind>
+        <symbol>queueMessage, processMessageQueue</symbol>
+        <lines>N/A</lines>
+        <reason>Message sending infrastructure with retry logic and queue management. May be reusable for statement reminders or provide retry pattern reference.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>messages object</symbol>
+        <lines>1-100</lines>
+        <reason>Existing pt-BR message templates. Add statementReminder section with greeting, closingIn, period, total, budget, remaining, exceeded, cta keys.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>messages object</symbol>
+        <lines>N/A</lines>
+        <reason>English message templates. Add corresponding statementReminder section with English translations.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/database/supabase-client.ts</path>
+        <kind>service</kind>
+        <symbol>supabase client instance</symbol>
+        <lines>N/A</lines>
+        <reason>Database client for querying eligible users, payment methods, and executing calculate_statement_period and calculate_statement_budget_spent functions.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/services/monitoring/logger.ts</path>
+        <kind>service</kind>
+        <symbol>logger</symbol>
+        <lines>N/A</lines>
+        <reason>Structured logging service for job execution, per-user success/failure, and error tracking.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/analytics/events.ts</path>
+        <kind>analytics</kind>
+        <symbol>PostHog event tracking</symbol>
+        <lines>N/A</lines>
+        <reason>PostHog event definitions. Add STATEMENT_REMINDER_SENT and STATEMENT_REMINDER_JOB_COMPLETED events.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/scripts/044_statement_period_calculation.sql</path>
+        <kind>database-migration</kind>
+        <symbol>calculate_statement_period function</symbol>
+        <lines>13-70</lines>
+        <reason>PostgreSQL function for statement period calculation. Handles edge cases (Feb 31, leap years, month boundaries). Use to determine current statement period for reminders.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/scripts/045_budget_calculation_function.sql</path>
+        <kind>database-migration</kind>
+        <symbol>calculate_statement_budget_spent function</symbol>
+        <lines>13-51</lines>
+        <reason>PostgreSQL function for budget spent calculation (transactions + pending installments). Single source of truth for budget calculations. Use for reminder total spent amount.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <node>
+        <package>node-cron</package>
+        <version>latest</version>
+        <usage>Daily cron job scheduler for statement reminders (9 AM Brazil time)</usage>
+      </node>
+      <node>
+        <package>@whiskeysockets/baileys</package>
+        <version>latest</version>
+        <usage>WhatsApp message sending via Baileys client</usage>
+      </node>
+      <node>
+        <package>@supabase/supabase-js</package>
+        <version>latest</version>
+        <usage>Database queries for eligible users, payment methods, budget calculations</usage>
+      </node>
+      <node>
+        <package>date-fns</package>
+        <version>latest</version>
+        <usage>Date formatting with locale awareness (pt-BR: "5 de Janeiro", en: "January 5th")</usage>
+      </node>
+      <node>
+        <package>posthog-node</package>
+        <version>latest</version>
+        <usage>Event tracking: statement_reminder_sent, statement_reminder_job_completed</usage>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    - MUST use calculate_statement_period() PostgreSQL function for statement period calculation (consistency with web)
+    - MUST use calculate_statement_budget_spent() PostgreSQL function for budget totals (single source of truth)
+    - MUST achieve 99.5% delivery success rate (NFR8 - critical reliability requirement)
+    - MUST complete job execution in &lt;30 seconds for all users (NFR6)
+    - MUST use awareness-first language (no judgmental tone, neutral colors)
+    - MUST respect Credit Mode filter (only send to credit_mode=true users)
+    - MUST handle month boundaries correctly (Dec 29 → Jan 1)
+    - MUST use multi-identifier WhatsApp lookup (JID/LID/phone) from Epic 1
+    - MUST localize messages based on user's locale (pt-BR or en)
+    - MUST include installment payments in budget totals (Epic 2 integration)
+    - MUST NOT send reminders if statement_closing_day IS NULL
+    - MUST NOT send reminders to users without WhatsApp authorization
+    - MUST implement retry logic with exponential backoff (max 3 attempts)
+    - MUST classify errors as transient (retry) or permanent (skip)
+    - MUST log all delivery attempts (success, failure, retry count)
+    - MUST track PostHog events for monitoring and analytics
+    - MUST handle edge cases gracefully (no transactions, Feb 31, multiple cards, session expired, user blocked bot)
+    - MUST run as in-process handler (needs WhatsApp socket access)
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>calculate_statement_period</name>
+      <kind>PostgreSQL function</kind>
+      <signature>calculate_statement_period(p_closing_day INTEGER, p_reference_date DATE DEFAULT CURRENT_DATE) RETURNS TABLE(period_start DATE, period_end DATE, next_closing DATE)</signature>
+      <path>fe/scripts/044_statement_period_calculation.sql</path>
+    </interface>
+    <interface>
+      <name>calculate_statement_budget_spent</name>
+      <kind>PostgreSQL function</kind>
+      <signature>calculate_statement_budget_spent(p_payment_method_id UUID, p_user_id UUID, p_start_date DATE, p_end_date DATE) RETURNS DECIMAL(10,2)</signature>
+      <path>fe/scripts/045_budget_calculation_function.sql</path>
+    </interface>
+    <interface>
+      <name>runStatementRemindersJob</name>
+      <kind>Async function (in-process handler)</kind>
+      <signature>async function runStatementRemindersJob(): Promise&lt;void&gt;</signature>
+      <path>whatsapp-bot/src/services/scheduler/statement-reminders-job.ts (NEW)</path>
+    </interface>
+    <interface>
+      <name>sendReminderWithRetry</name>
+      <kind>Async function</kind>
+      <signature>async function sendReminderWithRetry(userId: string, identifiers: UserIdentifiers, message: string, maxRetries: number): Promise&lt;{success: boolean, attempts: number, error?: string}&gt;</signature>
+      <path>whatsapp-bot/src/services/reminders/reminder-sender.ts (NEW)</path>
+    </interface>
+    <interface>
+      <name>buildReminderMessage</name>
+      <kind>Function</kind>
+      <signature>function buildReminderMessage(userData: UserData, budgetData: BudgetData, locale: string): string</signature>
+      <path>whatsapp-bot/src/services/reminders/reminder-message-builder.ts (NEW)</path>
+    </interface>
+    <interface>
+      <name>getBudgetDataForReminder</name>
+      <kind>Async function</kind>
+      <signature>async function getBudgetDataForReminder(paymentMethodId: string, userId: string): Promise&lt;{totalSpent: number, budget: number | null, remaining: number, percentage: number, periodStart: Date, periodEnd: Date}&gt;</signature>
+      <path>whatsapp-bot/src/services/reminders/budget-calculator.ts (NEW)</path>
+    </interface>
+    <interface>
+      <name>messages.statementReminder</name>
+      <kind>Localization object</kind>
+      <signature>statementReminder: { greeting: string, closingIn: string, period: string, total: string, budget: string, remaining: string, exceeded: string, cta: string }</signature>
+      <path>whatsapp-bot/src/localization/pt-br.ts, en.ts (EXTEND)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing uses Jest for unit and integration tests. Coverage threshold: 70% (branches, functions, lines, statements).
+      Unit tests focus on business logic isolation. Integration tests verify database interactions and message delivery.
+      Performance tests validate NFR requirements (job execution &lt;30s, budget calculation &lt;200ms).
+      Manual tests verify awareness-first language and localized message formatting.
+    </standards>
+
+    <locations>
+      - whatsapp-bot/src/__tests__/services/reminders/ (NEW - unit tests for reminder logic)
+      - whatsapp-bot/src/__tests__/scheduler/ (integration tests for cron job)
+      - Manual testing: WhatsApp message format, awareness-first language audit, localization QA
+    </locations>
+
+    <ideas>
+      - AC4.1: Unit test eligibility query (closing day 5, today 2 → eligible; closing day 15, today 2 → not eligible; month boundary Dec 29 → Jan 1)
+      - AC4.1: Integration test query returns correct users with all eligibility filters
+      - AC4.2: Unit test message builder (with budget, no budget, budget exceeded, both locales)
+      - AC4.2: Manual test verify awareness-first language (no judgmental tone)
+      - AC4.3: Integration test budget calculation matches web dashboard
+      - AC4.3: Unit test installments included in total
+      - AC4.4: Unit test retry logic (transient error → retry 3 times, permanent error → no retry, success on attempt 2 → stop)
+      - AC4.4: Integration test mock WhatsApp failure → verify retry behavior
+      - AC4.5: Performance test 100 users → job completes in &lt;30 seconds (NFR6)
+      - AC4.5: Performance test per-user processing &lt;300ms average
+      - AC4.6: Manual test pt-BR and English message formats, date/currency formatting
+      - AC4.7: Integration test PostHog events logged correctly (statement_reminder_sent, statement_reminder_job_completed)
+      - AC4.8: Unit test edge cases (no eligible users, month boundary, Feb 31, multiple cards, no transactions, budget=0, session expired, user blocked)
+      - AC4.8: Integration test job continues after single user failure
+      - Manual test: Create test user with closing date in 3 days, trigger job manually, verify WhatsApp reminder received with correct format
+    </ideas>
+  </tests>
+</story-context>

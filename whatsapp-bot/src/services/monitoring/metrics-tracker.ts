@@ -27,6 +27,12 @@ export type ParsingStrategy =
   | 'first_message_welcome' // Story 2.2: First message detection
   | 'tip_command' // Story 3.5: Tip opt-out/opt-in commands
   | 'goodbye_response' // Story 4.4: Goodbye response processing
+  | 'credit_mode_selection' // Story 1.3: Credit mode selection
+  | 'installment_card_selection' // Story 2.1: Installment card selection (AC1.2 Scenario 3)
+  | 'delete_conversation' // Story 2.7: Delete installment conversation state
+  | 'payoff_conversation' // Story 2.5: Payoff installment conversation state
+  | 'mode_switch_warning_response' // Credit mode switch warning confirmation
+  | 'mode_switch_card_selection' // Credit mode switch card selection
   | 'unknown'
 
 export interface ParsingMetric {

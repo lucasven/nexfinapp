@@ -206,6 +206,162 @@ export interface Messages {
   engagementDestinationSwitchedToIndividual: string
   engagementDestinationSwitchFailed: string
   engagementDestinationNeedGroupFirst: string
+
+  // Credit Mode Selection (Story 1.3)
+  credit_mode: {
+    selection_prompt: string
+    confirmation_credit: string
+    confirmation_simple: string
+    invalid_input: string
+    switch_warning?: (count: number) => string
+    mode_switched_keep?: string
+    mode_switched_payoff?: (count: number) => string
+    mode_switched_success?: (cardName: string, mode: 'credit' | 'simple') => string
+    mode_switch_cancelled?: string
+    invalid_switch_option?: string
+  }
+
+  // Installments (Epic 2 Story 2.1)
+  installment?: {
+    created_title: (description: string) => string
+    created_total: (total: number, installments: number, monthly: number) => string
+    created_first_payment: (date: string) => string
+    created_last_payment: (date: string) => string
+    created_help: string
+    blocked_simple_mode: string
+    select_card: (cards: string[]) => string
+    clarify_amount: string
+    clarify_installments: string
+    error_validation: string
+    error_network: string
+  }
+
+  // Future Commitments (Epic 2 Story 2.3)
+  futureCommitments?: {
+    title: string
+    total_next_months: (months: number, total: number) => string
+    no_active: string
+    create_hint: string
+    month_summary: (month: string, year: string, amount: number, count: number) => string
+    installment_item: (description: string, current: number, total: number, amount: number) => string
+    empty_state: string
+    loading: string
+    error: string
+  }
+
+  // Statement Reminder (Epic 3 Story 3.4)
+  statementReminder?: {
+    greeting: string
+    closingIn: (paymentMethod: string, days: number, date: string) => string
+    period: (start: string, end: string) => string
+    total: (amount: string) => string
+    budget: (budget: string, percentage: number) => string
+    remaining: (amount: string) => string
+    exceeded: (amount: string) => string
+    cta: string
+  }
+
+  // Payment Due Reminder (Epic 4 Story 4.2)
+  paymentReminder?: {
+    title: string
+    dueIn: (days: number, date: string) => string
+    amount: (amount: string) => string
+    cardName: (name: string) => string
+    period: (start: string, end: string) => string
+    footer: string
+  }
+
+  autoPayment?: {
+    descriptionFormat: (cardName: string, monthYear: string) => string
+    jobStarted: string
+    jobCompleted: string
+    transactionCreated: (cardName: string) => string
+    transactionSkipped: (cardName: string) => string
+    transactionFailed: (cardName: string) => string
+  }
+
+  // Installment Payoff (Epic 2 Story 2.5)
+  installmentPayoff?: {
+    list_active: string
+    installment_summary: (emoji: string, description: string, paymentMethod: string, amount: number, count: number, paid: number, total: number, remaining: number) => string
+    select_prompt: (numbers: string) => string
+    confirmation_title: string
+    confirmation_details: (emoji: string, description: string, paymentMethod: string, total: number, count: number, paid: number, paidAmount: number, pending: number, remaining: number) => string
+    confirm_prompt: string
+    success: (emoji: string, description: string, count: number, amount: number) => string
+    cancelled: string
+    no_active: string
+    invalid_selection: (numbers: string) => string
+    error: string
+  }
+
+  // Installment Delete (Epic 2 Story 2.7)
+  installmentDelete?: {
+    list_prompt: string
+    list_item: (number: string, description: string, total: number, installments: number) => string
+    list_status: (paid: number, pending: number) => string
+    list_footer: string
+    no_active: string
+    confirmation_title: string
+    confirmation_intro: string
+    confirmation_details: (emoji: string, description: string, total: number, count: number) => string
+    confirmation_status: string
+    confirmation_paid: (paid: number, paidAmount: number) => string
+    confirmation_pending: (pending: number, remaining: number) => string
+    confirmation_warning?: string
+    confirmation_what_happens: string
+    confirmation_plan_removed: string
+    confirmation_pending_deleted: (count: number) => string
+    confirmation_paid_preserved: (count: number) => string
+    confirmation_commitments_updated: (amount: number) => string
+    confirmation_irreversible: string
+    confirmation_consequences?: string[]
+    confirm_prompt: string
+    success_title: string
+    success_description: (description: string) => string
+    success_impact: string
+    success_pending_deleted: (count: number) => string
+    success_paid_preserved: (count: number) => string
+    success_commitments_updated: (amount: number) => string
+    success_footer: string
+    success?: (description: string) => string // Legacy - keep for backward compatibility
+    cancelled: string
+    timeout: string
+    invalid_selection: (numbers: string) => string
+    error: string
+    error_not_found: string
+    error_unauthorized: string
+  }
+
+  // Statement Summary (Epic 3 Story 3.5)
+  statementSummary?: {
+    header: (paymentMethod: string) => string
+    period: (start: string, end: string) => string
+    total: (amount: string) => string
+    budget: (budget: string, percentage: number) => string
+    exceeded: (amount: string) => string
+    remaining: (amount: string) => string
+    categoryHeader: string
+    categoryLine: (icon: string, name: string, amount: string, percentage: number) => string
+    transactionCount: (count: number) => string
+    includesInstallments: string
+    installmentFormat: (description: string, current: number, total: number, amount: string) => string
+    installmentBullet: (description: string, current: number, total: number, amount: string) => string
+    cta: string
+    noTransactions: string
+    cardSelection: (count: number, list: string) => string
+    noCards: string
+    noClosingDate: string
+    error: string
+  }
+
+  // Statement Period (Epic 3 Story 3.6)
+  statementPeriod?: {
+    currentPeriod: string
+    nextPeriod: string
+    pastPeriod: string
+    periodContext: string
+  }
 }
 
 export interface FormatHelpers {

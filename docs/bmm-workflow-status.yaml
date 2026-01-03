@@ -38,7 +38,7 @@ workflow_status:
     note: "Optional workflows - include as needed"
     workflows:
       - id: "brainstorm-project"
-        status: "optional"
+        status: "docs/brainstorming-session-results-2025-11-27.md"
         agent: "analyst"
         command: "/bmad:bmm:workflows:brainstorm-project"
 
@@ -59,7 +59,8 @@ workflow_status:
         status: "docs/prd.md"
         agent: "pm"
         command: "/bmad:bmm:workflows:prd"
-        output: "PRD focused on new features/changes"
+        output: "PRD for Credit Card Management & AI Helper System (95 FRs, 37 NFRs)"
+        completed: "2025-11-28"
 
       - id: "validate-prd"
         status: "optional"

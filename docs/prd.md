@@ -1,75 +1,72 @@
 # NexFinApp - Product Requirements Document
 
 **Author:** Lucas
-**Date:** 2025-11-21
-**Version:** 1.0
+**Date:** 2025-11-28
+**Version:** 2.0
 
 ---
 
 ## Executive Summary
 
-NexFinApp's Smart Onboarding & Engagement System transforms how users discover and adopt expense tracking by meeting them where they already are: WhatsApp. Instead of another app demanding attention, NexFinApp becomes a conversational companion that makes financial clarity feel effortless.
+NexFinApp's Credit Card Management System transforms how Brazilian users track and understand their credit card spending by embracing cultural norms (installment payments), respecting mental models (opt-in Credit Mode vs Simple Mode), and prioritizing awareness without judgment.
 
-The core insight: **Users don't churn because of missing features—they churn because they never experience the magic.** The solution is guided discovery that demonstrates value immediately, builds confidence progressively, and respects user autonomy throughout.
+The core insight: **Users don't change spending behavior through restriction—they change through clear self-awareness.** The solution is visibility-first features that make the invisible visible, combined with Brazilian-specific installment intelligence that no generic tracker provides.
 
-This PRD defines a two-part system:
-1. **Progressive Onboarding Journey**: Conversation-first discovery that shows the magic before teaching mechanics
-2. **Smart Re-engagement Engine**: Comfort-over-pressure approach that respects user readiness and dignity
+This PRD defines a two-epic system:
+1. **Credit Card Management** (Epic A): Opt-in credit features, installment tracking, statement awareness, and user-defined budgets
+2. **AI Helper System** (Epic B): Conversational domain helpers that educate users about features through natural WhatsApp conversations
 
 ### What Makes This Special
 
-> "The expense tracker that lives where you already are—no app to open, no guilt, no friction."
+> "The first credit card tracker that treats manual entry as mindfulness, not a limitation—with uniquely Brazilian installment awareness and zero guilt."
 
-**The differentiator isn't features—it's the interaction model:**
+**The differentiator isn't automation—it's the interaction philosophy:**
 
-| Traditional Expense Apps | NexFinApp |
-|--------------------------|-----------|
-| Open app → Navigate → Tap → Type → Save | Send a WhatsApp message |
-| Check reports: Login → Dashboard → Charts | "How much did I spend on food?" → Instant answer |
-| Set budget: Settings → Categories → Edit | "Set food budget to 500" → Done |
-| Feels like **work** | Feels like **conversation** |
+| Traditional Credit Card Apps | NexFinApp Credit Management |
+|------------------------------|----------------------------|
+| Auto-sync everything | Manual entry = awareness moment |
+| One-size-fits-all | Credit Mode OR Simple Mode (user choice) |
+| Red warnings: "OVERSPENT!" | Neutral awareness: "Spent more than planned" |
+| Generic credit tracking | Brazilian parcelamento intelligence |
+| Rigid command interface | Conversational AI helpers ("ajuda cartão") |
+| Feature discovery through menus | Education-first helper system |
+| Feels like **surveillance** | Feels like **self-knowledge** |
 
-Competitors build apps. NexFinApp builds a **companion** that meets users in the flow of their daily lives.
+Competitors build budget enforcers. NexFinApp builds **financial awareness companions** that respect user autonomy and cultural context.
 
 ---
 
 ## Project Classification
 
-**Technical Type:** Multi-part Application (web_app + api_backend)
+**Technical Type:** Multi-part Application Enhancement (Brownfield)
 - Next.js 15 web application with Supabase backend
 - Node.js WhatsApp bot service using Baileys library
 - Shared PostgreSQL database with pgvector for AI features
+- **Enhancement context:** Building on mature codebase (~12,000 lines) with existing expense tracking
 
-**Domain:** Personal Finance / Consumer Productivity
+**Domain:** Personal Finance / Credit Card Management (Fintech-adjacent)
 
 **Complexity:** Medium
 - No payment processing (tracking only, not transactions)
 - No KYC/AML regulatory requirements
 - LGPD compliance already implemented in existing codebase
+- Brazilian cultural context: installments (parcelamento) are norm, not exception
 - AI/NLP costs managed with daily limits
 
-**Project Context:** Brownfield Enhancement
-- Building on mature codebase (~12,000 lines)
-- 3-layer NLP system already operational
+**Project Context:** Brownfield Feature Addition
+- Existing 3-layer NLP system operational
 - Multi-identifier WhatsApp authentication in place
-- Existing onboarding infrastructure to extend
-
-### Key Assumptions (To Be Validated)
-
-| Assumption | Validation Method |
-|------------|-------------------|
-| Users churn due to lack of feature awareness | Track tier completion rates, self-select goodbye responses |
-| Conversational interface is the core hook | Compare retention: guided vs. unguided users |
-| Comfort-over-pressure improves retention | A/B test re-engagement approaches (future) |
-| First 24 hours are critical for habit formation | Track time-to-first-action vs. retention correlation |
+- Category management and budgeting infrastructure exists
+- Building credit-specific features as opt-in enhancement
 
 ---
 
 ## Source Documents
 
-**Product Brief:** `docs/product-brief-NexFinApp-2025-11-21.md`
+**Brainstorming Session:** `docs/brainstorming-session-results-2025-11-27.md`
 **Brownfield Documentation:** `docs/index.md` (comprehensive technical docs)
-**Research Documents:** None (proceeding with founder insights)
+**Product Brief:** `docs/product-brief-NexFinApp-2025-11-21.md` (original vision - onboarding focus)
+**Research Documents:** None (proceeding with founder insights + cultural knowledge)
 
 ---
 
@@ -79,40 +76,50 @@ Competitors build apps. NexFinApp builds a **companion** that meets users in the
 
 | Metric | Target | Why It Matters |
 |--------|--------|----------------|
-| **Tier 1 Completion Rate** | 80% within 7 days | If users don't master basics, nothing else matters. 80% = onboarding is working. |
-| **Magic Moment Rate** | 70%+ in first session | User experienced conversational NLP (not just commands). Proves they "got it." |
-| **Unprompted Return Rate** | Track baseline, then improve | Users who come back after 3+ days WITHOUT a prompt = true habit formation. |
-| **Tier Progression** | T1→T2: 80%, T2→T3: 60% | Progressive disclosure working. Drop-off at T2→T3 acceptable (advanced features). |
+| **Credit Mode Opt-in Rate** | 40%+ of credit card users | Validates that users understand and want credit-specific features |
+| **Installment Tracking Adoption** | 60%+ of Credit Mode users | Brazilian feature—high adoption proves cultural fit |
+| **Manual Entry Frequency** | Maintain or improve vs. baseline | Manual entry as mindfulness—shouldn't drop with new features |
+| **Helper Usage Rate** | 30%+ of users try "ajuda" commands | Validates conversational education model |
+| **Budget vs Limit Preference** | Track user-defined budget usage | Shows users want personal budgets, not bank limits |
 
 ### Diagnostic Metrics
 
 | Metric | What It Tells Us |
 |--------|------------------|
-| **Time to First Expense** | Onboarding friction. Target: < 5 minutes from WhatsApp connection. |
-| **Self-Select Goodbye Distribution** | "Confused" = fix onboarding. "Busy" = timing issue. "All Good" = respect and wait. |
-| **Web-Only vs WhatsApp-Active Retention** | Validates WhatsApp as the right channel. Expect 2x retention for WhatsApp users. |
-| **Re-engagement Response Rate** | Are comfort-first messages effective? Track by message type. |
+| **Credit Mode → Simple Mode switches** | If high, mental model mismatch or confusing features |
+| **Installment editing patterns** | Early payoff usage = feature resonance; errors = UX issues |
+| **Helper conversation depth** | Single-turn = lookup; multi-turn = learning/education working |
+| **Statement reminder open rate** | WhatsApp notification effectiveness |
+| **"Real available credit" views** | Interest in future commitment visibility |
 
 ### What We're NOT Measuring (Intentionally)
 
 | Metric | Why We Skip It |
 |--------|----------------|
-| DAU/MAU | Too generic—doesn't explain WHY users engage or churn |
-| Time in App | Expense tracking should be FAST. Long sessions = friction, not engagement |
-| Total Expenses Logged | Vanity metric. A user logging 3 meaningful expenses beats 30 junk entries |
-| Streaks / Consecutive Days | Contradicts "comfort over pressure" philosophy |
+| Total expenses logged | Vanity metric—quality over quantity |
+| Daily active users | Credit cards aren't daily—weekly/monthly is natural |
+| Time in app | Fast interactions = good; long sessions = confusion |
+| Budget adherence % | Awareness-first, not enforcement—judgment metric |
 
 ### Success Definition
 
-**MVP Success** = Evidence that the hypothesis is working:
-- 80% Tier 1 completion proves onboarding guides effectively
-- Magic Moment Rate > 70% proves conversational interface is the hook
-- Qualitative signal: Users describe it as "easy" or "like texting a friend"
+**MVP Success (Epic A - Credit Card Management)** = Evidence of product-market fit:
+- 40%+ opt-in to Credit Mode (users see value in credit-specific features)
+- 60%+ of Credit Mode users track at least one installment (Brazilian feature resonates)
+- Qualitative signal: Users describe budget tracking as "clarity" not "restriction"
+- Zero complaints about "judgmental" language (awareness-first tone working)
 
-**Long-term Success** = Retention correlation:
-- WhatsApp-active users reach 2-month retention at higher rates than web-only
-- Unprompted return rate trends upward over cohorts
-- "Confused" responses in self-select goodbye trend toward zero
+**Platform Success (Epic B - AI Helper System)** = Conversational education working:
+- 30%+ helper usage in first 30 days after launch
+- Multi-turn conversations indicate learning (not just lookups)
+- Support ticket reduction for "how do I..." questions
+- Feature discovery increase (tracked via PostHog events)
+
+**Long-term Success** = Sustained engagement:
+- Credit Mode users maintain manual entry frequency (mindfulness working)
+- Weekly reflection patterns emerge (statement reminders + budget checks)
+- Low Credit→Simple mode churn (mental model holds over time)
+- Helper system expands to all 7 domains (platform value proven)
 
 ---
 
@@ -120,239 +127,222 @@ Competitors build apps. NexFinApp builds a **companion** that meets users in the
 
 ### MVP - Minimum Viable Product
 
-The smallest thing that proves the hypothesis: **"Guided discovery + comfort-over-pressure = retention"**
+The smallest system that proves the hypothesis: **"Awareness without judgment + Brazilian cultural fit = engaged credit card users"**
 
-#### 1. Conversation-First Welcome (Critical)
+#### Epic A: Credit Card Management - Core Features (Sprint 1-2)
 
-When a user sends their FIRST message after WhatsApp connection:
-- Bot responds conversationally to whatever they said
-- Demonstrates the "magic" immediately (NLP understanding)
-- THEN guides toward first expense: "By the way, try saying something like 'I spent 50 on lunch'"
+**Foundation: Opt-in Mental Model**
 
-**Why first:** Users must experience the conversational magic before learning mechanics.
+**Feature 1: Credit Mode vs Simple Mode**
+- Users choose their mental model on first credit card transaction
+- **Credit Mode**: Installments, statements, credit-specific budgets, future commitment tracking
+- **Simple Mode**: Treat credit card like debit (existing expense tracking behavior)
+- Can switch modes later (with data implications warning)
+- Default: Ask user; no assumption
 
-#### 2. Progressive Onboarding Journey (Core)
+**Why first:** Respects that users have different relationships with credit cards. Forcing credit features on everyone frustrates "pay-in-full" users.
 
-**TIER 1: "Expense Mastery"** - Available immediately
-| Step | Action | Accomplishment |
-|------|--------|----------------|
-| 1 | Add an expense | "You just tracked spending!" |
-| 2 | Edit expense category | "You can reorganize anytime" |
-| 3 | Delete an expense | "Mistakes happen, easy fix" |
-| 4 | Add a category | "Make it yours" |
+**Feature 2: User-Defined Monthly Budget**
+- Separate from bank credit limit
+- User sets: "I want to spend R$2,000 this month" (even if limit is R$10,000)
+- Tracks spending against personal budget, not bank limit
+- Only for Credit Mode users
 
-> Unlock message: "You've mastered expense tracking! But here's where it gets powerful..."
+**Why critical:** High-limit users don't track against bank limit—they track against personal intention. This is the core "awareness" metric.
 
-**TIER 2: "Plan Ahead"** - Unlocks after Tier 1
-| Step | Action | Accomplishment |
-|------|--------|----------------|
-| 5 | Set a budget | "Now you're planning ahead!" |
-| 6 | Add recurring expense | "Autopilot for subscriptions" |
-| 7 | List categories | "See your world organized" |
+**Feature 3: Installment Tracker (Parcelamento)**
+- Add expense with installment: "Gastei 600 em 3x no celular"
+- System creates:
+  - Parent installment record (R$600 total, 3 months)
+  - Monthly expense entries (R$200 each) across 3 months
+- Dashboard shows: "Future commitments: R$800/month for next 4 months"
+- **Budget impact:** Only monthly payment counts against monthly budget
+- Option to mark as "paid off early" (if bank offers discount)
 
-> Unlock message: "You're not just tracking—you're planning! Ready to see the big picture?"
+**Why Brazilian-specific:** Parcelamento is cultural norm. Generic trackers miss this—NexFinApp embraces it.
 
-**TIER 3: "See the Big Picture"** - Unlocks after Tier 2
-| Step | Action | Accomplishment |
-|------|--------|----------------|
-| 8 | Edit a category | "Evolve your system" |
-| 9 | Check reports | "See your progress" |
+**Feature 4: Statement Awareness**
+- User sets statement closing date (e.g., day 5 of month)
+- WhatsApp reminder 3 days before: "Statement closes in 3 days. Current total: R$2,450"
+- Shows what's on THIS statement vs next statement
+- Neutral tone: "Here's where you're at" not "WARNING: High spending"
 
-> Completion message: "You're a pro now! You have complete control over your finances."
+**Feature 5: Due Date Reminder with Auto-Expense**
+- User sets payment due date (e.g., day 15 of month)
+- Reminder: "Credit card payment due in 2 days: R$2,450"
+- Auto-creates expense in NEXT month: "Pagamento Cartão de Crédito - R$2,450"
+- Category: "Credit Card Payment" (system category)
+- Separates current month usage from payment transaction
 
-**Design Principles:**
-- Track tier completion (not individual steps) for cleaner analytics
-- Users can skip ahead or stop the flow entirely (autonomy)
-- Contextual teaching: suggest custom categories AFTER first expense
+**Feature 6: Awareness-First Language**
+- Replace all judgmental copy:
+  - ~~"OVERSPENT!"~~ → "Spent more than planned"
+  - ~~"Warning: Budget exceeded"~~ → "Heads up: Budget reached"
+  - ~~"You're R$500 over"~~ → "R$500 above personal budget"
+- No red colors for amounts (neutral blues/grays)
+- Celebration language for staying within budget: "On track this month"
 
-#### 3. Smart Re-engagement Engine (Core)
-
-**5-State Engagement Machine:**
-```
-ACTIVE → (14 days inactive) → GOODBYE_SENT
-GOODBYE_SENT → (response "1") → HELP_FLOW → ACTIVE
-GOODBYE_SENT → (response "2") → REMIND_LATER (2-week timer)
-GOODBYE_SENT → (response "3" or 48h timeout) → DORMANT
-DORMANT → (any user message) → ACTIVE
-```
-
-**Weekly Review** (Activity-triggered only):
-- ONLY sent if user had activity in the previous week
-- No activity = no message (silence IS the design)
-- Message: "Hey, you did great last week tracking your expenses! How are things going?"
-
-**Self-Select Goodbye:**
-> "Hey! We noticed you've been quiet. No pressure at all—finances are personal.
->
-> Quick question before we go quiet:
-> 1️⃣ I was confused—help me out?
-> 2️⃣ Just busy—remind me later
-> 3️⃣ All good, I'll reach out when ready
->
-> (Or just ignore this, we'll be here 💙)"
-
-**Response Handling:**
-| Response | Action |
-|----------|--------|
-| 1 (confused) | Restart Tier 1 guidance, offer help |
-| 2 (busy) | Set 2-week reminder, then DORMANT |
-| 3 (all good) | Immediate DORMANT, door stays open |
-| No response (48h) | Default to DORMANT |
-
-**Failsafe Design:**
-- Idempotent scheduler: re-running never double-sends
-- Timer states in DB, not memory
-- Any user message immediately → ACTIVE
-
-#### 4. Group Context Handling (Critical - 66% of users)
-
-- Store `preferred_destination` on user profile: `individual` | `group`
-- If user first interacts via group → default to group for all bot messages
-- User can switch explicitly via command
-- All re-engagement messages respect preferred destination
-
-#### 5. User Opt-Out (LGPD Required)
-
-**Dual Channel Opt-Out:**
-- WhatsApp: User sends "stop reminders" or similar → opt-out
-- Web: Settings/configs page toggle
-- Both channels sync to single source of truth in DB
-- Opt-out = no re-engagement messages, onboarding tips still allowed
-
-#### 6. Tone & Voice System
-
-**Always Use:**
-- Curiosity: "Wondering how your week went?"
-- Celebration: "You've tracked 10 expenses! Your future self thanks you"
-- Dignity: "Finances are personal—we're just here when you need us"
-- Empowerment: "You're building a clearer picture"
-
-**Never Use:**
-- Guilt: ~~"You haven't logged anything in 5 days..."~~
-- Pressure: ~~"Don't forget to track your spending!"~~
-- Judgment: ~~"Your budget is way over!"~~
-- Manipulation: ~~"Don't lose your streak!"~~
-
-#### 7. Testing Infrastructure (Critical)
-
-- E2E testing capability for WhatsApp bot flows
-- Integration tests for 30-day user journey scenarios
-- Scheduler test coverage for all timing edge cases
+**Why foundational:** Sets the tone for entire feature set. Awareness, not enforcement.
 
 ---
 
-### Growth Features (Post-MVP)
+#### Epic B: AI Helper System - Platform Foundation (Sprint 3-4)
 
-| Feature | Trigger to Build |
-|---------|------------------|
-| Per-WhatsApp-number notification silencing | User feedback requesting granular control |
-| Web-active → WhatsApp nudges | After MVP proves WhatsApp retention advantage |
-| Personalized pacing | Data shows different users need different speeds |
-| Contextual tips ("5 food expenses → suggest budget") | After Tier completion rates stabilize |
-| Self-serve documentation page | If "confused" responses remain high despite onboarding |
+**Fully Feature-Flagged Architecture**
+
+**Feature 7: Feature Flag Infrastructure**
+- PostHog integration (frontend + WhatsApp bot)
+- Environment variable fallback: `ENABLE_AI_HELPERS=true`
+- Gradual rollout: Internal → 5% → 25% → 50% → 100%
+- Instant rollback capability
+
+**Feature 8: Base Helper Architecture**
+- Abstract `BaseHelper` class with shared conversational logic
+- Each domain helper extends base
+- Helper router (keyword-based domain identification)
+- Conversational freedom: AI can ask clarifying questions before executing
+
+**Feature 9: Credit Card Helper ("ajuda cartão")**
+- Explains Credit Mode vs Simple Mode
+- Teaches installment tracking
+- Shows statement dates and budget status
+- Guides through first credit card expense
+- **Priority 1:** This validates the helper concept
+
+**Feature 10: Transaction Helper ("ajuda gastos")**
+- Explains CRUD operations (add, edit, delete expenses)
+- Shows recent transactions
+- Guides category changes
+- **Priority 2:** High usage expected
+
+**Feature 11: AI Integration Test Framework**
+- Separate test suite (NOT in CI pipeline)
+- Structured scenarios with expected outcomes
+- Run manually before deploying prompt/tool changes
+- Prevents regression on conversational quality
+
+**Feature 12: Gradual Rollout Strategy**
+- Week 1-2: Internal testing (Lucas only)
+- Week 3: 5% rollout, monitor error rates
+- Week 4-5: 25% rollout, monitor quality
+- Week 6-7: 50% rollout
+- Week 8+: 100% if metrics healthy
+- Maintain old system for 2 months, then deprecate
 
 ---
 
-### Vision Features (Future)
+### Growth Features (Post-MVP, Sprint 2-4)
 
-| Feature | Why Wait |
-|---------|----------|
-| Milestone celebrations ("1 month of tracking!") | Need long-term users first |
-| Smart quiet hours (timezone-aware) | Requires usage pattern data |
-| Recovery flows (special re-onboarding for long-absent users) | Need to understand why users leave first |
-| A/B testing framework | Manual iteration until patterns emerge |
-| Push notifications | WhatsApp-first; only add if WhatsApp insufficient |
+Build these AFTER MVP validation, based on user feedback and metrics:
+
+#### Epic A Enhancements
+
+**Guilt-Free Catch-Up Mode**
+- Detects multi-day gaps in expense entry
+- Message: "Welcome back! Let's pick up where you left off" (not "You missed 5 days")
+- Bulk entry flow optimized for catching up
+- **Trigger:** If manual entry frequency drops
+
+**Pre-Statement Summary**
+- 3 days before closing, send category breakdown
+- "This statement: Food R$650, Transport R$320, Shopping R$890"
+- Helps users understand where money went
+- **Trigger:** After statement reminders prove valuable
+
+**"Real Available Credit" Calculation**
+- Dashboard widget: "Credit Limit R$10k - Future installments R$800 = R$9,200 available"
+- Shows true purchasing power accounting for future commitments
+- **Trigger:** If installment adoption is high (60%+)
+
+**Weekly Category Spotlight** (A/B Test)
+- Variant of existing weekly reminder
+- Shows biggest spending category with neutral awareness
+- "This week: Food was your top category at R$320"
+- **Trigger:** A/B test against current weekly reminder
+
+**Spending Personality Insights**
+- Neutral archetypes: "Weekend Spender", "Subscription Collector"
+- Not judgments—just patterns
+- "You spend 60% of your budget on weekends"
+- **Trigger:** After 3 months of data
+
+#### Epic B Expansion
+
+**Budget Helper ("ajuda orçamento")**
+- Set budgets per category
+- Track budget progress
+- Explain difference between budget and credit limit
+
+**Reports Helper ("ajuda relatórios")**
+- Show spending summaries
+- Category breakdowns
+- Balance inquiries
+
+**Recurring Helper ("ajuda recorrentes")**
+- Set up subscriptions
+- Manage recurring expenses
+- **Note:** Expenses only for now; if recurring income needed, route to income-helper
+
+**Category Helper ("ajuda categorias")**
+- Show all categories
+- Create custom categories
+- Change expense categories
+
+**Income Helper ("ajuda receitas")**
+- Track income sources
+- Differentiate from expenses
+- Show net cash flow
 
 ---
 
-### Explicitly Out of Scope (MVP and Beyond)
+### Vision Features (Future, 6+ months)
+
+Build these ONLY after Epic A/B prove successful:
+
+**Three Rings Visualization**
+- Dashboard: Credit utilization ring, Category budget ring, Savings goal ring
+- Apple Watch-style progress visualization
+- **Why wait:** Need established user base with multiple goals
+
+**Predictive Spending Projections**
+- "At this pace, you'll reach R$3,500 by statement close (R$500 over budget)"
+- Requires ML model trained on spending patterns
+- **Why wait:** Need historical data for accuracy
+
+**Streak Shields with Planned Splurge Days**
+- Gamification: Budget streaks with planned exceptions
+- "Mark this as a planned splurge day"
+- **Why wait:** Risks adding pressure; validate awareness-first approach first
+
+**AI-Powered Anomaly Detection**
+- "Unusual spending detected: 3 restaurant charges in one day"
+- Catches duplicate entries or fraud
+- **Why wait:** Requires baseline patterns per user
+
+**OCR Helper ("ajuda foto")**
+- Guide receipt scanning
+- Troubleshoot OCR issues
+- Explain best practices
+- **Why wait:** Helper system must prove valuable first
+
+**Multi-Card Support**
+- Users with 2-3 credit cards
+- Budget allocation across cards
+- Consolidated view
+- **Why wait:** Adds significant complexity; validate single-card first
+
+---
+
+### Explicitly Out of Scope
+
+**Never build these (contradict core philosophy):**
 
 | Feature | Why Never |
 |---------|-----------|
-| Gamification (badges, streaks, leaderboards) | Contradicts "comfort over pressure" philosophy |
-| Guilt-based messaging | Core value: preserve user dignity |
-| Aggressive re-engagement (daily reminders) | Becomes spam, damages trust |
-
----
-
-## User Experience Principles
-
-### Conversational Personality
-
-**Target feeling:** "Like texting a friend who happens to be really good with money."
-
-| Not This | But This |
-|----------|----------|
-| Bank (formal, transactional) | Knowledgeable friend (helpful, casual) |
-| Productivity app (task-oriented, demanding) | Supportive companion (encouraging, never judging) |
-| Chatbot (scripted, robotic) | Reliable assistant (always there, never pushy) |
-
-### Key Interaction Patterns
-
-**Response Timing:**
-- Immediate acknowledgment for actions ("Got it!")
-- Brief pause before longer messages (feels more human)
-- Never stack multiple messages rapidly (overwhelming)
-
-**Message Length:**
-- Short for confirmations: 1 line ("✓ R$30 em Transporte registrado!")
-- Medium for guidance: 2-3 lines
-- Chunked for explanations: Multiple messages only if necessary
-
-**Conversation Recovery:**
-- Gibberish input → Gentle redirect with example
-- User seems frustrated → Offer help, don't repeat same instruction
-- User goes quiet mid-flow → Don't chase; they'll return when ready
-
-**Celebration Calibration:**
-- Small wins: Brief ("Done!")
-- Tier completions: Moderate (one emoji acceptable)
-- Never over-the-top (no "🎉🎊🥳 AMAZING!!!")
-
-### Critical Interaction Flows
-
-**First Message (Magic Moment):**
-```
-User: "oi" (or anything)
-Bot: "Oi! Que bom ter você aqui 😊
-     [contextual response if parseable]
-     Experimenta mandar algo tipo 'gastei 50 no almoço'
-     e vê a mágica acontecer."
-```
-
-**First Expense Success:**
-```
-User: "gastei 30 no uber"
-Bot: "✓ R$30 em Transporte registrado!
-     Você acabou de registrar sua primeira despesa. Fácil, né?"
-```
-
-**Tier Unlock (Non-Pushy):**
-```
-Bot: "Você já dominou o básico!
-     Quer ir além? Tenta definir um orçamento:
-     'definir orçamento de 500 para alimentação'"
-[User can ignore—no follow-up]
-```
-
-**Self-Select Goodbye (Dignity-First):**
-```
-Bot: "Oi! Notamos que você está quieto. Sem pressão—finanças são pessoais.
-
-     Pergunta rápida antes de ficarmos em silêncio:
-     1️⃣ Fiquei confuso—me ajuda?
-     2️⃣ Só ocupado—me lembra depois
-     3️⃣ Tá tudo certo, eu falo quando precisar
-
-     (Ou só ignora, estaremos aqui 💙)"
-```
-
-### Language Considerations
-
-- **Primary:** Portuguese (pt-BR) - matches user base
-- **Casual register:** Uses "você" not "o senhor", contractions okay
-- **Emoji:** Sparingly, never more than one per message
-- **English fallback:** Detect language preference, respond accordingly
+| Automatic spending limits (enforce) | Awareness, not enforcement |
+| Guilt-based reminders ("You're over budget again") | Dignity-first philosophy |
+| Public leaderboards / social comparison | Compare to past self only |
+| Gamified daily streaks | Adds pressure, contradicts comfort approach |
 
 ---
 
@@ -361,130 +351,235 @@ Bot: "Oi! Notamos que você está quieto. Sem pressão—finanças são pessoais
 > **Altitude Check:** Each FR states WHAT capability exists, not HOW it's implemented.
 > These are testable capabilities that downstream work (UX, Architecture, Epics) will deliver.
 
-### Onboarding & Discovery
+### Epic A: Credit Card Management
 
-- **FR1:** System detects when a user sends their first WhatsApp message after account connection
-- **FR2:** System responds conversationally to the user's first message before providing onboarding guidance
-- **FR3:** System guides new users toward their first expense with a natural language example
-- **FR4:** System tracks user progress through a 3-tier onboarding journey (Tier 1, Tier 2, Tier 3)
-- **FR5:** System detects when a user completes all actions within a tier
-- **FR6:** System sends tier completion celebration message when user completes a tier
-- **FR7:** System unlocks next tier guidance after previous tier completion
-- **FR8:** Users can perform any action at any time regardless of tier (no hard gating)
-- **FR9:** System provides contextual hints after relevant actions (e.g., suggest custom category after first expense)
-- **FR10:** Users can explicitly skip onboarding guidance ("stop tips" or similar)
+#### Mental Model & Opt-In
 
-### Engagement State Management
+- **FR1:** System detects when user adds first credit card transaction
+- **FR2:** System prompts user to choose between Credit Mode and Simple Mode
+- **FR3:** System stores user's credit card mode preference (credit/simple) per payment method
+- **FR4:** Users can switch between Credit Mode and Simple Mode at any time
+- **FR5:** System warns user about data implications when switching modes (installments affected)
+- **FR6:** Simple Mode users see credit cards treated as regular expenses (existing behavior)
+- **FR7:** Credit Mode users access credit-specific features (budgets, installments, statements)
 
-- **FR11:** System maintains an engagement state for each user (ACTIVE, GOODBYE_SENT, HELP_FLOW, REMIND_LATER, DORMANT)
-- **FR12:** System automatically transitions user to GOODBYE_SENT after 14 days of inactivity
-- **FR13:** System sends self-select goodbye message when transitioning to GOODBYE_SENT state
-- **FR14:** System processes user responses to goodbye message (options 1, 2, 3)
-- **FR15:** System transitions to HELP_FLOW and restarts Tier 1 guidance when user responds "1" (confused)
-- **FR16:** System transitions to REMIND_LATER and schedules 2-week reminder when user responds "2" (busy)
-- **FR17:** System transitions to DORMANT when user responds "3" (all good) or after 48h no response
-- **FR18:** System immediately transitions any DORMANT user to ACTIVE upon receiving any message
-- **FR19:** System prevents duplicate state transition messages (idempotent scheduler)
+#### User-Defined Budgets
 
-### Weekly Engagement
+- **FR8:** Credit Mode users can set a personal monthly credit card budget (separate from bank limit)
+- **FR9:** System tracks spending against user-defined budget, not credit limit
+- **FR10:** Users can edit monthly budget at any time
+- **FR11:** System displays budget progress: spent amount, remaining, and percentage
+- **FR12:** System uses awareness-first language when budget is exceeded (no judgment)
 
-- **FR20:** System tracks user activity on a weekly basis (had activity vs. no activity)
-- **FR21:** System sends weekly review message to users who had activity in the previous week
-- **FR22:** System does NOT send weekly review to users with no activity (silence by design)
-- **FR23:** Weekly review message celebrates activity and checks in conversationally
+#### Installment Tracking (Parcelamento)
 
-### Message Destination
+- **FR13:** Users can add expenses with installment information (total amount + number of installments)
+- **FR14:** System creates parent installment record with full amount and duration
+- **FR15:** System automatically creates monthly expense entries for each installment payment
+- **FR16:** System distributes installment payments across correct months from purchase date
+- **FR17:** System displays "future commitments" showing total upcoming installment obligations per month
+- **FR18:** Only the monthly installment payment counts against monthly budget (not full amount)
+- **FR19:** Users can view all active installments with remaining payments
+- **FR20:** Users can mark installments as "paid off early"
+- **FR21:** Early payoff recalculates future commitment totals
+- **FR22:** Users can edit or delete installment records
+- **FR23:** Deleting installment removes all future monthly payments
 
-- **FR24:** System stores preferred message destination per user (individual or group)
-- **FR25:** System automatically sets preferred destination based on user's first interaction context
-- **FR26:** System sends all proactive messages (onboarding, re-engagement) to user's preferred destination
-- **FR27:** Users can explicitly change their preferred destination via command
+#### Statement Awareness
 
-### User Preferences & Opt-Out
+- **FR24:** Credit Mode users can set their credit card statement closing date
+- **FR25:** System sends WhatsApp reminder 3 days before statement closing date
+- **FR26:** Statement reminder includes current statement total
+- **FR27:** System distinguishes expenses on current statement vs next statement
+- **FR28:** Users can view pre-statement summary with category breakdown
+- **FR29:** Statement reminders use neutral, awareness-first tone
 
-- **FR28:** Users can opt out of re-engagement messages via WhatsApp command
-- **FR29:** Users can opt out of re-engagement messages via web settings
-- **FR30:** System syncs opt-out preference between WhatsApp and web (single source of truth)
-- **FR31:** System respects opt-out for re-engagement messages while still allowing onboarding tips
-- **FR32:** Users who opt out can opt back in via either channel
+#### Payment Due Date
 
-### Message Content & Tone
+- **FR30:** Credit Mode users can set credit card payment due date
+- **FR31:** System sends WhatsApp reminder 2 days before payment due date
+- **FR32:** Payment reminder includes total amount due
+- **FR33:** System auto-creates "Credit Card Payment" expense transaction in next month
+- **FR34:** Payment expense uses system category "Pagamento Cartão de Crédito"
+- **FR35:** Payment transaction separates current month usage from actual payment
+- **FR36:** Users can edit or delete auto-generated payment transactions
 
-- **FR33:** All automated messages follow defined tone guidelines (curiosity, celebration, dignity, empowerment)
-- **FR34:** System never sends messages with guilt, pressure, judgment, or manipulation framing
-- **FR35:** System uses appropriate message length based on context (short confirmations, medium guidance)
-- **FR36:** System limits emoji usage to maximum one per message
-- **FR37:** System sends messages in user's preferred language (pt-BR default, English fallback)
+#### Awareness-First Language & UX
+
+- **FR37:** All credit card features use awareness-first language (no judgment terminology)
+- **FR38:** System replaces "overspent" with "spent more than planned"
+- **FR39:** System replaces "warning" with "heads up"
+- **FR40:** Budget visualizations use neutral colors (no red for overspending)
+- **FR41:** System celebrates staying within budget with positive reinforcement
+- **FR42:** All error messages maintain dignity-first tone
+
+### Epic B: AI Helper System
+
+#### Platform Infrastructure
+
+- **FR43:** System integrates with PostHog feature flags for helper system control
+- **FR44:** Feature flags support gradual rollout (5%, 25%, 50%, 100%)
+- **FR45:** System supports instant feature flag rollback
+- **FR46:** Environment variable fallback enables/disables helper system
+
+#### Helper Architecture
+
+- **FR47:** System implements base helper architecture with shared conversational logic
+- **FR48:** System routes user messages to appropriate domain helper based on keywords
+- **FR49:** Helper system coexists with existing 3-layer NLP system
+- **FR50:** Helpers can ask clarifying questions before executing actions
+- **FR51:** Helpers prioritize education over immediate execution
+- **FR52:** Helper conversations support multi-turn interactions
+
+#### Domain Helpers (MVP)
+
+- **FR53:** Credit Card Helper responds to "ajuda cartão" and variations
+- **FR54:** Credit Card Helper explains Credit Mode vs Simple Mode
+- **FR55:** Credit Card Helper teaches installment tracking syntax
+- **FR56:** Credit Card Helper shows user's statement dates and budget status
+- **FR57:** Credit Card Helper guides users through first credit card expense
+
+- **FR58:** Transaction Helper responds to "ajuda gastos", "ajuda transações" and variations
+- **FR59:** Transaction Helper explains CRUD operations (add, edit, delete)
+- **FR60:** Transaction Helper shows recent transactions
+- **FR61:** Transaction Helper guides category changes
+- **FR62:** Transaction Helper differentiates between income and expenses
+
+#### Testing & Quality
+
+- **FR63:** System supports AI integration testing with structured scenarios
+- **FR64:** Test framework validates conversational quality (not just correctness)
+- **FR65:** Tests cover multi-turn conversation flows
+- **FR66:** Tests verify education-first behavior (explain before execute)
+- **FR67:** Test results prevent regression on prompt/tool changes
+
+#### Rollout & Monitoring
+
+- **FR68:** System logs all helper interactions with user ID and timestamp
+- **FR69:** System tracks helper usage metrics (invocations, conversation depth, success rate)
+- **FR70:** System monitors error rates per helper domain
+- **FR71:** System supports gradual user rollout with cohort tracking
+- **FR72:** Old AI system remains accessible during helper system rollout
+- **FR73:** System deprecates old AI system 2 months after 100% rollout
+
+### Growth Features (Post-MVP)
+
+#### Catch-Up Mode
+
+- **FR74:** System detects multi-day gaps in expense entry
+- **FR75:** System offers guilt-free catch-up flow with "Welcome back" messaging
+- **FR76:** Catch-up mode optimizes bulk entry workflow
+
+#### Enhanced Awareness
+
+- **FR77:** System calculates "real available credit" (limit minus future installments)
+- **FR78:** System displays future installment obligations on dashboard
+- **FR79:** System sends pre-statement category breakdown summary
+- **FR80:** System identifies spending personality patterns (weekend spender, etc.)
+- **FR81:** Spending patterns use neutral archetypes (no judgment)
+
+#### Additional Domain Helpers
+
+- **FR82:** Budget Helper responds to "ajuda orçamento"
+- **FR83:** Reports Helper responds to "ajuda relatórios", "ajuda saldo"
+- **FR84:** Recurring Helper responds to "ajuda recorrentes", "ajuda assinaturas"
+- **FR85:** Category Helper responds to "ajuda categorias"
+- **FR86:** Income Helper responds to "ajuda receitas", "ajuda renda"
 
 ### Analytics & Learning
 
-- **FR38:** System tracks tier completion events with timestamps
-- **FR39:** System tracks "magic moment" occurrences (NLP-parsed first message success)
-- **FR40:** System tracks self-select goodbye response distribution (confused/busy/all good/no response)
-- **FR41:** System tracks unprompted return events (user message after 3+ days without re-engagement prompt)
-- **FR42:** System tracks engagement state transitions with timestamps
-- **FR43:** Analytics data accessible via admin dashboard or database queries
-
-### Scheduler & Background Processing
-
-- **FR44:** System runs daily evaluation of user engagement states
-- **FR45:** System processes scheduled reminders (REMIND_LATER → check after 2 weeks)
-- **FR46:** System runs weekly review evaluation (identify users with activity for review message)
-- **FR47:** Scheduler operations are idempotent (safe to re-run without side effects)
-- **FR48:** Scheduler state persisted in database (survives service restarts)
-
-### Testing Infrastructure
-
-- **FR49:** System supports E2E testing of WhatsApp message flows (mock or test client)
-- **FR50:** System supports integration testing of 30-day user journey scenarios
-- **FR51:** System supports unit testing of scheduler timing logic and edge cases
-- **FR52:** Test coverage includes all engagement state transitions
-- **FR53:** Test coverage includes idempotency verification for scheduler operations
+- **FR87:** System tracks Credit Mode vs Simple Mode adoption rates
+- **FR88:** System tracks installment creation and editing patterns
+- **FR89:** System tracks manual entry frequency before/after credit features
+- **FR90:** System tracks helper usage rates per domain
+- **FR91:** System tracks conversation depth (single-turn vs multi-turn)
+- **FR92:** System tracks mode switching (Credit ↔ Simple)
+- **FR93:** System tracks statement reminder open rates
+- **FR94:** System tracks budget vs limit preference (user-defined vs bank limit)
+- **FR95:** Analytics data accessible via PostHog dashboards
 
 ---
 
 ## Non-Functional Requirements
 
-> Only NFRs that matter for this specific feature. Generic requirements (LGPD, RLS) already implemented in existing codebase.
+> Only NFRs that matter for this specific feature set. Generic requirements (LGPD, RLS, authentication) already implemented in existing codebase.
 
 ### Performance
 
 | Requirement | Target | Rationale |
 |-------------|--------|-----------|
-| **NFR1:** First message response time | < 3 seconds | "Magic moment" requires quick response to feel conversational |
-| **NFR2:** Onboarding hint response time | < 2 seconds | Contextual tips should feel immediate, not delayed |
-| **NFR3:** Scheduler evaluation time | < 60 seconds for full user base | Daily/weekly jobs must complete reliably |
+| **NFR1:** Helper response time (first turn) | < 2 seconds | Conversational education feels natural—delays break flow |
+| **NFR2:** Helper response time (follow-up) | < 1.5 seconds | Multi-turn conversations require quick responses |
+| **NFR3:** Installment calculation time | < 500ms | User waits while system creates monthly entries—must be instant |
+| **NFR4:** Mode switching operation | < 1 second | Immediate feedback on Credit ↔ Simple mode change |
+| **NFR5:** Budget progress calculation | < 200ms | Displayed on every expense add—critical path operation |
+| **NFR6:** Statement reminder job execution | < 30 seconds for all users | Daily cron job must complete reliably |
 
 ### Reliability
 
 | Requirement | Target | Rationale |
 |-------------|--------|-----------|
-| **NFR4:** Scheduler job success rate | 99.9% | Missed engagement windows damage user relationship |
-| **NFR5:** Message delivery confirmation | Retry on failure, max 3 attempts | Proactive messages must actually reach users |
-| **NFR6:** State persistence | Survive service restarts | Engagement state must never be lost |
-| **NFR7:** Idempotency guarantee | No duplicate messages ever | Sending goodbye twice = trust broken |
+| **NFR7:** Installment calculation accuracy | 100% | Financial data—zero tolerance for errors |
+| **NFR8:** Reminder delivery success rate | 99.5% | Missed reminders damage trust (statement/payment dates) |
+| **NFR9:** Feature flag response time | < 100ms | Rollback must be instantaneous if issues detected |
+| **NFR10:** Helper system failover | Graceful degradation to old NLP | Users never blocked from core expense tracking |
+| **NFR11:** Mode switching data integrity | No orphaned installments | Credit→Simple must handle existing installments safely |
+| **NFR12:** Payment auto-expense creation | 100% success | Missing payment transactions = broken accounting |
 
 ### Scalability
 
 | Requirement | Target | Rationale |
 |-------------|--------|-----------|
-| **NFR8:** User base capacity | Handle 10,000 users without architecture changes | Build for growth even though starting small |
-| **NFR9:** Scheduler efficiency | O(n) or better for user evaluation | Linear scaling with user growth |
+| **NFR13:** Helper system capacity | 1000 concurrent conversations | Gradual rollout peak load (10% of 10k users) |
+| **NFR14:** Installment storage efficiency | O(n) per user, not O(n²) | Users may have 10+ active installments |
+| **NFR15:** Feature flag evaluation performance | < 10ms per check | Called on every helper invocation |
+| **NFR16:** Statement reminder scaling | Handle 10,000 users daily check | Linear scaling with user growth |
 
 ### Data Integrity
 
 | Requirement | Target | Rationale |
 |-------------|--------|-----------|
-| **NFR10:** Opt-out sync latency | < 5 seconds between channels | User opts out on web, must reflect in WhatsApp immediately |
-| **NFR11:** Analytics accuracy | 100% event capture | Metrics drive product decisions; gaps are unacceptable |
+| **NFR17:** Installment-to-expense linkage | Maintain parent-child relationships | Editing parent must cascade correctly |
+| **NFR18:** Budget calculation consistency | Real-time accuracy across all views | Web and WhatsApp must show same numbers |
+| **NFR19:** Mode preference persistence | Survive service restarts | User choice must never be lost |
+| **NFR20:** Statement date validation | Prevent invalid dates (32nd, etc.) | User input must be validated |
+| **NFR21:** Early payoff recalculation | Atomic operation | All future payments updated or none |
 
 ### Observability
 
 | Requirement | Target | Rationale |
 |-------------|--------|-----------|
-| **NFR12:** Scheduler job logging | Full audit trail | Debug failed jobs, understand timing issues |
-| **NFR13:** Engagement state change logging | All transitions logged with timestamps | Reconstruct user journey for debugging |
-| **NFR14:** Message delivery logging | Success/failure logged per message | Identify delivery issues quickly |
+| **NFR22:** Helper conversation logging | Full transcript with metadata | Debug conversational issues, improve prompts |
+| **NFR23:** Feature flag change audit trail | All rollout steps logged | Reconstruct what % was live when issues occurred |
+| **NFR24:** Installment operation logging | Create, edit, delete, payoff events | Track user behavior for UX improvements |
+| **NFR25:** Mode switching events | Log all Credit ↔ Simple transitions | Understand why users change modes |
+| **NFR26:** Helper error rate alerting | Real-time alerts at >5% error rate | Catch helper system degradation immediately |
+| **NFR27:** Reminder delivery logging | Success/failure per user | Identify WhatsApp delivery issues |
+
+### Usability (Credit-Specific)
+
+| Requirement | Target | Rationale |
+|-------------|--------|-----------|
+| **NFR28:** Mode selection clarity | 90%+ users understand choice | If confused, defeats purpose of opt-in model |
+| **NFR29:** Installment syntax learnability | Users succeed on first try after helper guidance | Natural language must be intuitive |
+| **NFR30:** Budget vs limit distinction | Clear in all UI/messaging | Users must understand personal budget ≠ credit limit |
+| **NFR31:** Awareness-first tone consistency | Zero user complaints about judgment | Language audit across all features |
+
+### Compatibility
+
+| Requirement | Target | Rationale |
+|-------------|--------|-----------|
+| **NFR32:** Simple Mode backward compatibility | Existing users unaffected | Credit features are additive, not breaking |
+| **NFR33:** Old NLP system coexistence | Both systems operational during rollout | 2-month overlap period during helper migration |
+| **NFR34:** Feature flag framework compatibility | Works in both frontend and WhatsApp bot | Cross-platform feature control |
+
+### Maintainability
+
+| Requirement | Target | Rationale |
+|-------------|--------|-----------|
+| **NFR35:** Helper system extensibility | Add new domain helper in < 1 day | BaseHelper architecture must be reusable |
+| **NFR36:** Installment logic testability | 100% unit test coverage | Financial calculations require comprehensive tests |
+| **NFR37:** Feature flag documentation | All flags documented with rollout plan | Future developers understand migration state |
 
 ---
 
@@ -492,71 +587,123 @@ Bot: "Oi! Notamos que você está quieto. Sem pressão—finanças são pessoais
 
 ### What We're Building
 
-A **Smart Onboarding & Engagement System** that transforms NexFinApp from "another expense app" into "a conversational companion that meets users where they already are."
+A **Credit Card Management System with AI Helper Platform** that transforms NexFinApp from basic expense tracking into culturally-aware financial awareness companion for Brazilian users.
 
-**Core Hypothesis:** Guided discovery + comfort-over-pressure = retention
+**Core Hypothesis:** Awareness without judgment + Brazilian cultural fit (parcelamento) + conversational education = engaged credit card users who maintain manual entry as mindfulness practice.
 
 ### Key Decisions Made
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| First user experience | Conversation-first, show magic before teaching | Proves the value prop immediately |
-| Onboarding structure | 3-tier progressive disclosure | Achievements, not homework |
-| Re-engagement philosophy | Comfort over pressure | Preserve dignity, no guilt |
-| Weekly reviews | Activity-triggered only | Silence IS the design |
-| Group handling | First-interaction auto-detect | 66% of users use groups |
-| Testing | E2E infrastructure mandatory | Critical for scheduler reliability |
+| **Mental model approach** | Opt-in: Credit Mode OR Simple Mode | Respects different user relationships with credit cards |
+| **Budget philosophy** | User-defined budget, not bank limit | High-limit users track intention, not max spending |
+| **Brazilian-specific feature** | Installment (parcelamento) tracking | Cultural norm—generic trackers miss this |
+| **Language tone** | Awareness-first, zero judgment | "Spent more than planned" not "OVERSPENT!" |
+| **AI architecture** | Education-first helpers, not executors | "Ajuda cartão" teaches, then executes |
+| **Rollout strategy** | Feature-flagged gradual rollout (5%→100%) | Safe experimentation with instant rollback |
+| **Testing approach** | AI integration test framework (non-CI) | Prevent conversational regression on prompt changes |
+| **Platform investment** | Helper system benefits ALL features | Credit helper validates, then expand to 7 domains |
 
 ### By the Numbers
 
 | Category | Count |
 |----------|-------|
-| Functional Requirements | 53 |
-| Non-Functional Requirements | 14 |
-| MVP Components | 7 |
-| Engagement States | 5 |
-| Onboarding Tiers | 3 |
-| Success Metrics | 4 primary + 4 diagnostic |
+| **Functional Requirements** | 95 FRs |
+| **Non-Functional Requirements** | 37 NFRs |
+| **MVP Features (Epic A)** | 6 features |
+| **MVP Features (Epic B)** | 6 components |
+| **Growth Features** | 10 features |
+| **Vision Features** | 6 features |
+| **Success Metrics** | 5 primary + 5 diagnostic |
+| **Sprints Estimated** | 4 sprints (Epic A: 1-2, Epic B: 3-4) |
+
+### Innovation Highlights
+
+**From Brainstorming Session:**
+
+1. **Manual Entry as Mindfulness** - Reframed limitation (no auto-sync) as feature (awareness moment)
+2. **Fitness Tracker → Guilt Loops** - Forced Relationships technique revealed: guilt breaks habits, awareness builds them
+3. **Parcelamento Intelligence** - Brazilian cultural norm elevated to core feature (not afterthought)
+4. **AI as Teacher** - Helpers educate first, execute second (vs rigid tool-calling)
+5. **Feature Flag Discipline** - Major architectural change protected by gradual rollout
 
 ### The Product in One Sentence
 
-> NexFinApp's onboarding shows users the conversational magic immediately, guides them through progressive mastery, and re-engages with dignity—never guilt.
+> NexFinApp's credit card management respects how Brazilians actually use credit (installments), treats manual entry as self-awareness (not chore), and educates through conversation (not menus)—all while preserving dignity with judgment-free language.
 
 ---
 
 ## Next Steps
 
-**PRD Complete.** Here's the recommended path forward:
+**PRD Complete!** Here's the recommended path forward:
 
 ### Option A: Architecture First (Recommended)
 
-Since this is a brownfield project with existing infrastructure, the Architect should review how the new engagement system integrates with:
-- Existing `services/onboarding/` code
-- Current database schema (`user_profiles`)
-- Railway cron job infrastructure
-- WhatsApp message handlers
+Since Epic B (AI Helper System) involves major architectural change, the Architect should design:
+- Helper system architecture (BaseHelper, router, domain helpers)
+- Feature flag integration points (PostHog + environment variables)
+- Installment data model (parent-child relationships, future commitments calculation)
+- Credit Mode vs Simple Mode data schema
+- Helper system coexistence with existing 3-layer NLP
+- Gradual rollout infrastructure
 
-**Command:** Load `architect` agent → `*create-architecture` or `/bmad:bmm:workflows:architecture`
+**Why first:** Feature-flagged architecture requires upfront design. Installment tracking has complex data relationships. Helper system is platform investment—architecture must be extensible.
 
-### Option B: Epics & Stories Directly
+**Command:** `/bmad:bmm:workflows:architecture`
 
-If the architecture is straightforward (extend existing patterns), skip to breaking this PRD into implementable stories.
+---
 
-**Command:** Load `pm` agent → `*create-epics-and-stories` or `/bmad:bmm:workflows:create-epics-and-stories`
+### Option B: Epic Breakdown Directly
+
+If architecture is straightforward (extend existing patterns), skip to breaking this PRD into implementable stories:
+- Epic A: Credit Card Management (6 features → ~8-12 stories)
+- Epic B: AI Helper System (6 components → ~10-15 stories)
+
+**Command:** `/bmad:bmm:workflows:create-epics-and-stories`
+
+---
 
 ### Option C: UX Design First
 
-If you want detailed message copy and flow diagrams before implementation.
+If you want detailed interaction flows and copy variations before implementation:
+- Credit Mode vs Simple Mode opt-in dialog
+- Installment entry UX flows
+- Helper conversation scripts
+- Statement reminder copy testing
+- Awareness-first language audit
 
-**Command:** Load `ux-designer` agent → `*create-design` or `/bmad:bmm:workflows:create-ux-design`
+**Command:** `/bmad:bmm:workflows:create-ux-design`
 
 ---
 
-**My Recommendation:** Go with **Option A (Architecture)** since this feature touches scheduler infrastructure, state management, and multi-channel sync—areas that benefit from explicit architectural decisions before coding.
+### My Recommendation: **Option A (Architecture)**
+
+**Reasons:**
+1. **Epic B is architectural:** Helper system is platform-level change requiring careful design
+2. **Feature flags need infrastructure:** PostHog integration, gradual rollout mechanics
+3. **Installment complexity:** Parent-child relationships, budget calculations, future commitments
+4. **Data schema decisions:** Credit Mode preference storage, installment tables, payment tracking
+5. **Coexistence strategy:** Old NLP + new helpers running simultaneously requires design
+6. **Brownfield constraints:** Must integrate with existing 3-layer NLP, category system, budget infrastructure
+
+**After Architecture:**
+- Then UX Design for Credit Mode opt-in flows and helper conversations
+- Then Epic Breakdown with full architectural context
+- Then Implementation (Sprint 1-4)
 
 ---
 
-_This PRD captures the vision for NexFinApp's Smart Onboarding & Engagement System—a conversational companion that guides users with empowerment, not pressure._
+**Update Workflow Status:**
 
-_Created through collaborative discovery between Lucas and John (PM Agent)._
+The workflow status file should be updated:
+- `prd` status: `docs/prd.md` ✓
+- Next recommended: `architecture`
+
+---
+
+_This PRD captures the vision for NexFinApp's Credit Card Management System—awareness without judgment, Brazilian cultural intelligence, and conversational education._
+
+_Created through collaborative discovery between Lucas and PM Agent, based on brainstorming session facilitated by 9 BMAD agents on 2025-11-27._
+
+_Generated: 2025-11-28_
 

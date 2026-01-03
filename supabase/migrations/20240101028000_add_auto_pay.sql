@@ -1,0 +1,1 @@
+../../fe/scripts/028_add_auto_pay.sql

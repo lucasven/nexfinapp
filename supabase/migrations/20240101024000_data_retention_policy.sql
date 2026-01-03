@@ -1,0 +1,1 @@
+../../fe/scripts/024_data_retention_policy.sql

@@ -1,0 +1,48 @@
+-- Rollback Migration: Atomic Transaction Functions
+-- Purpose: Remove PostgreSQL RPC functions for atomic operations
+-- Date: 2025-12-02
+-- Epic: 2 - Parcelamento Intelligence
+-- Story: 2.0 - Epic 2 Foundation & Blockers Resolution (Part 3)
+-- Version: 042 Rollback
+
+-- ============================================================================
+-- SECTION 1: DROP ATOMIC TRANSACTION FUNCTIONS
+-- Purpose: Remove all functions created in migration 042
+-- ============================================================================
+
+DROP FUNCTION IF EXISTS switch_credit_mode_atomic(UUID, UUID, BOOLEAN, BOOLEAN);
+DROP FUNCTION IF EXISTS create_installment_plan_atomic(UUID, UUID, TEXT, DECIMAL, INTEGER, TEXT, UUID, DATE);
+DROP FUNCTION IF EXISTS delete_installment_plan_atomic(UUID, UUID, TEXT);
+
+-- ============================================================================
+-- SECTION 2: VERIFY CLEANUP
+-- Purpose: Confirm all functions were removed
+-- ============================================================================
+
+DO $$
+DECLARE
+  function_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO function_count
+  FROM pg_proc p
+  JOIN pg_namespace n ON p.pronamespace = n.oid
+  WHERE n.nspname = 'public'
+    AND p.proname IN (
+      'switch_credit_mode_atomic',
+      'create_installment_plan_atomic',
+      'delete_installment_plan_atomic'
+    );
+
+  IF function_count = 0 THEN
+    RAISE NOTICE 'All atomic transaction functions removed successfully';
+  ELSE
+    RAISE WARNING 'Expected 0 functions remaining, found %', function_count;
+  END IF;
+END $$;
+
+-- ============================================================================
+-- ROLLBACK COMPLETE
+-- Expected execution time: < 2 seconds
+-- Note: This rollback ONLY removes functions, it does NOT revert any data
+-- changes made using these functions (e.g., switched credit modes, created plans)
+-- ============================================================================

@@ -129,11 +129,15 @@ export async function deleteCategory(id: string) {
   // Check if category is custom and owned by user
   const { data: category } = await supabase
     .from("categories")
-    .select("is_custom, user_id, name")
+    .select("is_custom, is_system, user_id, name")
     .eq("id", id)
     .single()
 
   if (!category) throw new Error("Category not found")
+
+  if (category.is_system) {
+    throw new Error("System categories cannot be deleted")
+  }
 
   if (!category.is_custom) {
     throw new Error("Cannot delete default categories")

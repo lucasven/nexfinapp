@@ -1,0 +1,1042 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>3-2-set-user-defined-monthly-budget</story-id>
+    <story-title>Set User-Defined Monthly Budget</story-title>
+    <epic>Epic 3: Statement-Aware Budgets</epic>
+    <status>ready-for-dev</status>
+    <created-date>2025-12-03</created-date>
+    <dependencies>
+      <dependency status="complete">Story 3.1: Set Statement Closing Date</dependency>
+      <dependency status="complete">Epic 1: Credit Mode Foundation</dependency>
+      <dependency status="complete">Epic 2: Parcelamento Intelligence</dependency>
+    </dependencies>
+  </metadata>
+
+  <story-overview>
+    <user-story>
+      As a Credit Mode user with a statement closing date set,
+      I want to set a personal monthly budget for my credit card (separate from bank credit limit),
+      So that I can track my spending against a budget that aligns with my statement period and financial goals.
+    </user-story>
+
+    <business-context>
+      This story enables users to set personal spending goals separate from bank-imposed credit limits.
+      The budget applies to statement periods (not calendar months), aligning with the user's mental model
+      of credit card spending. Budget is optional - users can track without budget, or add budget later.
+      Foundation for budget progress tracking (Story 3.3) and statement reminders (Story 3.4).
+    </business-context>
+
+    <acceptance-criteria-summary>
+      - AC2.1: Budget Settings UI Display (Credit Mode + Closing Date Required)
+      - AC2.2: Budget Amount Validation (>= 0, no upper limit)
+      - AC2.3: Budget Storage (payment_methods.monthly_budget)
+      - AC2.4: Immediate Effect on Budget Tracking
+      - AC2.5: Budget Update Flexibility (no restrictions)
+      - AC2.6: Confirmation and Feedback
+      - AC2.7: Helper Text and User Guidance
+      - AC2.8: Simple Mode Compatibility (Cross-Cutting)
+      - AC2.9: Optional Budget (User Can Choose Not to Set)
+    </acceptance-criteria-summary>
+
+    <key-design-decisions>
+      <decision id="1">
+        <title>Budget is Optional (Can Be NULL)</title>
+        <rationale>Not all users want to set budgets - some prefer to just track spending</rationale>
+        <implementation>monthly_budget is nullable column, budget progress widget handles NULL gracefully</implementation>
+      </decision>
+      <decision id="2">
+        <title>No Upper Limit on Budget Amount</title>
+        <rationale>Users have different financial situations - don't impose arbitrary limits</rationale>
+        <implementation>Validation only checks >= 0, no maximum. Confirmation dialog for very high budgets.</implementation>
+      </decision>
+      <decision id="3">
+        <title>Budget Applies to Statement Period (Not Calendar Month)</title>
+        <rationale>Epic 3 goal is statement-aware budgets aligned with billing cycles</rationale>
+        <implementation>Budget tracked against statement period dates from Story 3.1</implementation>
+      </decision>
+      <decision id="4">
+        <title>Allow Setting Budget Lower Than Current Spending</title>
+        <rationale>Users should have flexibility to adjust budget based on current situation</rationale>
+        <implementation>No validation against current spending, show info message with awareness-first language</implementation>
+      </decision>
+    </key-design-decisions>
+  </story-overview>
+
+  <architecture-context>
+    <epic-3-tech-spec>
+      <statement-period-calculation>
+        - Uses calculate_statement_period() PostgreSQL function (Migration 044)
+        - Handles edge cases: Feb 31 → Feb 28/29, day 31 in 30-day months → day 30
+        - Single source of truth for period calculations across web and WhatsApp
+        - Returns: period_start, period_end, next_closing dates
+      </statement-period-calculation>
+
+      <budget-progress-calculation>
+        - Uses get_budget_for_period() PostgreSQL function (Migration 043)
+        - Includes regular transactions + installment payments due in period
+        - Query structure:
+          UNION ALL (regular transactions in period, installment payments due in period)
+        - Returns: date, description, amount, category info, installment details
+      </budget-progress-calculation>
+
+      <data-models>
+        <payment-methods-table>
+          - id: UUID PRIMARY KEY
+          - user_id: UUID (FK to auth.users, CASCADE delete)
+          - name: TEXT NOT NULL
+          - type: TEXT CHECK (type IN ('credit', 'debit', 'cash', 'pix', 'other'))
+          - credit_mode: BOOLEAN DEFAULT NULL (TRUE=Credit Mode, FALSE=Simple Mode, NULL=not set)
+          - statement_closing_day: INTEGER CHECK (1-31), nullable
+          - monthly_budget: DECIMAL(10,2), nullable (Story 3.2 uses this column)
+          - payment_due_day: INTEGER (days after closing)
+          - created_at, updated_at: TIMESTAMPTZ
+          - UNIQUE(user_id, name)
+          - RLS: user_id = auth.uid()
+        </payment-methods-table>
+
+        <budget-progress-interface>
+          interface BudgetProgress {
+            paymentMethodId: string
+            paymentMethodName: string
+            monthlyBudget: number
+            spentAmount: number
+            remainingAmount: number
+            percentageUsed: number
+            status: 'on-track' | 'near-limit' | 'exceeded'
+            periodStart: Date
+            periodEnd: Date
+            daysUntilClosing: number
+          }
+        </budget-progress-interface>
+      </data-models>
+
+      <nfr-performance>
+        - NFR5: Budget progress calculation time &lt; 200ms (critical path operation)
+        - Budget update operation target: &lt; 200ms (including analytics)
+        - Dashboard widget refetch target: &lt; 300ms
+      </nfr-performance>
+
+      <nfr-security>
+        - Epic3-S1: Budget data access control via RLS (user_id = auth.uid())
+        - Epic3-S2: Statement settings modification verified by server actions
+        - Epic3-S4: Budget amount validation (monthly_budget >= 0 OR NULL)
+      </nfr-security>
+    </epic-3-tech-spec>
+
+    <integration-with-story-3-1>
+      <dependency-requirements>
+        - REQUIRED: Statement closing date (statement_closing_day) must be set first
+        - Budget settings UI only visible when statement_closing_day IS NOT NULL
+        - Budget applies to statement period calculated by Story 3.1 function
+        - Located in same settings UI as statement closing date (credit-card-settings.tsx)
+        - Both settings stored in payment_methods table
+      </dependency-requirements>
+
+      <statement-period-usage>
+        - Helper text shows exact statement period dates: "Budget applies to statement period (Day X to Day Y)"
+        - Uses getStatementPeriodPreview() from Story 3.1 to display current period
+        - Dynamic subtext shows current statement period dates in budget settings
+      </statement-period-usage>
+    </integration-with-story-3-1>
+
+    <integration-with-epic-1>
+      <credit-mode-dependency>
+        - Only visible for Credit Mode credit cards (credit_mode = true)
+        - Simple Mode users (credit_mode = false) don't see budget features
+        - Respects mode separation established in Epic 1
+        - Conditional rendering: creditMode &amp;&amp; closingDateSet &amp;&amp; &lt;BudgetSettings /&gt;
+      </credit-mode-dependency>
+
+      <payment-methods-table-usage>
+        - Uses monthly_budget column added in Story 1.1 (Migration 040)
+        - No new columns needed for Story 3.2
+        - RLS policies from Epic 1 ensure security
+        - Server action checks credit_mode = true before allowing updates
+      </payment-methods-table-usage>
+    </integration-with-epic-1>
+
+    <integration-with-epic-2>
+      <installment-payments-in-budget>
+        - Budget calculations include installment payment amounts
+        - Installment payments counted in statement period budget totals
+        - Uses get_budget_for_period() function from Migration 043
+        - Example: R$ 200 installment payment counts toward R$ 2,000 budget
+        - Installment details shown in budget breakdown (Story 3.3, not this story)
+      </installment-payments-in-budget>
+    </integration-with-epic-2>
+  </architecture-context>
+
+  <existing-code-context>
+    <server-actions-payment-methods>
+      <file-path>fe/lib/actions/payment-methods.ts</file-path>
+      <existing-functions>
+        <!-- Story 3.1 functions that Story 3.2 will follow as template -->
+        <function>
+          <name>updateStatementSettings</name>
+          <signature>
+            async function updateStatementSettings(
+              paymentMethodId: string,
+              closingDay: number
+            ): Promise&lt;{ success: boolean; nextClosingDate?: string; error?: string }&gt;
+          </signature>
+          <description>Updates statement_closing_day with validation, RLS security, and analytics</description>
+          <pattern-to-follow>
+            1. Get authenticated user (Supabase auth.getUser())
+            2. Validate inputs (closingDay 1-31, UUID format)
+            3. Fetch current payment method (to check credit_mode, get previous value)
+            4. Verify Credit Mode credit card
+            5. Update database with RLS enforcement
+            6. Track analytics event (PostHog)
+            7. Revalidate Next.js paths
+            8. Return success with optional data
+          </pattern-to-follow>
+        </function>
+
+        <function>
+          <name>getStatementPeriodPreview</name>
+          <signature>
+            async function getStatementPeriodPreview(
+              closingDay: number,
+              referenceDate?: Date
+            ): Promise&lt;{
+              periodStart: Date
+              periodEnd: Date
+              nextClosing: Date
+              daysUntilClosing: number
+            } | null&gt;
+          </signature>
+          <description>Calls calculate_statement_period() RPC function for real-time preview</description>
+          <usage-in-story-3-2>Budget settings will use this to show "Budget applies to period (X - Y)"</usage-in-story-3-2>
+        </function>
+      </existing-functions>
+
+      <new-function-to-create>
+        <function>
+          <name>setMonthlyBudget</name>
+          <signature>
+            export async function setMonthlyBudget(
+              paymentMethodId: string,
+              budget: number | null
+            ): Promise&lt;{ success: boolean; error?: string }&gt;
+          </signature>
+          <implementation-notes>
+            - Follow updateStatementSettings() pattern
+            - Validate: budget >= 0 OR budget === null
+            - Verify prerequisites: credit_mode = true AND statement_closing_day IS NOT NULL
+            - Update payment_methods.monthly_budget
+            - Track PostHog events: monthly_budget_set or monthly_budget_removed
+            - Return success or error with user-friendly message
+          </implementation-notes>
+          <analytics-events>
+            - Event: AnalyticsEvent.MONTHLY_BUDGET_SET
+            - Properties: userId, paymentMethodId, budgetAmount, previousBudget, currentSpending, percentageUsed
+            - Event: AnalyticsEvent.MONTHLY_BUDGET_REMOVED (when budget set to null)
+          </analytics-events>
+        </function>
+      </new-function-to-create>
+    </server-actions-payment-methods>
+
+    <statement-settings-component>
+      <file-path>fe/components/settings/statement-settings.tsx</file-path>
+      <component-structure>
+        - Uses Card, CardHeader, CardTitle, CardDescription from UI components
+        - Uses Select dropdown for day selection (1-31)
+        - Shows real-time preview with loading state
+        - Save button with disabled state and loading indicator
+        - Toast notifications for success/error
+        - Conditional rendering: Only visible for Credit Mode credit cards
+        - Localized with useTranslations('statementSettings')
+        - Date formatting with date-fns (pt-BR/en)
+      </component-structure>
+
+      <pattern-to-follow-for-budget-settings>
+        1. Create similar UI structure with Card layout
+        2. Use controlled input for budget amount (currency format)
+        3. Show helper text with statement period dates
+        4. Save button calls setMonthlyBudget() server action
+        5. Toast on success/error with localization
+        6. Conditional rendering based on credit_mode AND statement_closing_day
+        7. Handle loading states during save
+        8. Use react state for selectedBudget tracking
+      </pattern-to-follow-for-budget-settings>
+    </statement-settings-component>
+
+    <credit-card-settings-integration>
+      <file-path>fe/components/settings/credit-card-settings.tsx</file-path>
+      <current-structure>
+        - Maps over creditCards (filtered by type = 'credit')
+        - Displays each card with name, mode badge, switch button
+        - Renders StatementSettings component below each Credit Mode card (Story 3.1)
+        - Uses router.refresh() after updates
+        - Includes warning dialogs for mode switching
+      </current-structure>
+
+      <integration-point-for-story-3-2>
+        - BudgetSettings component will be added BELOW StatementSettings
+        - Same conditional rendering: Only if credit_mode = true
+        - Additional condition: Only if statement_closing_day IS NOT NULL
+        - Pass paymentMethod prop and onUpdate callback
+        - Show message "Set closing date first" if no closing date
+      </integration-point-for-story-3-2>
+
+      <current-code-snippet>
+        <![CDATA[
+        {/* Story 3.1: Statement Settings for Credit Mode credit cards */}
+        <StatementSettings
+          paymentMethod={card}
+          onUpdate={() => router.refresh()}
+        />
+
+        {/* Story 3.2: Budget Settings will be added here */}
+        {/* Only visible if credit_mode = true AND statement_closing_day IS NOT NULL */}
+        ]]>
+      </current-code-snippet>
+    </credit-card-settings-integration>
+  </existing-code-context>
+
+  <localization-context>
+    <existing-structure>
+      <pt-br-file>fe/lib/localization/pt-br.ts</pt-br-file>
+      <en-file>fe/lib/localization/en.ts</en-file>
+      <types-file>fe/lib/localization/types.ts</types-file>
+
+      <statement-settings-keys-example>
+        statementSettings: {
+          title: 'Configurações de Fatura',
+          closingDayLabel: 'Dia de Fechamento',
+          closingDayPlaceholder: 'Selecione o dia',
+          notSet: 'Não definido',
+          currentPeriod: 'Período atual: {{start}} - {{end}}',
+          nextClosing: 'Próximo fechamento: {{date}} ({{days}} dias)',
+          saveButton: 'Salvar',
+          successToast: 'Dia de fechamento definido para o dia {{day}}',
+          errorToast: 'Erro ao salvar configuração. Tente novamente.',
+          validationError: 'Dia de fechamento deve ser entre 1 e 31',
+          description: 'Define o dia do mês em que sua fatura fecha',
+          helpText: 'Escolha o dia que aparece na sua fatura do cartão'
+        }
+      </statement-settings-keys-example>
+    </existing-structure>
+
+    <new-keys-to-add>
+      <budget-settings-pt-br>
+        budgetSettings: {
+          title: 'Orçamento Mensal',
+          label: 'Orçamento',
+          placeholder: 'Digite o valor (ex: 2000)',
+          notSet: 'Não definido',
+          helperText: 'Orçamento aplica-se ao período da fatura ({{start}} - {{end}})',
+          saveButton: 'Salvar',
+          removeButton: 'Remover Orçamento',
+          successToast: 'Orçamento mensal definido: {{amount}}',
+          removedToast: 'Orçamento removido. Gastos continuam sendo rastreados.',
+          errorToast: 'Erro ao salvar orçamento. Tente novamente.',
+          validationErrorNegative: 'Orçamento não pode ser negativo',
+          validationErrorInvalid: 'Digite um valor válido',
+          confirmZeroBudget: 'Orçamento de R$ 0 significa sem limite. Confirma?',
+          confirmHighBudget: 'Orçamento de {{amount}}+. Confirma?',
+          infoOverBudget: 'Você já gastou {{spent}}, acima do orçamento de {{budget}}',
+          setClosingDateFirst: 'Configure o dia de fechamento primeiro para definir orçamento',
+          tooltipTitle: 'Sobre Orçamento Mensal',
+          tooltipContent: 'Seu orçamento mensal é diferente do limite do cartão. Defina um valor que você deseja gastar por período de fatura.',
+        }
+      </budget-settings-pt-br>
+
+      <budget-settings-en>
+        budgetSettings: {
+          title: 'Monthly Budget',
+          label: 'Budget',
+          placeholder: 'Enter amount (e.g., 2000)',
+          notSet: 'Not set',
+          helperText: 'Budget applies to statement period ({{start}} - {{end}})',
+          saveButton: 'Save',
+          removeButton: 'Remove Budget',
+          successToast: 'Monthly budget set: {{amount}}',
+          removedToast: 'Budget removed. Spending still tracked.',
+          errorToast: 'Error saving budget. Please try again.',
+          validationErrorNegative: 'Budget cannot be negative',
+          validationErrorInvalid: 'Enter a valid amount',
+          confirmZeroBudget: 'Budget of R$ 0 means no limit. Confirm?',
+          confirmHighBudget: 'Budget of {{amount}}+. Confirm?',
+          infoOverBudget: 'You have already spent {{spent}}, above budget of {{budget}}',
+          setClosingDateFirst: 'Set statement closing date first to enable budget',
+          tooltipTitle: 'About Monthly Budget',
+          tooltipContent: 'Your monthly budget is different from your card limit. Set an amount you want to spend per statement period.',
+        }
+      </budget-settings-en>
+
+      <types-update>
+        <!-- Add to Messages interface in types.ts -->
+        budgetSettings: {
+          title: string
+          label: string
+          placeholder: string
+          notSet: string
+          helperText: string
+          saveButton: string
+          removeButton: string
+          successToast: string
+          removedToast: string
+          errorToast: string
+          validationErrorNegative: string
+          validationErrorInvalid: string
+          confirmZeroBudget: string
+          confirmHighBudget: string
+          infoOverBudget: string
+          setClosingDateFirst: string
+          tooltipTitle: string
+          tooltipContent: string
+        }
+      </types-update>
+    </new-keys-to-add>
+
+    <currency-formatting>
+      <pt-br-format>R$ 2.000,00 (comma for decimals, dot for thousands)</pt-br-format>
+      <en-format>R$ 2,000.00 (dot for decimals, comma for thousands)</en-format>
+      <implementation>
+        Use Intl.NumberFormat with user's locale from next-intl
+        Example: new Intl.NumberFormat(locale, { style: 'currency', currency: 'BRL' }).format(amount)
+      </implementation>
+    </currency-formatting>
+  </localization-context>
+
+  <analytics-context>
+    <existing-events-file>fe/lib/analytics/events.ts</existing-events-file>
+
+    <existing-events-reference>
+      <!-- From Story 3.1 -->
+      STATEMENT_CLOSING_DAY_SET = 'statement_closing_day_set'
+      STATEMENT_PERIOD_PREVIEW_VIEWED = 'statement_period_preview_viewed'
+      STATEMENT_SETTINGS_ERROR = 'statement_settings_error'
+
+      <!-- From Epic 1 -->
+      CREDIT_MODE_SELECTED = 'credit_mode_selected'
+      CREDIT_MODE_SWITCHED = 'credit_mode_switched'
+    </existing-events-reference>
+
+    <new-events-to-add>
+      <event>
+        <name>MONTHLY_BUDGET_SET</name>
+        <value>'monthly_budget_set'</value>
+        <properties>
+          - userId: string (from auth.uid())
+          - paymentMethodId: string (UUID)
+          - budgetAmount: number (the new budget value)
+          - previousBudget: number | null (previous value for context)
+          - currentSpending: number (from budget progress query)
+          - percentageUsed: number (currentSpending / budgetAmount * 100)
+          - timestamp: ISO8601 string
+        </properties>
+        <trigger>After successful database update in setMonthlyBudget()</trigger>
+      </event>
+
+      <event>
+        <name>MONTHLY_BUDGET_REMOVED</name>
+        <value>'monthly_budget_removed'</value>
+        <properties>
+          - userId: string
+          - paymentMethodId: string
+          - previousBudget: number (the budget that was removed)
+          - timestamp: ISO8601
+        </properties>
+        <trigger>When user sets budget to null (removes budget)</trigger>
+      </event>
+    </new-events-to-add>
+
+    <tracking-implementation>
+      <pattern-from-story-3-1>
+        await trackServerEvent(
+          user.id,
+          AnalyticsEvent.STATEMENT_CLOSING_DAY_SET,
+          {
+            [AnalyticsProperty.PAYMENT_METHOD_ID]: paymentMethodId,
+            closingDay,
+            previousClosingDay: previousClosingDay ?? null,
+          }
+        )
+      </pattern-from-story-3-1>
+
+      <usage-in-story-3-2>
+        Import trackServerEvent from '@/lib/analytics/server-tracker'
+        Call after successful database update in setMonthlyBudget()
+        Include all relevant properties for analytics
+      </usage-in-story-3-2>
+    </tracking-implementation>
+  </analytics-context>
+
+  <database-context>
+    <payment-methods-schema>
+      <table-structure>
+        CREATE TABLE payment_methods (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('credit', 'debit', 'cash', 'pix', 'other')),
+          credit_mode BOOLEAN DEFAULT NULL,
+          statement_closing_day INTEGER CHECK (statement_closing_day BETWEEN 1 AND 31),
+          monthly_budget DECIMAL(10,2),  -- Story 3.2 uses this column
+          payment_due_day INTEGER CHECK (payment_due_day > 0),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(user_id, name)
+        );
+      </table-structure>
+
+      <monthly-budget-column>
+        - Column: monthly_budget DECIMAL(10,2)
+        - Nullable: YES (NULL = no budget set, optional feature)
+        - Constraint: CHECK (monthly_budget >= 0 OR monthly_budget IS NULL)
+        - Purpose: User-defined budget per statement period (separate from bank credit limit)
+        - Added in: Migration 040 (Epic 1, Story 1.1)
+        - No new migration needed for Story 3.2
+      </monthly-budget-column>
+
+      <rls-policies>
+        -- Users can only access their own payment methods
+        CREATE POLICY payment_methods_user_policy ON payment_methods
+          FOR ALL USING (user_id = auth.uid());
+      </rls-policies>
+
+      <indexes>
+        CREATE INDEX idx_payment_methods_user ON payment_methods(user_id);
+      </indexes>
+    </payment-methods-schema>
+
+    <budget-calculation-function>
+      <function-name>get_budget_for_period</function-name>
+      <migration>043_budget_with_installments.sql</migration>
+      <signature>
+        CREATE OR REPLACE FUNCTION get_budget_for_period(
+          p_user_id UUID,
+          p_payment_method_id UUID,
+          p_period_start DATE,
+          p_period_end DATE
+        )
+        RETURNS TABLE (
+          date DATE,
+          description TEXT,
+          amount DECIMAL,
+          category_id UUID,
+          category_name TEXT,
+          category_emoji TEXT,
+          is_installment BOOLEAN,
+          installment_number INTEGER,
+          total_installments INTEGER,
+          plan_description TEXT
+        )
+      </signature>
+
+      <usage-in-story-3-2>
+        - Story 3.2 needs to query current spending for analytics (percentageUsed calculation)
+        - Call this function to get total spent in current statement period
+        - Sum all amounts from returned rows for total spending
+        - Compare with monthly_budget to calculate percentage
+        - Full budget progress widget implemented in Story 3.3 (not this story)
+      </usage-in-story-3-2>
+
+      <query-structure>
+        UNION ALL of:
+        1. Regular transactions in period (type='expense', date in period)
+        2. Installment payments due in period (status='pending', due_date in period)
+        Includes category info and installment details for breakdown
+      </query-structure>
+    </budget-calculation-function>
+  </database-context>
+
+  <ui-component-structure>
+    <budget-settings-component>
+      <file-to-create>fe/components/payment-methods/budget-settings.tsx</file-to-create>
+
+      <component-interface>
+        interface BudgetSettingsProps {
+          paymentMethod: PaymentMethod
+          onUpdate: () => void
+        }
+
+        interface PaymentMethod {
+          id: string
+          name: string
+          type: string
+          credit_mode: boolean | null
+          statement_closing_day: number | null
+          monthly_budget: number | null
+        }
+      </component-interface>
+
+      <component-structure>
+        1. State management:
+           - selectedBudget: number | null (controlled input)
+           - isLoading: boolean (save operation)
+           - isSaving: boolean (button state)
+
+        2. Conditional rendering:
+           - Only render if creditMode &amp;&amp; statement_closing_day IS NOT NULL
+           - Show "Set closing date first" message if closing date not set
+
+        3. Currency input field:
+           - Controlled input with R$ prefix
+           - Format: R$ 2.000,00 (pt-BR) or R$ 2,000.00 (en)
+           - Parse input to number on blur
+           - Validate >= 0
+
+        4. Helper text:
+           - Show current statement period dates
+           - Use getStatementPeriodPreview() to fetch period
+           - Format: "Orçamento aplica-se ao período da fatura (6 Dez - 5 Jan)"
+
+        5. Save/Remove buttons:
+           - Save: Calls setMonthlyBudget(budget)
+           - Remove: Calls setMonthlyBudget(null)
+           - Disabled if no changes or loading
+           - Loading state during save
+
+        6. Toast notifications:
+           - Success: "Orçamento mensal definido: R$ 2.000,00"
+           - Removed: "Orçamento removido. Gastos continuam sendo rastreados."
+           - Error: "Erro ao salvar orçamento. Tente novamente."
+
+        7. Confirmation dialogs:
+           - Budget = 0: "Orçamento de R$ 0 significa sem limite. Confirma?"
+           - Budget > R$ 100,000: "Orçamento alto. Confirma?"
+           - Budget &lt; current spending: Info only, not blocking
+
+        8. Tooltip/Help icon:
+           - Explain difference between budget and credit limit
+           - "Defina um valor que você deseja gastar por período de fatura"
+      </component-structure>
+
+      <ui-components-to-use>
+        - Card, CardContent, CardHeader, CardTitle, CardDescription
+        - Input (with currency formatting)
+        - Button (Save, Remove)
+        - AlertDialog (for confirmations)
+        - Info icon from lucide-react
+        - toast from sonner
+      </ui-components-to-use>
+    </budget-settings-component>
+
+    <integration-in-credit-card-settings>
+      <location>fe/components/settings/credit-card-settings.tsx</location>
+      <placement>Below StatementSettings component for each Credit Mode card</placement>
+
+      <code-addition>
+        <![CDATA[
+        {/* Story 3.1: Statement Settings */}
+        <StatementSettings
+          paymentMethod={card}
+          onUpdate={() => router.refresh()}
+        />
+
+        {/* Story 3.2: Budget Settings */}
+        {card.credit_mode === true && card.statement_closing_day !== null && (
+          <BudgetSettings
+            paymentMethod={card}
+            onUpdate={() => router.refresh()}
+          />
+        )}
+
+        {/* Show message if closing date not set */}
+        {card.credit_mode === true && card.statement_closing_day === null && (
+          <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+            <p className="text-sm text-muted-foreground">
+              {t('budgetSettings.setClosingDateFirst')}
+            </p>
+          </div>
+        )}
+        ]]>
+      </code-addition>
+    </integration-in-credit-card-settings>
+  </ui-component-structure>
+
+  <validation-and-error-handling>
+    <input-validation>
+      <frontend-validation>
+        - Budget >= 0: Required (negative budgets not allowed)
+        - Budget format: Number with up to 2 decimal places
+        - Empty field: Treated as "remove budget" (set to null)
+        - Non-numeric input: Show error "Digite um valor válido"
+      </frontend-validation>
+
+      <server-validation>
+        - Validate budget >= 0 OR budget === null
+        - Validate paymentMethodId is valid UUID
+        - Verify payment method exists and user owns it
+        - Verify credit_mode = true
+        - Verify statement_closing_day IS NOT NULL
+      </server-validation>
+
+      <database-constraint>
+        -- Will be added if not exists (should already be there from Migration 040)
+        ALTER TABLE payment_methods
+          ADD CONSTRAINT check_monthly_budget_non_negative
+          CHECK (monthly_budget >= 0 OR monthly_budget IS NULL);
+      </database-constraint>
+    </input-validation>
+
+    <error-scenarios>
+      <validation-errors>
+        - Budget &lt; 0: "Orçamento não pode ser negativo"
+        - Invalid input: "Digite um valor válido"
+        - Closing date not set: "Configure o dia de fechamento primeiro"
+        - Payment method not Credit Mode: Hidden UI (no error shown)
+      </validation-errors>
+
+      <database-errors>
+        - RLS policy rejection: "Você não tem permissão para alterar este cartão"
+        - Network error: "Erro de conexão. Verifique sua internet."
+        - Unexpected error: "Erro ao salvar orçamento. Tente novamente."
+      </database-errors>
+
+      <edge-case-warnings>
+        - Budget = 0: Confirmation dialog (not error)
+        - Budget > R$ 100,000: Confirmation dialog (not error)
+        - Budget &lt; current spending: Info message (not blocking)
+      </edge-case-warnings>
+    </error-scenarios>
+
+    <error-logging>
+      - Log all errors with context: userId, paymentMethodId, budgetAmount, error message
+      - Error-level logs for database/network errors
+      - Info-level logs for validation errors (expected)
+      - Use console.error() with clear prefixes: [setMonthlyBudget]
+    </error-logging>
+  </validation-and-error-handling>
+
+  <testing-requirements>
+    <unit-tests>
+      <test-suite>setMonthlyBudget() Server Action</test-suite>
+      <test-cases>
+        - Test valid budget (2000) → Success
+        - Test budget = 0 → Success (valid edge case)
+        - Test budget = null → Success (remove budget)
+        - Test negative budget (-100) → Error
+        - Test non-numeric input → Error
+        - Test invalid UUID → Error
+        - Test Credit Mode check: credit_mode = false → Error
+        - Test closing date check: statement_closing_day = null → Error
+        - Test RLS enforcement: Update another user's payment method → Rejected
+      </test-cases>
+    </unit-tests>
+
+    <integration-tests>
+      <test-suite>Budget Settings Flow</test-suite>
+      <test-cases>
+        - Test full flow: Enter budget → Save → Verify database updated
+        - Test RLS: User can only update own payment methods
+        - Test Credit Mode check: Cannot update Simple Mode PM
+        - Test closing date check: Cannot set budget without closing date
+        - Test analytics: Verify PostHog events logged
+        - Test remove budget: Set to null → Verify database updated
+        - Test currency formatting: R$ 2.000,00 → Stored as 2000.00
+      </test-cases>
+    </integration-tests>
+
+    <e2e-tests-manual>
+      <test-scenarios>
+        - Credit Mode card with closing date → Budget settings visible
+        - Credit Mode card without closing date → Message shown
+        - Simple Mode card → Budget settings hidden
+        - Enter budget → Save → Toast appears, database updated
+        - Remove budget → Toast appears, database set to NULL
+        - Test both pt-BR and English locales
+        - Test edge cases: Budget = 0, budget &lt; current spending
+        - Test currency input: Format validation, decimal handling
+      </test-scenarios>
+    </e2e-tests-manual>
+
+    <performance-tests>
+      <targets>
+        - Budget update operation: &lt; 200ms (including database update + analytics)
+        - Dashboard widget refetch: &lt; 300ms (handled in Story 3.3)
+        - No impact on Simple Mode users (zero queries for budget features)
+      </targets>
+    </performance-tests>
+  </testing-requirements>
+
+  <implementation-checklist>
+    <task-1>
+      <title>Server Action for Budget Settings</title>
+      <subtasks>
+        - [ ] Create setMonthlyBudget() in fe/lib/actions/payment-methods.ts
+        - [ ] Implement validation: budget >= 0 OR budget === null
+        - [ ] Verify prerequisites: credit_mode = true AND statement_closing_day IS NOT NULL
+        - [ ] Update payment_methods.monthly_budget with RLS enforcement
+        - [ ] Track PostHog events: monthly_budget_set, monthly_budget_removed
+        - [ ] Add error handling with user-friendly messages
+        - [ ] Write unit tests for validation and RLS
+      </subtasks>
+    </task-1>
+
+    <task-2>
+      <title>Frontend Budget Settings UI</title>
+      <subtasks>
+        - [ ] Create fe/components/payment-methods/budget-settings.tsx
+        - [ ] Implement currency input with R$ formatting
+        - [ ] Add helper text showing statement period dates
+        - [ ] Implement Save/Remove buttons with loading states
+        - [ ] Add toast notifications (success/error)
+        - [ ] Add confirmation dialogs for edge cases (0, high budget)
+        - [ ] Conditional rendering: Only if credit_mode &amp;&amp; closing_date_set
+        - [ ] Add tooltip explaining budget vs credit limit
+      </subtasks>
+    </task-2>
+
+    <task-3>
+      <title>Integration with Payment Methods Settings Page</title>
+      <subtasks>
+        - [ ] Add BudgetSettings below StatementSettings in credit-card-settings.tsx
+        - [ ] Implement conditional rendering logic
+        - [ ] Add "Set closing date first" message for cards without closing date
+        - [ ] Ensure router.refresh() after budget update
+        - [ ] Test with multiple credit cards (some Credit Mode, some Simple Mode)
+      </subtasks>
+    </task-3>
+
+    <task-4>
+      <title>Localization</title>
+      <subtasks>
+        - [ ] Add budgetSettings keys to fe/lib/localization/pt-br.ts
+        - [ ] Add budgetSettings keys to fe/lib/localization/en.ts
+        - [ ] Update fe/lib/localization/types.ts with budgetSettings interface
+        - [ ] Implement currency formatting (pt-BR: R$ 2.000,00, en: R$ 2,000.00)
+        - [ ] Test all messages in both locales
+      </subtasks>
+    </task-4>
+
+    <task-5>
+      <title>Analytics</title>
+      <subtasks>
+        - [ ] Add MONTHLY_BUDGET_SET event to fe/lib/analytics/events.ts
+        - [ ] Add MONTHLY_BUDGET_REMOVED event to fe/lib/analytics/events.ts
+        - [ ] Implement event tracking in setMonthlyBudget()
+        - [ ] Include all required properties: userId, paymentMethodId, budgetAmount, previousBudget, currentSpending, percentageUsed
+        - [ ] Test PostHog events logged correctly
+      </subtasks>
+    </task-5>
+
+    <task-6>
+      <title>Testing</title>
+      <subtasks>
+        - [ ] Write unit tests for setMonthlyBudget() validation
+        - [ ] Write integration tests for full budget settings flow
+        - [ ] Test RLS security enforcement
+        - [ ] Test Simple Mode compatibility (no budget features visible)
+        - [ ] Manual E2E testing (Credit Mode, Simple Mode, edge cases)
+        - [ ] Performance testing (budget update &lt; 200ms)
+      </subtasks>
+    </task-6>
+
+    <task-7>
+      <title>Documentation</title>
+      <subtasks>
+        - [ ] Update CLAUDE.md with budget settings documentation
+        - [ ] Add JSDoc comments to BudgetSettings component
+        - [ ] Document setMonthlyBudget() server action
+        - [ ] Document budget validation rules
+        - [ ] Add implementation notes for optional budget behavior
+      </subtasks>
+    </task-7>
+
+    <task-8>
+      <title>Deployment</title>
+      <subtasks>
+        - [ ] Verify payment_methods.monthly_budget column exists (from Story 1.1)
+        - [ ] Verify CHECK constraint for monthly_budget >= 0 OR NULL
+        - [ ] Run all tests (unit, integration, manual)
+        - [ ] Test on staging environment
+        - [ ] Deploy to production
+        - [ ] Monitor PostHog for monthly_budget_set events
+        - [ ] Verify error rates &lt; 1%
+      </subtasks>
+    </task-8>
+  </implementation-checklist>
+
+  <risks-and-mitigations>
+    <risk id="1">
+      <title>Users Confused by "Monthly Budget" vs "Credit Limit"</title>
+      <likelihood>Medium</likelihood>
+      <impact>Medium</impact>
+      <mitigation>
+        - Clear helper text and tooltip explaining difference
+        - Examples in UI: "Set an amount you want to spend per statement period"
+        - Awareness-first language: "Budget is separate from bank credit limit"
+      </mitigation>
+    </risk>
+
+    <risk id="2">
+      <title>Budget Set Without Understanding Statement Period</title>
+      <likelihood>Medium</likelihood>
+      <impact>Medium</impact>
+      <mitigation>
+        - Helper text shows exact statement period dates
+        - Link to closing date explanation
+        - Preview of current period in budget settings
+      </mitigation>
+    </risk>
+
+    <risk id="3">
+      <title>Simple Mode Regression</title>
+      <likelihood>Low</likelihood>
+      <impact>High</impact>
+      <mitigation>
+        - Regression tests verify Simple Mode unchanged
+        - Conditional rendering isolated to Credit Mode credit cards
+        - Zero code execution for Simple Mode users
+      </mitigation>
+    </risk>
+  </risks-and-mitigations>
+
+  <acceptance-criteria-details>
+    <ac-2-1>
+      <title>Budget Settings UI Display</title>
+      <requirements>
+        - Visible for Credit Mode credit cards with closing date set
+        - Hidden for Simple Mode and cards without closing date
+        - Shows "Monthly Budget" section with currency input
+        - Shows current budget value or "Not set"
+        - Shows helper text with statement period dates
+      </requirements>
+      <validation>
+        - Manual test: Credit Mode card with closing date → Settings visible
+        - Manual test: Credit Mode card without closing date → Message shown
+        - Manual test: Simple Mode card → Settings hidden
+      </validation>
+    </ac-2-1>
+
+    <ac-2-2>
+      <title>Budget Amount Validation</title>
+      <requirements>
+        - Validates budget >= 0 (no negative budgets)
+        - No upper limit (users can set any positive amount)
+        - Empty field treated as "remove budget" (set to null)
+        - Edge cases: Budget = 0 valid but shows confirmation
+      </requirements>
+      <validation>
+        - Unit test: Validate inputs -100, 0, 2000 → Only 0 and 2000 accepted
+        - Integration test: Attempt to save negative budget → Verify error
+        - Unit test: Empty field → Sets monthly_budget to NULL
+      </validation>
+    </ac-2-2>
+
+    <ac-2-3>
+      <title>Budget Storage</title>
+      <requirements>
+        - Budget stored in payment_methods.monthly_budget
+        - RLS enforces user can only update own payment methods
+        - Server action validates ownership before update
+        - Decimal precision: DECIMAL(10,2) supports up to R$ 99,999,999.99
+      </requirements>
+      <validation>
+        - Integration test: Update budget → Verify database record updated
+        - Security test: Attempt to update another user's PM → Verify rejected
+        - Test decimal precision: Set R$ 1,234.56 → Stored as 1234.56
+      </validation>
+    </ac-2-3>
+
+    <ac-2-4>
+      <title>Immediate Effect on Budget Tracking</title>
+      <requirements>
+        - Budget changes apply immediately to current statement period
+        - Dashboard widget refetches updated data
+        - No recalculation delay
+      </requirements>
+      <validation>
+        - E2E test: Set budget → Verify dashboard updates immediately
+        - E2E test: Update budget → Verify percentage recalculates
+        - E2E test: Remove budget → Verify widget shows "No budget set"
+      </validation>
+    </ac-2-4>
+
+    <ac-2-5>
+      <title>Budget Update Flexibility</title>
+      <requirements>
+        - User can update budget at any time
+        - User can set budget lower than current spending (no validation against spending)
+        - Uses awareness-first language: "R$ 500 acima do planejado" (not "OVERSPENT!")
+      </requirements>
+      <validation>
+        - Manual test: Set budget lower than current spending → Accepted
+        - Manual test: Update budget mid-period → Applies immediately
+        - Test awareness-first language when budget exceeded
+      </validation>
+    </ac-2-5>
+
+    <ac-2-6>
+      <title>Confirmation and Feedback</title>
+      <requirements>
+        - Success toast: "Orçamento mensal definido: R$ 2.000,00"
+        - Remove toast: "Orçamento removido. Gastos continuam sendo rastreados."
+        - Error handling with user-friendly messages
+        - PostHog events logged: monthly_budget_set, monthly_budget_removed
+      </requirements>
+      <validation>
+        - Manual test: Save budget → Verify toast appears
+        - Manual test: Test both pt-BR and en locales
+        - Analytics test: Verify PostHog events logged
+      </validation>
+    </ac-2-6>
+
+    <ac-2-7>
+      <title>Helper Text and User Guidance</title>
+      <requirements>
+        - Helper text explains budget applies to statement period
+        - Shows current statement period dates dynamically
+        - Tooltip explains difference between budget and credit limit
+        - Localized in pt-BR and en
+      </requirements>
+      <validation>
+        - Manual test: Verify helper text displays correctly
+        - Manual test: Verify tooltip content is clear
+        - Manual test: Verify both pt-BR and en translations
+      </validation>
+    </ac-2-7>
+
+    <ac-2-8>
+      <title>Simple Mode Compatibility</title>
+      <requirements>
+        - Simple Mode users see NO budget settings
+        - Existing calendar month tracking unchanged
+        - Zero performance impact on Simple Mode users
+      </requirements>
+      <validation>
+        - Manual test: Simple Mode user → Verify NO budget settings visible
+        - Regression test: Simple Mode calendar month tracking unchanged
+      </validation>
+    </ac-2-8>
+
+    <ac-2-9>
+      <title>Optional Budget</title>
+      <requirements>
+        - Budget is nullable (can be NULL)
+        - System tracks spending without budget
+        - Dashboard widget shows "No budget set" with CTA
+      </requirements>
+      <validation>
+        - Integration test: User without budget → Spending still tracked
+        - E2E test: Budget progress widget shows CTA when budget = NULL
+        - E2E test: Add budget later → Applies to current period only
+      </validation>
+    </ac-2-9>
+  </acceptance-criteria-details>
+
+  <next-steps>
+    <story-3-3>
+      <title>Budget Progress Dashboard</title>
+      <description>Implement dashboard widget showing budget progress with percentage, remaining amount, and awareness-first language</description>
+      <dependencies>Story 3.2 complete (budget must be set first)</dependencies>
+    </story-3-3>
+
+    <story-3-4>
+      <title>Statement Closing Reminders</title>
+      <description>WhatsApp reminders 3 days before statement closing with current total and budget status</description>
+      <dependencies>Story 3.1 (closing date) and Story 3.2 (budget) complete</dependencies>
+    </story-3-4>
+
+    <story-3-5>
+      <title>Pre-Statement Category Summary</title>
+      <description>Category breakdown for current statement with installment details</description>
+      <dependencies>Story 3.1 and Story 3.2 complete</dependencies>
+    </story-3-5>
+  </next-steps>
+</story-context>

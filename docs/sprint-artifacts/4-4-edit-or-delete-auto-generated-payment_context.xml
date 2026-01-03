@@ -1,0 +1,910 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story_context>
+  <metadata>
+    <story_id>4-4-edit-or-delete-auto-generated-payment</story_id>
+    <story_title>Edit or Delete Auto-Generated Payment</story_title>
+    <epic>Epic 4: Payment Reminders and Auto-Accounting</epic>
+    <status>ready-for-dev</status>
+    <generated_at>2025-12-03</generated_at>
+    <complexity>Low</complexity>
+    <estimated_effort>1-2 days</estimated_effort>
+  </metadata>
+
+  <story_summary>
+    <user_story>
+      As a Credit Mode user,
+      I want to edit or delete auto-generated payment transactions,
+      So that I can correct payment amounts or remove payments I've handled differently.
+    </user_story>
+    <business_value>
+      - Provides user control over system-generated data
+      - Handles real-world scenarios (minimum payment, different account, external payment)
+      - Prevents "locked" data syndrome
+      - Maintains user trust through transparency and control
+    </business_value>
+    <key_principle>
+      Auto-generated transactions are fully editable and deletable with no restrictions.
+      The metadata.auto_generated flag remains true for audit trail, but users have complete control.
+    </key_principle>
+  </story_summary>
+
+  <dependencies>
+    <dependency type="required" status="complete">
+      <story_id>4-3-auto-create-payment-transaction</story_id>
+      <reason>Provides auto-generated transactions to edit/delete</reason>
+      <provides>
+        - Auto-generated payment transactions with metadata.auto_generated flag
+        - "Auto-gerado" badge display logic in transaction list
+        - Transaction metadata structure
+      </provides>
+    </dependency>
+    <dependency type="required" status="complete">
+      <story_id>3-3-budget-progress-dashboard-statement-period</story_id>
+      <reason>Budget cache invalidation after edit/delete</reason>
+      <provides>
+        - useInvalidateBudgetProgress() hook
+        - Budget cache invalidation logic
+        - Real-time budget updates
+      </provides>
+    </dependency>
+    <dependency type="infrastructure" status="complete">
+      <name>Transaction CRUD Actions</name>
+      <location>fe/lib/actions/transactions.ts</location>
+      <provides>
+        - updateTransaction() server action
+        - deleteTransaction() server action
+        - RLS enforcement
+        - Revalidation logic
+      </provides>
+    </dependency>
+    <dependency type="infrastructure" status="complete">
+      <name>PostHog Analytics</name>
+      <location>fe/lib/analytics/</location>
+      <provides>
+        - trackServerEvent() function
+        - AnalyticsEvent enum
+        - AnalyticsProperty enum
+      </provides>
+    </dependency>
+  </dependencies>
+
+  <acceptance_criteria>
+    <criterion id="AC4.4.1">
+      <title>Edit Auto-Generated Payment Transaction</title>
+      <description>User can edit all fields of auto-generated payment transaction without restrictions</description>
+      <implementation>
+        - Reuse existing updateTransaction() server action (no new code)
+        - All fields editable: amount, date, payment_method_id, category_id, description
+        - metadata.auto_generated flag remains true after edit
+        - "Auto-gerado" badge remains visible after edit
+      </implementation>
+      <validation>
+        - E2E test: Edit amount, verify updated
+        - E2E test: Edit date, verify updated
+        - E2E test: Edit payment method, verify updated
+        - Manual test: Badge still visible after edit
+        - Manual test: metadata.auto_generated still true
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.4.2">
+      <title>Delete Auto-Generated Payment Transaction</title>
+      <description>User can delete auto-generated payment transaction with custom confirmation dialog</description>
+      <implementation>
+        - Reuse existing deleteTransaction() server action
+        - Custom confirmation message for auto-generated transactions
+        - Check metadata.auto_generated flag in delete handler
+        - Post-deletion: Budget cache invalidated, no impact on future auto-payments
+      </implementation>
+      <validation>
+        - E2E test: Delete auto-payment, confirm, verify deleted
+        - E2E test: Delete auto-payment, cancel, verify still exists
+        - Manual test: Custom confirmation dialog appears
+        - Manual test: Next statement closing creates new auto-payment
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.4.3">
+      <title>Analytics Event Tracking</title>
+      <description>Track PostHog events for edit and delete actions on auto-generated payments</description>
+      <events>
+        <event name="auto_payment_edited">
+          <properties>
+            - userId: string
+            - transactionId: string
+            - paymentMethodId: string
+            - fieldsChanged: string[] (e.g., ['amount', 'payment_method'])
+            - oldAmount: number
+            - newAmount: number
+            - oldPaymentMethodId: string | null
+            - newPaymentMethodId: string | null
+            - locale: 'pt-BR' | 'en'
+            - timestamp: ISO8601
+          </properties>
+        </event>
+        <event name="auto_payment_deleted">
+          <properties>
+            - userId: string
+            - transactionId: string
+            - paymentMethodId: string
+            - amount: number
+            - statementPeriodStart: ISO8601
+            - statementPeriodEnd: ISO8601
+            - locale: 'pt-BR' | 'en'
+            - timestamp: ISO8601
+          </properties>
+        </event>
+      </events>
+      <implementation>
+        - Add events to fe/lib/analytics/events.ts
+        - Track in updateTransaction() and deleteTransaction() server actions
+        - Only track if metadata.auto_generated === true
+        - Helper function: getChangedFields(oldTransaction, newTransaction)
+      </implementation>
+    </criterion>
+
+    <criterion id="AC4.4.4">
+      <title>Badge Visibility After Edit</title>
+      <description>"Auto-gerado" badge remains visible after editing auto-generated transaction</description>
+      <implementation>
+        - No code changes needed (existing logic)
+        - Badge displayed based on metadata.auto_generated === true
+        - Metadata flag preserved by updateTransaction()
+      </implementation>
+      <validation>
+        - E2E test: Edit auto-payment, verify badge still visible
+        - Manual test: Badge appearance consistent before/after edit
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.4.5">
+      <title>WhatsApp Bot Edit/Delete Support</title>
+      <description>WhatsApp bot edit/delete support (DEFERRED to Epic 6)</description>
+      <status>deferred</status>
+      <reason>Web frontend provides full functionality. WhatsApp requires complex conversation state management.</reason>
+    </criterion>
+
+    <criterion id="AC4.4.6">
+      <title>Budget Impact Recalculation</title>
+      <description>Budget calculations automatically update after edit/delete</description>
+      <implementation>
+        - Reuse existing budget cache invalidation logic
+        - useInvalidateBudgetProgress() hook already integrated in TransactionDialog
+        - Real-time updates &lt; 300ms (Epic 3 performance target)
+      </implementation>
+      <validation>
+        - E2E test: Edit amount, verify budget updated
+        - E2E test: Delete transaction, verify budget updated
+        - Performance test: Cache invalidation &lt; 300ms
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.4.7">
+      <title>Simple Mode Compatibility</title>
+      <description>Simple Mode users unaffected by edit/delete logic</description>
+      <implementation>
+        - Simple Mode users have NO auto-generated transactions
+        - Auto-generated transactions only exist for Credit Mode users with payment_due_day set
+      </implementation>
+      <validation>
+        - Manual test: Simple Mode user edit/delete works normally
+        - Regression test: Simple Mode behavior unchanged
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.4.8">
+      <title>Localization</title>
+      <description>All UI text and messages support pt-BR and English</description>
+      <localization_keys>
+        <pt_br>
+          - transactions.deleteAutoGeneratedTitle: 'Deletar pagamento automático?'
+          - transactions.deleteAutoGeneratedMessage: 'Esta transação foi gerada automaticamente. Você tem certeza que deseja deletá-la?'
+          - transactions.deleteAutoGeneratedCancel: 'Cancelar'
+          - transactions.deleteAutoGeneratedConfirm: 'Deletar'
+          - transactions.autoPaymentEdited: 'Pagamento automático editado'
+          - transactions.autoPaymentDeleted: 'Pagamento automático deletado'
+        </pt_br>
+        <english>
+          - transactions.deleteAutoGeneratedTitle: 'Delete auto-generated payment?'
+          - transactions.deleteAutoGeneratedMessage: 'This transaction was auto-generated. Are you sure you want to delete it?'
+          - transactions.deleteAutoGeneratedCancel: 'Cancel'
+          - transactions.deleteAutoGeneratedConfirm: 'Delete'
+          - transactions.autoPaymentEdited: 'Auto-generated payment edited'
+          - transactions.autoPaymentDeleted: 'Auto-generated payment deleted'
+        </english>
+      </localization_keys>
+      <implementation>
+        - Add keys to fe/lib/localization/pt-br.ts
+        - Add keys to fe/lib/localization/en.ts
+        - Update fe/lib/localization/types.ts
+      </implementation>
+    </criterion>
+  </acceptance_criteria>
+
+  <existing_code_patterns>
+    <pattern name="Transaction Server Actions">
+      <location>fe/lib/actions/transactions.ts</location>
+      <current_implementation>
+        <![CDATA[
+// updateTransaction() - Lines 137-196
+export async function updateTransaction(
+  id: string,
+  formData: {
+    amount?: number
+    type?: "income" | "expense"
+    category_id?: string
+    description?: string
+    date?: string
+    payment_method_id?: string
+  },
+) {
+  const supabase = await getSupabaseServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  // Payment method validation (if being updated)
+  if (formData.payment_method_id) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(formData.payment_method_id)) {
+      throw new Error("Invalid payment method ID format")
+    }
+    // Verify payment method exists and belongs to user
+    const { data: paymentMethod, error: pmError } = await supabase
+      .from("payment_methods")
+      .select("id")
+      .eq("id", formData.payment_method_id)
+      .eq("user_id", user.id)
+      .single()
+    if (pmError || !paymentMethod) {
+      throw new Error("Payment method not found or unauthorized")
+    }
+  }
+
+  // Update transaction
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({
+      ...formData,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select()
+    .single()
+
+  if (error) throw error
+
+  // Track transaction update event
+  await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_EDITED, {
+    [AnalyticsProperty.TRANSACTION_ID]: id,
+  })
+
+  revalidatePath("/")
+  return data
+}
+
+// deleteTransaction() - Lines 198-216
+export async function deleteTransaction(id: string) {
+  const supabase = await getSupabaseServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id)
+
+  if (error) throw error
+
+  // Track transaction deletion event
+  await trackServerEvent(user.id, AnalyticsEvent.TRANSACTION_DELETED, {
+    [AnalyticsProperty.TRANSACTION_ID]: id,
+  })
+
+  revalidatePath("/")
+}
+        ]]>
+      </current_implementation>
+      <modifications_needed>
+        <modification type="enhance">
+          <function>updateTransaction()</function>
+          <changes>
+            - Fetch old transaction before update (for analytics)
+            - Check if metadata.auto_generated === true
+            - If auto-generated: Track auto_payment_edited event with fieldsChanged
+            - Calculate fieldsChanged array using helper function
+            - Include oldAmount, newAmount, oldPaymentMethodId, newPaymentMethodId
+          </changes>
+        </modification>
+        <modification type="enhance">
+          <function>deleteTransaction()</function>
+          <changes>
+            - Fetch transaction before deletion (for analytics)
+            - Check if metadata.auto_generated === true
+            - If auto-generated: Track auto_payment_deleted event
+            - Include amount, statementPeriodStart, statementPeriodEnd from metadata
+          </changes>
+        </modification>
+      </modifications_needed>
+    </pattern>
+
+    <pattern name="Transaction List Delete Handler">
+      <location>fe/components/transaction-list.tsx</location>
+      <current_implementation>
+        <![CDATA[
+// handleDelete - Lines 64-73
+const handleDelete = async (id: string) => {
+  if (confirm(t('transaction.deleteConfirm'))) {
+    try {
+      await deleteTransaction(id)
+      router.refresh()
+    } catch (error) {
+      console.error("Error deleting transaction:", error)
+    }
+  }
+}
+        ]]>
+      </current_implementation>
+      <modifications_needed>
+        <modification type="enhance">
+          <changes>
+            - Accept transaction object in addition to id
+            - Check transaction.metadata?.auto_generated flag
+            - If auto-generated: Use custom confirmation message
+            - If manual: Use default confirmation message
+            - Use localized messages from t('transactions.deleteAutoGeneratedTitle') etc.
+          </changes>
+          <new_implementation>
+            <![CDATA[
+const handleDelete = async (transaction: Transaction) => {
+  const confirmationMessage = transaction.metadata?.auto_generated
+    ? t('transactions.deleteAutoGeneratedMessage')
+    : t('transaction.deleteConfirm')
+
+  const confirmationTitle = transaction.metadata?.auto_generated
+    ? t('transactions.deleteAutoGeneratedTitle')
+    : t('transaction.deleteDefaultTitle')
+
+  // Use AlertDialog component for better UX (optional)
+  if (confirm(confirmationMessage)) {
+    try {
+      await deleteTransaction(transaction.id)
+      router.refresh()
+      toast.success(
+        transaction.metadata?.auto_generated
+          ? t('transactions.autoPaymentDeleted')
+          : t('transaction.deleted')
+      )
+    } catch (error) {
+      console.error("Error deleting transaction:", error)
+      toast.error(t('transaction.deleteError'))
+    }
+  }
+}
+            ]]>
+          </new_implementation>
+        </modification>
+      </modifications_needed>
+    </pattern>
+
+    <pattern name="Auto-Generated Badge Display">
+      <location>fe/components/transaction-list.tsx</location>
+      <current_implementation>
+        <![CDATA[
+// Badge display - Lines 144-148
+{transaction.metadata?.auto_generated && (
+  <Badge variant="secondary" className="text-xs">
+    {t('transaction.autoGenerated')}
+  </Badge>
+)}
+        ]]>
+      </current_implementation>
+      <notes>
+        - No changes needed
+        - Badge displays based on metadata.auto_generated flag
+        - Flag remains true after edit (preserved by updateTransaction)
+        - Existing implementation already supports AC4.4.4
+      </notes>
+    </pattern>
+
+    <pattern name="Analytics Event Enum">
+      <location>fe/lib/analytics/events.ts</location>
+      <current_implementation>
+        <![CDATA[
+export enum AnalyticsEvent {
+  // Transaction Events
+  TRANSACTION_CREATED = 'transaction_created',
+  TRANSACTION_EDITED = 'transaction_edited',
+  TRANSACTION_DELETED = 'transaction_deleted',
+  // ... other events
+}
+        ]]>
+      </current_implementation>
+      <modifications_needed>
+        <modification type="add">
+          <changes>
+            - Add AUTO_PAYMENT_EDITED = 'auto_payment_edited'
+            - Add AUTO_PAYMENT_DELETED = 'auto_payment_deleted'
+            - Add comment: // Auto-Payment Events (Epic 4 - Story 4.4)
+          </changes>
+        </modification>
+      </modifications_needed>
+    </pattern>
+
+    <pattern name="Budget Cache Invalidation">
+      <location>fe/components/transaction-dialog.tsx</location>
+      <current_implementation>
+        <![CDATA[
+// Budget cache invalidation hook - Line 46
+const { invalidateAll: invalidateBudgetProgress } = useInvalidateBudgetProgress()
+
+// Called after transaction create/update - Lines 200+ (approximate)
+await invalidateBudgetProgress()
+        ]]>
+      </current_implementation>
+      <notes>
+        - Already integrated in TransactionDialog
+        - Automatically invalidates budget cache after transaction mutations
+        - No changes needed for Story 4.4
+        - Supports AC4.4.6 (Budget Impact Recalculation)
+      </notes>
+    </pattern>
+  </existing_code_patterns>
+
+  <data_structures>
+    <structure name="Transaction">
+      <location>fe/lib/types.ts</location>
+      <definition>
+        <![CDATA[
+export interface Transaction {
+  id: string
+  user_id: string
+  amount: number
+  type: "income" | "expense"
+  category_id: string | null
+  description: string | null
+  date: string
+  payment_method_id: string
+  payment_method_legacy?: string | null
+  created_at: string
+  updated_at: string
+  category?: Category
+  payment_method?: PaymentMethod
+  tags?: Tag[]
+  metadata?: {
+    auto_generated?: boolean
+    source?: 'payment_reminder'
+    credit_card_id?: string
+    statement_period_start?: string
+    statement_period_end?: string
+    statement_total?: number
+  }
+}
+        ]]>
+      </definition>
+      <notes>
+        - metadata.auto_generated: Flag indicating transaction was auto-created (Story 4.3)
+        - metadata.source: Origin of auto-generation ('payment_reminder')
+        - metadata.credit_card_id: Payment method ID that triggered auto-creation
+        - metadata.statement_period_start/end: Statement period dates
+        - metadata.statement_total: Original statement total amount
+      </notes>
+    </structure>
+
+    <structure name="PaymentMethod">
+      <location>fe/lib/types.ts</location>
+      <definition>
+        <![CDATA[
+export interface PaymentMethod {
+  id: string
+  user_id: string
+  name: string
+  type: 'credit' | 'debit' | 'cash' | 'pix' | 'other'
+  credit_mode: boolean | null
+  statement_closing_day: number | null
+  payment_due_day: number | null  // Story 4.1
+  monthly_budget: number | null
+  created_at: string
+  updated_at: string
+}
+        ]]>
+      </definition>
+      <notes>
+        - payment_due_day: Days after statement closing when payment is due
+        - Auto-generated payments only created for Credit Mode cards with payment_due_day set
+      </notes>
+    </structure>
+  </data_structures>
+
+  <implementation_approach>
+    <phase number="1" name="Analytics Events">
+      <task>Add AUTO_PAYMENT_EDITED and AUTO_PAYMENT_DELETED to AnalyticsEvent enum</task>
+      <task>Create getChangedFields() helper function</task>
+      <task>Enhance updateTransaction() to track auto_payment_edited event</task>
+      <task>Enhance deleteTransaction() to track auto_payment_deleted event</task>
+      <files_to_modify>
+        - fe/lib/analytics/events.ts
+        - fe/lib/actions/transactions.ts
+      </files_to_modify>
+    </phase>
+
+    <phase number="2" name="Delete Confirmation Customization">
+      <task>Add localization keys to pt-br.ts and en.ts</task>
+      <task>Update types.ts with new localization keys</task>
+      <task>Modify handleDelete in transaction-list.tsx to check metadata.auto_generated</task>
+      <task>Show custom confirmation message for auto-generated transactions</task>
+      <files_to_modify>
+        - fe/lib/localization/pt-br.ts
+        - fe/lib/localization/en.ts
+        - fe/lib/localization/types.ts
+        - fe/components/transaction-list.tsx
+      </files_to_modify>
+    </phase>
+
+    <phase number="3" name="Testing">
+      <task>Manual E2E testing: Edit auto-payment (amount, date, payment method)</task>
+      <task>Manual E2E testing: Delete auto-payment (confirm and cancel)</task>
+      <task>Analytics verification: Check PostHog for events</task>
+      <task>Budget cache invalidation verification</task>
+      <task>Localization testing: pt-BR and English</task>
+      <files_to_test>
+        - fe/lib/actions/transactions.ts
+        - fe/components/transaction-list.tsx
+        - PostHog dashboard
+      </files_to_test>
+    </phase>
+
+    <phase number="4" name="Documentation">
+      <task>Update CLAUDE.md with edit/delete functionality</task>
+      <task>Add JSDoc comments to modified functions</task>
+      <task>Document analytics events in story file</task>
+    </phase>
+  </implementation_approach>
+
+  <edge_cases>
+    <edge_case id="EC1">
+      <scenario>User paid minimum payment instead of full statement</scenario>
+      <example>
+        - Auto-payment: R$ 1,450 (statement total)
+        - User paid: R$ 500 (minimum)
+        - User edits amount to R$ 500
+        - Remaining R$ 950 not tracked (user responsibility)
+      </example>
+      <handling>Allow edit without warnings. User controls the amount.</handling>
+    </edge_case>
+
+    <edge_case id="EC2">
+      <scenario>User paid from different bank account</scenario>
+      <example>
+        - Auto-payment: Bank Account A (default)
+        - User paid: Bank Account B
+        - User edits payment_method_id to Bank Account B
+      </example>
+      <handling>Standard payment method validation applies. Budget shifts to correct account.</handling>
+    </edge_case>
+
+    <edge_case id="EC3">
+      <scenario>User handled payment outside system</scenario>
+      <example>
+        - Auto-payment created: R$ 1,450
+        - User paid via bank auto-debit
+        - User deletes auto-payment
+      </example>
+      <handling>Delete without side effects. Next statement closing creates new auto-payment normally.</handling>
+    </edge_case>
+
+    <edge_case id="EC4">
+      <scenario>User edits multiple times</scenario>
+      <example>
+        - Edit 1: Amount R$ 1,450 → R$ 1,500
+        - Edit 2: Payment method Bank A → Bank B
+        - Edit 3: Date Jan 15 → Jan 20
+      </example>
+      <handling>
+        - Each edit tracked separately with fieldsChanged array
+        - Badge remains visible after all edits
+        - metadata.auto_generated never removed
+      </handling>
+    </edge_case>
+
+    <edge_case id="EC5">
+      <scenario>Deletion doesn't prevent future auto-payments</scenario>
+      <example>
+        - Jan 5: Statement closes, auto-payment created
+        - Jan 10: User deletes auto-payment
+        - Feb 5: Next statement closes, NEW auto-payment created
+      </example>
+      <handling>Each statement period is independent. Deletion has no side effects.</handling>
+    </edge_case>
+
+    <edge_case id="EC6">
+      <scenario>RLS violation (user tries to edit/delete another user's transaction)</scenario>
+      <handling>
+        - Supabase RLS blocks operation
+        - Error thrown: "Payment method not found or unauthorized"
+        - Toast error: "Você não tem permissão para editar esta transação"
+      </handling>
+    </edge_case>
+
+    <edge_case id="EC7">
+      <scenario>Analytics tracking failure doesn't block user action</scenario>
+      <handling>
+        - Try-catch around analytics tracking
+        - Log error, but don't throw
+        - Edit/delete succeeds even if analytics fails
+        - Graceful degradation
+      </handling>
+    </edge_case>
+  </edge_cases>
+
+  <performance_targets>
+    <target id="PT1">
+      <metric>Budget cache invalidation</metric>
+      <value>&lt; 300ms</value>
+      <source>Epic 3 performance target (reused infrastructure)</source>
+    </target>
+    <target id="PT2">
+      <metric>Edit/delete response time</metric>
+      <value>&lt; 1 second</value>
+      <measurement>Time from Save/Delete button click to toast notification</measurement>
+    </target>
+    <target id="PT3">
+      <metric>Analytics event tracking</metric>
+      <value>&lt; 50ms</value>
+      <notes>Async operation, doesn't block UI. Logged if exceeds threshold.</notes>
+    </target>
+  </performance_targets>
+
+  <testing_strategy>
+    <test_type name="Manual E2E Tests">
+      <priority>High</priority>
+      <tests>
+        <test>Edit auto-payment amount → Verify amount updated, badge visible</test>
+        <test>Edit auto-payment date → Verify date updated, badge visible</test>
+        <test>Edit auto-payment payment method → Verify payment method updated</test>
+        <test>Delete auto-payment → Confirm → Verify deleted, budget updated</test>
+        <test>Delete auto-payment → Cancel → Verify still exists</test>
+        <test>Edit manual transaction → Verify NO auto_payment_edited event</test>
+        <test>Delete manual transaction → Verify default confirmation message</test>
+      </tests>
+    </test_type>
+
+    <test_type name="Analytics Verification">
+      <priority>High</priority>
+      <tests>
+        <test>Edit auto-payment → Check PostHog for auto_payment_edited event</test>
+        <test>Verify fieldsChanged array contains correct fields</test>
+        <test>Verify oldAmount and newAmount correct</test>
+        <test>Delete auto-payment → Check PostHog for auto_payment_deleted event</test>
+        <test>Verify event properties match metadata</test>
+      </tests>
+    </test_type>
+
+    <test_type name="Localization Tests">
+      <priority>Medium</priority>
+      <tests>
+        <test>pt-BR locale → Verify Portuguese confirmation dialog</test>
+        <test>English locale → Verify English confirmation dialog</test>
+        <test>pt-BR locale → Verify Portuguese toast messages</test>
+        <test>Switch locale → Verify messages update</test>
+      </tests>
+    </test_type>
+
+    <test_type name="Regression Tests">
+      <priority>High</priority>
+      <tests>
+        <test>Simple Mode user → Edit/delete manual transactions works normally</test>
+        <test>Credit Mode user → Edit/delete manual transactions unchanged</test>
+        <test>Transaction list performance unchanged</test>
+        <test>Budget cache invalidation still works for manual transactions</test>
+      </tests>
+    </test_type>
+
+    <test_type name="Performance Tests">
+      <priority>Medium</priority>
+      <tests>
+        <test>Budget cache invalidation &lt; 300ms after edit</test>
+        <test>Budget cache invalidation &lt; 300ms after delete</test>
+        <test>Edit response time &lt; 1 second</test>
+        <test>Delete response time &lt; 1 second</test>
+      </tests>
+    </test_type>
+  </testing_strategy>
+
+  <risks_and_mitigations>
+    <risk id="R1">
+      <description>User confusion about editable auto-generated transactions</description>
+      <likelihood>Medium</likelihood>
+      <impact>Low</impact>
+      <mitigation>
+        - Clear badge indicates transaction origin
+        - Full edit/delete control provides flexibility
+        - No restrictions or warnings that increase confusion
+      </mitigation>
+    </risk>
+
+    <risk id="R2">
+      <description>Budget calculation errors after edit</description>
+      <likelihood>Low</likelihood>
+      <impact>Medium</impact>
+      <mitigation>
+        - Reuse existing cache invalidation logic (proven in Epic 3)
+        - Comprehensive testing before deployment
+        - Performance monitoring in production
+      </mitigation>
+    </risk>
+
+    <risk id="R3">
+      <description>Analytics event tracking failures</description>
+      <likelihood>Low</likelihood>
+      <impact>Low</impact>
+      <mitigation>
+        - Graceful degradation: Edit/delete succeeds even if analytics fails
+        - Error logging for debugging
+        - Try-catch around analytics code
+      </mitigation>
+    </risk>
+  </risks_and_mitigations>
+
+  <technical_constraints>
+    <constraint>
+      <name>Supabase RLS Policies</name>
+      <description>Row-level security enforces user ownership on all operations</description>
+      <impact>Prevents unauthorized edits/deletes. No additional validation needed.</impact>
+    </constraint>
+
+    <constraint>
+      <name>metadata.auto_generated Flag</name>
+      <description>Flag must remain true after edit for audit trail and badge display</description>
+      <impact>updateTransaction() must preserve metadata fields, not overwrite them</impact>
+    </constraint>
+
+    <constraint>
+      <name>Budget Cache Invalidation</name>
+      <description>Must invalidate budget cache after any transaction mutation</description>
+      <impact>Reuse existing useInvalidateBudgetProgress() hook. Already integrated.</impact>
+    </constraint>
+
+    <constraint>
+      <name>Localization Support</name>
+      <description>All UI text must support pt-BR and English</description>
+      <impact>Add keys to both localization files and update types</impact>
+    </constraint>
+  </technical_constraints>
+
+  <success_criteria>
+    <criterion>User can edit all fields of auto-generated payment without restrictions</criterion>
+    <criterion>User can delete auto-generated payment with custom confirmation</criterion>
+    <criterion>Badge remains visible after edit</criterion>
+    <criterion>Budget cache invalidates correctly after edit/delete</criterion>
+    <criterion>Analytics events tracked with correct properties</criterion>
+    <criterion>Localization works for pt-BR and English</criterion>
+    <criterion>Manual transactions unaffected by changes</criterion>
+    <criterion>Simple Mode users unaffected</criterion>
+    <criterion>Performance targets met (budget &lt; 300ms, edit/delete &lt; 1s)</criterion>
+  </success_criteria>
+
+  <dev_notes>
+    <note type="architecture">
+      This story is primarily a configuration/enhancement story, not a new feature.
+      It reuses 90%+ of existing infrastructure:
+      - Transaction CRUD actions (updateTransaction, deleteTransaction)
+      - Budget cache invalidation (useInvalidateBudgetProgress)
+      - Analytics tracking (trackServerEvent)
+      - Localization system (next-intl)
+
+      The only new code is:
+      1. Analytics events (2 new events in enum)
+      2. getChangedFields() helper function
+      3. Custom confirmation message logic
+      4. Localization keys
+    </note>
+
+    <note type="implementation">
+      Key implementation decision: Preserve metadata.auto_generated flag after edit.
+      This provides:
+      - Audit trail for debugging and support
+      - Badge remains visible (transparency)
+      - Analytics can distinguish edited auto-payments from manual transactions
+
+      Trade-off: Badge visible after edit might confuse some users.
+      Decision: Accept trade-off for transparency and audit trail benefits.
+    </note>
+
+    <note type="testing">
+      Focus testing on:
+      1. Analytics events (most complex new code)
+      2. Custom confirmation dialog (UX-critical)
+      3. Budget cache invalidation (critical path)
+      4. Localization (pt-BR/English)
+
+      Lower priority:
+      - Edit/delete logic (reuses proven infrastructure)
+      - Badge display (no changes, existing code)
+      - RLS enforcement (Supabase handles)
+    </note>
+
+    <note type="deployment">
+      Deployment is low-risk:
+      - No database migrations needed
+      - No new API endpoints
+      - Reuses existing server actions
+      - Only adds analytics events and localization keys
+
+      Rollback: Simple revert of frontend code. No data migration needed.
+    </note>
+  </dev_notes>
+
+  <files_to_modify>
+    <file>
+      <path>fe/lib/analytics/events.ts</path>
+      <changes>
+        - Add AUTO_PAYMENT_EDITED = 'auto_payment_edited' to enum
+        - Add AUTO_PAYMENT_DELETED = 'auto_payment_deleted' to enum
+      </changes>
+      <estimated_lines>+2 lines</estimated_lines>
+    </file>
+
+    <file>
+      <path>fe/lib/actions/transactions.ts</path>
+      <changes>
+        - Add getChangedFields() helper function (~20 lines)
+        - Enhance updateTransaction() with auto-payment analytics (~30 lines)
+        - Enhance deleteTransaction() with auto-payment analytics (~20 lines)
+      </changes>
+      <estimated_lines>+70 lines</estimated_lines>
+    </file>
+
+    <file>
+      <path>fe/components/transaction-list.tsx</path>
+      <changes>
+        - Modify handleDelete to check metadata.auto_generated
+        - Add custom confirmation message logic (~15 lines)
+        - Add toast notifications (~5 lines)
+      </changes>
+      <estimated_lines>+20 lines</estimated_lines>
+    </file>
+
+    <file>
+      <path>fe/lib/localization/pt-br.ts</path>
+      <changes>
+        - Add 6 new keys under transactions section
+      </changes>
+      <estimated_lines>+6 lines</estimated_lines>
+    </file>
+
+    <file>
+      <path>fe/lib/localization/en.ts</path>
+      <changes>
+        - Add 6 new keys under transactions section
+      </changes>
+      <estimated_lines>+6 lines</estimated_lines>
+    </file>
+
+    <file>
+      <path>fe/lib/localization/types.ts</path>
+      <changes>
+        - Add 6 new keys to Messages.transaction interface
+      </changes>
+      <estimated_lines>+6 lines</estimated_lines>
+    </file>
+
+    <file>
+      <path>CLAUDE.md</path>
+      <changes>
+        - Update Auto-Payment Transaction Creation System section
+        - Document edit/delete functionality
+        - Document analytics events
+      </changes>
+      <estimated_lines>+30 lines</estimated_lines>
+    </file>
+  </files_to_modify>
+
+  <total_estimated_changes>
+    <new_lines>~140 lines</new_lines>
+    <modified_lines>~50 lines</modified_lines>
+    <files_changed>7 files</files_changed>
+    <complexity>Low (90% reuses existing infrastructure)</complexity>
+  </total_estimated_changes>
+</story_context>

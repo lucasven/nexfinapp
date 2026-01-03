@@ -14,6 +14,12 @@ import { handleEditTransaction, handleDeleteTransaction, handleChangeCategory, h
 import { handleSearchTransactions, handleQuickStats } from '../search/search.js'
 import { handleAnalyzeSpending } from '../reports/analysis.js'
 import { handleUndo } from './undo.js'
+import { handleCreateInstallment } from '../credit-card/installment-handler.js'
+import { handleFutureCommitments } from '../credit-card/future-commitments-handler.js'
+import { handlePayoffRequest } from '../credit-card/installment-payoff-handler.js'
+import { handleDeleteRequest } from '../credit-card/installment-delete-handler.js'
+import { handleStatementSummaryRequest } from '../credit-card/statement-summary-handler.js'
+import { handleModeSwitchRequest } from '../credit-card/mode-switch.js'
 import { messages } from '../../localization/pt-br.js'
 import { getSuggestedPaymentMethod, updatePaymentMethodPreference } from '../../nlp/pattern-storage.js'
 import { logger } from '../../services/monitoring/logger.js'
@@ -238,6 +244,36 @@ export async function executeIntent(
       // NEW: Undo
       case 'undo_last':
         result = await handleUndo(whatsappNumber)
+        break
+
+      // Epic 2 Story 2.1: Installments
+      case 'create_installment':
+        result = await handleCreateInstallment(whatsappNumber, intent)
+        break
+
+      // Epic 2 Story 2.3: Future Commitments
+      case 'view_future_commitments':
+        result = await handleFutureCommitments(whatsappNumber)
+        break
+
+      // Epic 2 Story 2.5: Pay Off Installment Early
+      case 'payoff_installment':
+        result = await handlePayoffRequest(whatsappNumber, intent.entities.description || '')
+        break
+
+      // Epic 2 Story 2.7: Delete Installment Plan
+      case 'delete_installment':
+        result = await handleDeleteRequest(whatsappNumber, intent.entities.description || '')
+        break
+
+      // Epic 3 Story 3.5: View Statement Summary
+      case 'view_statement_summary':
+        result = await handleStatementSummaryRequest(whatsappNumber)
+        break
+
+      // Epic 1 Story 1.5: Credit Mode Switch
+      case 'switch_credit_mode':
+        result = await handleModeSwitchRequest(whatsappNumber, intent)
         break
 
       default:

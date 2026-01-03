@@ -70,7 +70,7 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
   }
 
   const handleDeleteClick = (category: Category) => {
-    if (!category.is_custom) {
+    if (!category.is_custom || category.is_system) {
       return
     }
     setCategoryToDelete(category)
@@ -98,7 +98,9 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
 
   const renderCategory = (category: Category) => {
     const isCustom = category.is_custom
+    const isSystem = category.is_system
     const isOwned = category.user_id === userId
+    const canDelete = isCustom && isOwned && !isSystem
 
     return (
       <div
@@ -110,7 +112,12 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
           <div>
             <div className="flex items-center gap-2">
               <span className="font-medium">{category.name}</span>
-              {isCustom && (
+              {isSystem && (
+                <Badge variant="secondary" className="text-xs">
+                  {t('category.systemBadge')}
+                </Badge>
+              )}
+              {isCustom && !isSystem && (
                 <Badge variant="secondary" className="text-xs">
                   {t('common.custom')}
                 </Badge>
@@ -135,13 +142,17 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
               </Button>
             }
           />
-          {isCustom && isOwned && (
+          {canDelete ? (
             <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(category)}>
               <Trash2Icon className="h-4 w-4 text-destructive" />
             </Button>
-          )}
-          {!isCustom && (
-            <Button variant="ghost" size="sm" disabled title={t('category.cannotDelete')}>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              title={isSystem ? t('category.deleteSystemCategoryTooltip') : t('category.cannotDelete')}
+            >
               <Trash2Icon className="h-4 w-4 text-muted-foreground" />
             </Button>
           )}

@@ -1,0 +1,742 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>2-3-future-commitments-dashboard</story-id>
+    <story-title>Future Commitments Dashboard</story-title>
+    <epic-id>2</epic-id>
+    <epic-title>Parcelamento Intelligence</epic-title>
+    <generated-date>2025-12-03</generated-date>
+    <status>ready-for-dev</status>
+    <prerequisites>
+      <prerequisite id="2-1" status="done">Add Installment Purchase (WhatsApp)</prerequisite>
+      <prerequisite id="2-2" status="done">Add Installment Purchase (Web Frontend)</prerequisite>
+      <prerequisite id="epic-1" status="completed">Credit Mode Foundation</prerequisite>
+    </prerequisites>
+  </metadata>
+
+  <story-overview>
+    <user-story>
+      As a user with active installment plans,
+      I want to see my future monthly obligations across all installments,
+      So that I can understand my upcoming payment commitments and plan my budget accordingly.
+    </user-story>
+
+    <business-value>
+      While credit trackers show "you spent R$1,200," NexFinApp shows "you'll pay R$100/month for the next 12 months"—the information users actually need for budgeting. This is the killer insight that differentiates NexFinApp from generic expense trackers.
+    </business-value>
+
+    <complexity>Medium</complexity>
+    <estimated-effort>2-3 days</estimated-effort>
+  </story-overview>
+
+  <technical-context>
+    <architecture-summary>
+      <database>
+        <table name="installment_plans">
+          <description>Parent table for installment purchases (created in Epic 1 Story 1.1)</description>
+          <key-columns>
+            - id (UUID primary key)
+            - user_id (UUID foreign key to auth.users)
+            - description (TEXT)
+            - total_amount (DECIMAL 10,2)
+            - total_installments (INTEGER, CHECK 1-60)
+            - status ('active' | 'paid_off' | 'cancelled')
+            - payment_method_id (UUID foreign key)
+            - category_id (UUID foreign key, nullable)
+          </key-columns>
+          <indexes>
+            - idx_installment_plans_user_status ON (user_id, status)
+          </indexes>
+        </table>
+
+        <table name="installment_payments">
+          <description>Child table for individual monthly payments (created in Epic 1 Story 1.1)</description>
+          <key-columns>
+            - id (UUID primary key)
+            - plan_id (UUID foreign key to installment_plans, ON DELETE CASCADE)
+            - installment_number (INTEGER)
+            - amount (DECIMAL 10,2)
+            - due_date (DATE)
+            - status ('pending' | 'paid' | 'cancelled')
+            - transaction_id (UUID foreign key, nullable)
+          </key-columns>
+          <indexes>
+            - idx_installment_payments_plan ON (plan_id)
+            - idx_installment_payments_due_date_status ON (due_date, status)
+          </indexes>
+          <unique-constraint>(plan_id, installment_number)</unique-constraint>
+        </table>
+      </database>
+
+      <backend>
+        <framework>Next.js 15 Server Actions</framework>
+        <pattern>Server-side data fetching with React Server Components</pattern>
+        <database-client>Supabase (PostgreSQL with RLS)</database-client>
+
+        <new-server-actions>
+          <action name="getFutureCommitments">
+            <location>fe/lib/actions/installments.ts</location>
+            <description>Aggregate upcoming installment obligations by month (next 12 months default)</description>
+            <parameters>
+              - userId: string
+              - monthsAhead: number (optional, default 12)
+            </parameters>
+            <returns>FutureCommitments[] - Array of monthly commitment totals</returns>
+            <performance-target>&lt; 200ms (NFR-P2)</performance-target>
+          </action>
+
+          <action name="getFutureCommitmentsByMonth">
+            <location>fe/lib/actions/installments.ts</location>
+            <description>Get individual installment details for a specific month</description>
+            <parameters>
+              - userId: string
+              - month: string (YYYY-MM format)
+            </parameters>
+            <returns>MonthCommitmentDetails[] - Individual payments for the month</returns>
+          </action>
+        </new-server-actions>
+
+        <existing-functions>
+          <function name="createInstallment">
+            <location>fe/lib/actions/installments.ts</location>
+            <status>Implemented in Story 2.2</status>
+            <description>Creates installment plan atomically (used by Stories 2.1 and 2.2)</description>
+          </function>
+        </existing-functions>
+      </backend>
+
+      <frontend>
+        <framework>Next.js 15 App Router with React Server Components</framework>
+        <ui-library>Radix UI + Tailwind CSS</ui-library>
+        <localization>next-intl (pt-BR primary, en secondary)</localization>
+
+        <new-components>
+          <component name="FutureCommitmentsWidget">
+            <location>fe/components/dashboard/future-commitments-widget.tsx</location>
+            <type>Server Component</type>
+            <description>Displays next 12 months of installment obligations with expandable details</description>
+            <features>
+              - Monthly breakdown (aggregated totals)
+              - Expand/collapse individual installments
+              - Empty state handling
+              - Localized date/currency formatting
+            </features>
+            <dependencies>
+              - Radix Collapsible for expand/collapse
+              - date-fns for date formatting
+              - Intl.NumberFormat for currency
+            </dependencies>
+          </component>
+        </new-components>
+
+        <integration-points>
+          <page path="fe/app/[locale]/page.tsx">
+            <description>Main dashboard page - add FutureCommitmentsWidget below BalanceCard</description>
+            <current-widgets>
+              - BalanceCard (income/expenses/balance)
+              - UpcomingRecurringWidget (recurring payments)
+              - TransactionList
+            </current-widgets>
+          </page>
+        </integration-points>
+      </frontend>
+
+      <whatsapp-bot>
+        <new-handlers>
+          <handler name="future-commitments-handler">
+            <location>whatsapp-bot/src/handlers/credit-card/future-commitments-handler.ts</location>
+            <description>Handle WhatsApp command for viewing future commitments</description>
+            <command-patterns>
+              - "/parcelamentos" (Portuguese)
+              - "/installments" (English)
+              - "parcelamentos" (no slash, intent-based)
+              - "próximas parcelas"
+              - "future commitments"
+            </command-patterns>
+            <response-format>
+              Text summary showing:
+              - Monthly breakdown (Jan/2025: R$ 450,00 - 3 parcelas)
+              - Individual installments nested (bullet points)
+              - 12-month total at end
+              - Empty state guidance if no active installments
+            </response-format>
+          </handler>
+        </new-handlers>
+
+        <ai-integration>
+          <service>services/ai/ai-pattern-generator.ts</service>
+          <function>view_future_commitments</function>
+          <description>AI function for extracting future commitments intent from natural language</description>
+          <parameters>None (uses user_id from context)</parameters>
+        </ai-integration>
+
+        <intent-routing>
+          <router>handlers/core/intent-executor.ts</router>
+          <action>Add case for 'view_future_commitments' action</action>
+          <route-to>handlers/credit-card/future-commitments-handler.ts</route-to>
+        </intent-routing>
+      </whatsapp-bot>
+    </architecture-summary>
+
+    <data-models>
+      <typescript-interfaces>
+        <interface name="FutureCommitments">
+          <location>fe/lib/types.ts</location>
+          <definition>
+interface FutureCommitments {
+  month: string          // YYYY-MM format
+  total_due: number      // Sum of all payments due this month
+  payment_count: number  // Number of installment payments due
+}
+          </definition>
+        </interface>
+
+        <interface name="MonthCommitmentDetails">
+          <location>fe/lib/types.ts</location>
+          <definition>
+interface MonthCommitmentDetails {
+  plan_id: string
+  description: string
+  installment_number: number
+  total_installments: number
+  amount: number
+  category_id: string | null
+}
+          </definition>
+        </interface>
+      </typescript-interfaces>
+
+      <database-queries>
+        <query name="future_commitments_aggregation">
+          <description>Returns total installment obligations by month (next 12 months)</description>
+          <sql>
+SELECT
+  date_trunc('month', ip.due_date) as commitment_month,
+  SUM(ip.amount) as total_due,
+  COUNT(*) as payment_count
+FROM installment_payments ip
+JOIN installment_plans ipl ON ip.plan_id = ipl.id
+WHERE ipl.user_id = $1
+  AND ip.status = 'pending'
+  AND ip.due_date > CURRENT_DATE
+GROUP BY commitment_month
+ORDER BY commitment_month
+LIMIT 12;
+          </sql>
+          <performance-target>&lt; 200ms</performance-target>
+          <indexes-used>
+            - idx_installment_plans_user_status
+            - idx_installment_payments_due_date_status
+          </indexes-used>
+        </query>
+
+        <query name="month_commitment_details">
+          <description>Returns individual installment payments for a specific month</description>
+          <sql>
+SELECT
+  ipl.id as plan_id,
+  ipl.description,
+  ip.installment_number,
+  ipl.total_installments,
+  ip.amount,
+  ipl.category_id
+FROM installment_payments ip
+JOIN installment_plans ipl ON ip.plan_id = ipl.id
+WHERE ipl.user_id = $1
+  AND ip.status = 'pending'
+  AND date_trunc('month', ip.due_date) = $2
+ORDER BY ipl.description ASC;
+          </sql>
+        </query>
+      </database-queries>
+    </data-models>
+
+    <localization>
+      <frontend-keys>
+        <file>fe/lib/localization/pt-br.ts</file>
+        <keys>
+futureCommitments: {
+  title: 'Compromissos Futuros',
+  monthFormat: '{{month}} {{year}}',
+  paymentCount: '{{count}} parcelas',
+  paymentCount_one: '{{count}} parcela',
+  emptyState: 'Você não tem parcelamentos ativos.',
+  createButton: 'Criar Parcelamento',
+  monthlyTotal: 'R$ {{amount}}',
+  installmentProgress: '{{current}}/{{total}}',
+}
+        </keys>
+      </frontend-keys>
+
+      <whatsapp-keys>
+        <file>whatsapp-bot/src/localization/pt-br.ts</file>
+        <keys>
+futureCommitments: {
+  title: 'Compromissos Futuros',
+  total_next_months: 'Total próximos {{months}} meses: {{total}}',
+  no_active: 'Você não tem parcelamentos ativos.',
+  create_hint: 'Para criar um parcelamento, envie:\n"gastei 600 em 3x no celular"',
+  month_summary: '{{month}}/{{year}}: R$ {{amount}} ({{count}} parcelas)',
+  installment_item: '• {{description}}: {{current}}/{{total}} - R$ {{amount}}',
+}
+        </keys>
+      </whatsapp-keys>
+    </localization>
+
+    <analytics>
+      <events>
+        <event name="future_commitments_viewed">
+          <location>fe/lib/analytics/events.ts</location>
+          <properties>
+            - userId: string
+            - monthCount: number (months with commitments)
+            - totalCommitment: number (12-month total)
+            - paymentCount: number (total pending payments)
+            - channel: 'web' | 'whatsapp'
+            - timestamp: ISO8601
+          </properties>
+        </event>
+
+        <event name="future_commitments_month_expanded">
+          <location>fe/lib/analytics/events.ts</location>
+          <properties>
+            - userId: string
+            - month: string (YYYY-MM)
+            - paymentCount: number
+          </properties>
+        </event>
+
+        <event name="future_commitments_empty_state_viewed">
+          <location>fe/lib/analytics/events.ts</location>
+          <properties>
+            - userId: string
+            - channel: 'web' | 'whatsapp'
+          </properties>
+        </event>
+      </events>
+    </analytics>
+  </technical-context>
+
+  <implementation-guidance>
+    <critical-decisions>
+      <decision id="D1">
+        <title>Aggregate by Month (Not Individual Payments)</title>
+        <rationale>Users care about total monthly commitment, not individual payments. Clean, scannable UI.</rationale>
+        <implementation>GROUP BY month in query, SUM(amount) for total</implementation>
+        <trade-off>Requires expand action to see individual payments (acceptable UX trade-off)</trade-off>
+      </decision>
+
+      <decision id="D2">
+        <title>12-Month Default Window</title>
+        <rationale>Balance between visibility and data overload. Most users care about near-term commitments.</rationale>
+        <implementation>LIMIT 12 in query, monthsAhead parameter for future extension</implementation>
+        <enhancement>Allow user to expand to 24/36 months (Post-MVP)</enhancement>
+      </decision>
+
+      <decision id="D3">
+        <title>Server-Side Data Fetching (Web)</title>
+        <rationale>Next.js 15 Server Components best practice. Faster initial page load.</rationale>
+        <implementation>getFutureCommitments in server action, server component renders data</implementation>
+        <trade-off>Expand action requires client-side fetch for details</trade-off>
+      </decision>
+
+      <decision id="D4">
+        <title>WhatsApp Shows All Details (No Expand)</title>
+        <rationale>WhatsApp is text-based, can't collapse/expand easily. Single command shows everything.</rationale>
+        <implementation>Show all months + nested payments in single message</implementation>
+        <trade-off>Long message if 12 months with many payments (acceptable, users can scroll)</trade-off>
+      </decision>
+    </critical-decisions>
+
+    <performance-requirements>
+      <requirement id="NFR-P2">
+        <description>Future commitments query execution time</description>
+        <target>&lt; 200ms for user with 20 active installments</target>
+        <measurement>Query execution time from server action call to data return</measurement>
+        <implementation>
+          - Use indexed query on due_date, status
+          - LIMIT 12 months to reduce result set
+          - Aggregation at database level (not application)
+        </implementation>
+      </requirement>
+
+      <requirement id="NFR-P4">
+        <description>Dashboard page load time</description>
+        <target>&lt; 1 second total (including future commitments widget)</target>
+        <measurement>Time to first render of complete dashboard</measurement>
+      </requirement>
+    </performance-requirements>
+
+    <edge-cases>
+      <case id="EC1">
+        <scenario>No Active Installments</scenario>
+        <handling>Show empty state with guidance message and CTA to create installment</handling>
+        <test>Create user, don't create installments → Verify empty state displays</test>
+      </case>
+
+      <case id="EC2">
+        <scenario>All Payments in Past</scenario>
+        <handling>Empty state (no future commitments) - WHERE due_date > CURRENT_DATE excludes past</handling>
+        <test>Create installment with all payments in past → Verify empty state</test>
+      </case>
+
+      <case id="EC3">
+        <scenario>Installment Spanning 12+ Months</scenario>
+        <handling>Show first 12 months only (LIMIT 12)</handling>
+        <test>Create 60-month installment → Verify only 12 months shown</test>
+      </case>
+
+      <case id="EC4">
+        <scenario>Multiple Payments Same Day</scenario>
+        <handling>Aggregate correctly (same month group) - SUM(amount)</handling>
+        <test>Create 3 installments with same due_date → Verify correct aggregation</test>
+      </case>
+
+      <case id="EC5">
+        <scenario>Payment Due Today</scenario>
+        <handling>WHERE due_date > CURRENT_DATE excludes today (today is "now", not "future")</handling>
+        <alternative>Could change to >= if users request including today</alternative>
+      </case>
+    </edge-cases>
+
+    <testing-strategy>
+      <unit-tests>
+        <coverage-target>80%+</coverage-target>
+        <focus-areas>
+          - getFutureCommitments query logic (mocked Supabase)
+          - FutureCommitmentsWidget rendering (React Testing Library)
+          - WhatsApp handler formatting (Jest)
+          - Date/currency formatting (pt-BR and en)
+          - Empty state rendering
+        </focus-areas>
+      </unit-tests>
+
+      <integration-tests>
+        <scenarios>
+          - Create 3 installments → Verify dashboard shows aggregated totals
+          - Pay off 1 installment → Verify it disappears from commitments
+          - Delete installment → Verify commitments update
+          - WhatsApp command returns correct data
+        </scenarios>
+        <database>Real test database (Supabase)</database>
+      </integration-tests>
+
+      <performance-tests>
+        <test-scenarios>
+          - Create test user with 20 active installments (60 pending payments total)
+          - Measure getFutureCommitments query time
+          - Verify &lt; 200ms (NFR-P2)
+          - Test edge cases: 0 installments, 100 installments
+        </test-scenarios>
+      </performance-tests>
+
+      <manual-tests>
+        <test-scenarios>
+          - Test web dashboard with 0, 1, 3, 12+ months of commitments
+          - Test expand/collapse on mobile and desktop
+          - Test WhatsApp command with staging bot
+          - Verify formatting matches specification
+          - Test both pt-BR and en locales
+          - Test empty state scenarios
+        </test-scenarios>
+      </manual-tests>
+    </testing-strategy>
+  </implementation-guidance>
+
+  <existing-patterns>
+    <pattern name="Server Action Pattern">
+      <description>Established in Stories 2.1 and 2.2 for installment operations</description>
+      <reference>fe/lib/actions/installments.ts - createInstallment()</reference>
+      <apply-to>getFutureCommitments(), getFutureCommitmentsByMonth()</apply-to>
+      <key-elements>
+        - Use getSupabaseServerClient()
+        - Verify user authentication
+        - RLS policies automatically filter by user_id
+        - Return { success, data?, error? } structure
+        - Track analytics events
+        - Revalidate paths on mutations
+      </key-elements>
+    </pattern>
+
+    <pattern name="Radix Component Pattern">
+      <description>Established in Story 1.4 for UI components</description>
+      <reference>fe/components/transaction-dialog.tsx</reference>
+      <apply-to>FutureCommitmentsWidget with Radix Collapsible</apply-to>
+      <key-elements>
+        - Use Radix primitives (Collapsible.Root, Trigger, Content)
+        - Tailwind for styling
+        - Accessibility built-in
+        - Responsive design
+      </key-elements>
+    </pattern>
+
+    <pattern name="Localization Pattern">
+      <description>Established across Epic 1 for pt-BR/en support</description>
+      <reference>fe/lib/localization/pt-br.ts, whatsapp-bot/src/localization/pt-br.ts</reference>
+      <apply-to>All future commitments messages and UI text</apply-to>
+      <key-elements>
+        - Primary: pt-BR (Brazilian Portuguese)
+        - Secondary: en (English)
+        - Use next-intl for frontend
+        - Direct object access for WhatsApp bot
+        - Date formatting with date-fns + locale
+        - Currency formatting with Intl.NumberFormat
+      </key-elements>
+    </pattern>
+
+    <pattern name="WhatsApp Handler Pattern">
+      <description>Established in Story 2.1 for installment creation</description>
+      <reference>whatsapp-bot/src/handlers/credit-card/installment-handler.ts</reference>
+      <apply-to>future-commitments-handler.ts</apply-to>
+      <key-elements>
+        - AI intent extraction via services/ai/ai-pattern-generator.ts
+        - Route via handlers/core/intent-executor.ts
+        - Localized response messages
+        - Analytics tracking
+        - Error handling with user-friendly messages
+      </key-elements>
+    </pattern>
+
+    <pattern name="Analytics Pattern">
+      <description>Established in Story 2.2 for tracking user actions</description>
+      <reference>fe/lib/analytics/events.ts, server-tracker.ts</reference>
+      <apply-to>future_commitments_viewed, future_commitments_month_expanded events</apply-to>
+      <key-elements>
+        - Define events in events.ts enum
+        - Track via trackServerEvent() for server actions
+        - Track via posthog.capture() for client actions
+        - Include userId, timestamp, channel, relevant properties
+      </key-elements>
+    </pattern>
+  </existing-patterns>
+
+  <dependencies>
+    <blocker-dependencies>
+      <dependency id="story-2-1">
+        <title>Story 2.1: Add Installment Purchase (WhatsApp)</title>
+        <status>done</status>
+        <required-artifacts>
+          - installment_plans table populated with data
+          - installment_payments table populated with data
+          - Installment creation flow working
+        </required-artifacts>
+      </dependency>
+
+      <dependency id="story-2-2">
+        <title>Story 2.2: Add Installment Purchase (Web Frontend)</title>
+        <status>done</status>
+        <required-artifacts>
+          - createInstallment server action exists
+          - Installment plans can be created via web
+          - fe/lib/actions/installments.ts file structure
+        </required-artifacts>
+      </dependency>
+
+      <dependency id="epic-1">
+        <title>Epic 1: Credit Mode Foundation</title>
+        <status>completed</status>
+        <required-artifacts>
+          - Database schema with indexes
+          - payment_methods.credit_mode flag
+          - RLS policies enabled
+        </required-artifacts>
+      </dependency>
+    </blocker-dependencies>
+
+    <soft-dependencies>
+      <dependency id="epic-3">
+        <title>Epic 3: Statement-Aware Budgets</title>
+        <status>not-started</status>
+        <impact>
+          Future enhancement: Could show commitments aligned with statement periods.
+          For now, shows calendar months (acceptable for MVP).
+        </impact>
+      </dependency>
+    </soft-dependencies>
+
+    <third-party-libraries>
+      <library name="date-fns">
+        <version>^2.30.0</version>
+        <purpose>Date formatting and manipulation</purpose>
+        <usage>Format month names, calculate date ranges</usage>
+      </library>
+
+      <library name="@radix-ui/react-collapsible">
+        <version>Latest</version>
+        <purpose>Accessible expand/collapse component</purpose>
+        <usage>Monthly breakdown expand/collapse in FutureCommitmentsWidget</usage>
+      </library>
+
+      <library name="next-intl">
+        <version>Latest</version>
+        <purpose>Internationalization for Next.js</purpose>
+        <usage>Localized strings, date formatting with locale</usage>
+      </library>
+
+      <library name="posthog-js">
+        <version>^1.96.0</version>
+        <purpose>Product analytics</purpose>
+        <usage>Track user interactions with future commitments dashboard</usage>
+      </library>
+    </third-party-libraries>
+  </dependencies>
+
+  <risks>
+    <risk id="RISK-1">
+      <title>Query Performance with Many Installments</title>
+      <likelihood>Low</likelihood>
+      <impact>Slow dashboard load, poor UX</impact>
+      <mitigation>
+        - Performance testing before release with 20 installments
+        - Monitor query times in production
+        - Indexes already exist from Epic 1
+        - LIMIT 12 reduces result set
+      </mitigation>
+      <target>&lt; 200ms for 20 installments (NFR-P2)</target>
+    </risk>
+
+    <risk id="RISK-2">
+      <title>WhatsApp Message Too Long</title>
+      <likelihood>Medium</likelihood>
+      <impact>Message truncated or unreadable</impact>
+      <mitigation>
+        - Test with extreme cases (12 months × 10 payments = 120 lines)
+        - Consider pagination if needed
+        - Alternative: Limit WhatsApp to 6 months, prompt "Ver mais?"
+      </mitigation>
+    </risk>
+
+    <risk id="RISK-3">
+      <title>Empty State Confusion</title>
+      <likelihood>Medium</likelihood>
+      <impact>Users don't understand how to create installments</impact>
+      <mitigation>
+        - Clear guidance in empty state
+        - Link/button to Story 2.2 form (web)
+        - Instructions for WhatsApp command (bot)
+      </mitigation>
+    </risk>
+  </risks>
+
+  <acceptance-criteria-summary>
+    <ac id="AC3.1" priority="critical">
+      <title>Monthly Breakdown Display</title>
+      <description>Dashboard shows next 12 months of installment obligations</description>
+      <format>📅 Janeiro 2025: R$ 450,00 (3 parcelas)</format>
+      <query-target>&lt; 200ms</query-target>
+    </ac>
+
+    <ac id="AC3.2" priority="critical">
+      <title>Expandable Details</title>
+      <description>Clicking month expands to show individual installments</description>
+      <shows>Description, payment progress (3/12), amount, optional category emoji</shows>
+      <interaction>Click header to toggle, multiple months can be expanded</interaction>
+    </ac>
+
+    <ac id="AC3.3" priority="high">
+      <title>Empty State</title>
+      <description>Clear message when user has no active installments</description>
+      <web>Shows message + CTA button to create installment</web>
+      <whatsapp>Shows message + instructions for creating installment</whatsapp>
+    </ac>
+
+    <ac id="AC3.4" priority="critical">
+      <title>WhatsApp Support</title>
+      <description>WhatsApp command shows text summary of future commitments</description>
+      <commands>/parcelamentos, parcelamentos, próximas parcelas, /installments, future commitments</commands>
+      <format>Monthly breakdown + nested individual installments + 12-month total</format>
+    </ac>
+  </acceptance-criteria-summary>
+
+  <dev-notes>
+    <note priority="critical">
+      **Database Query Optimization:**
+      The future commitments query is critical for performance. It uses two existing indexes from Epic 1:
+      - idx_installment_plans_user_status (covers WHERE user_id, status)
+      - idx_installment_payments_due_date_status (covers WHERE due_date, status)
+
+      The query performs aggregation at the database level (GROUP BY month, SUM(amount)) rather than in application code.
+      This is significantly faster and scales better.
+    </note>
+
+    <note priority="high">
+      **Rounding Edge Cases:**
+      When displaying monthly payments, be aware of rounding:
+      - R$ 100 / 3 = R$ 33.33, R$ 33.33, R$ 33.34 (last payment absorbs difference)
+      - For dashboard display, show average: "R$ 33,33 / mês"
+      - Optionally show note: "(Última parcela: R$ 33,34)" for transparency
+    </note>
+
+    <note priority="medium">
+      **Empty State Design:**
+      The empty state is an opportunity for user education. Don't just say "no installments."
+      Provide clear guidance on how to create an installment:
+      - Web: Show CTA button that redirects to transaction form with installment toggle
+      - WhatsApp: Show example message pattern ("gastei 600 em 3x no celular")
+    </note>
+
+    <note priority="medium">
+      **WhatsApp Message Length:**
+      If a user has 12 months × 10 payments = 120 lines, the message could be very long.
+      For MVP, show all (users can scroll). Post-MVP, consider:
+      - Limit to 6 months, prompt "Reply 'more' to see 6-12 months"
+      - Or limit to 3 months with highest totals, prompt "Reply 'all' for complete list"
+    </note>
+
+    <note priority="low">
+      **Future Enhancement:**
+      Consider adding filter/sort options:
+      - Filter by payment method (show commitments for specific card)
+      - Filter by category
+      - Sort by total amount (highest commitments first)
+      - These are Post-MVP enhancements based on user feedback
+    </note>
+  </dev-notes>
+
+  <file-references>
+    <reference type="story">
+      <path>docs/sprint-artifacts/2-3-future-commitments-dashboard.md</path>
+      <description>Complete story specification with all ACs, tasks, and dev notes</description>
+    </reference>
+
+    <reference type="tech-spec">
+      <path>docs/sprint-artifacts/tech-spec-epic-2.md</path>
+      <description>Epic 2 technical specification with architecture decisions and data models</description>
+    </reference>
+
+    <reference type="implementation">
+      <path>fe/lib/actions/installments.ts</path>
+      <description>Existing installment server actions - add getFutureCommitments() here</description>
+    </reference>
+
+    <reference type="implementation">
+      <path>fe/app/[locale]/page.tsx</path>
+      <description>Main dashboard page - integrate FutureCommitmentsWidget below BalanceCard</description>
+    </reference>
+
+    <reference type="implementation">
+      <path>fe/lib/types.ts</path>
+      <description>TypeScript interfaces - add FutureCommitments and MonthCommitmentDetails</description>
+    </reference>
+
+    <reference type="implementation">
+      <path>whatsapp-bot/src/handlers/credit-card/installment-handler.ts</path>
+      <description>Reference for WhatsApp handler pattern (Story 2.1)</description>
+    </reference>
+
+    <reference type="localization">
+      <path>fe/lib/localization/pt-br.ts</path>
+      <description>Frontend localization strings - add futureCommitments section</description>
+    </reference>
+
+    <reference type="localization">
+      <path>whatsapp-bot/src/localization/pt-br.ts</path>
+      <description>WhatsApp bot localization strings - add futureCommitments section</description>
+    </reference>
+
+    <reference type="analytics">
+      <path>fe/lib/analytics/events.ts</path>
+      <description>Analytics event definitions - add future_commitments_* events</description>
+    </reference>
+  </file-references>
+</story-context>

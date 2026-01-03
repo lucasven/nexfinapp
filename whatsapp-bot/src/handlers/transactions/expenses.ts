@@ -61,6 +61,77 @@ export async function handleAddExpense(
       })
     }
 
+    // Story 1.2 & 1.3: Credit Mode Detection and Selection
+    // Handle payment method and trigger mode selection if needed
+    let paymentMethodId: string | null = null
+    if (paymentMethod) {
+      const { findOrCreatePaymentMethod, detectPaymentMethodType } = await import('../../utils/payment-method-helper.js')
+      const { needsCreditModeSelection } = await import('../../utils/credit-mode-detection.js')
+      const { storePendingTransactionContext } = await import('../../services/conversation/pending-transaction-state.js')
+      const { sendModeSelectionPrompt } = await import('../credit-card/mode-selection.js')
+      const { getUserLocale } = await import('../../localization/i18n.js')
+
+      // Detect payment method type from name
+      const pmType = detectPaymentMethodType(paymentMethod)
+
+      // Find or create payment method
+      const pm = await findOrCreatePaymentMethod(session.userId, paymentMethod, pmType)
+
+      if (pm) {
+        paymentMethodId = pm.id
+
+        // Check if credit mode selection is needed
+        const needsMode = await needsCreditModeSelection(paymentMethodId)
+
+        if (needsMode) {
+          // Get user locale for pending transaction context
+          const locale = await getUserLocale(session.userId)
+
+          // Store pending transaction
+          storePendingTransactionContext(whatsappNumber, {
+            paymentMethodId,
+            amount,
+            categoryId,
+            description,
+            date: date || new Date().toISOString().split('T')[0],
+            locale: locale as 'pt-BR' | 'en',
+            transactionType: (type || 'expense') as 'expense' | 'income'
+          })
+
+          logger.info('Credit mode selection triggered', {
+            whatsappNumber,
+            userId: session.userId,
+            paymentMethodId,
+            paymentMethodName: paymentMethod
+          })
+
+          // Return mode selection prompt (Story 1.3)
+          return await sendModeSelectionPrompt(session.userId)
+        }
+
+        // Story 1.6: Simple Mode Backward Compatibility
+        // If credit_mode = FALSE (Simple Mode), skip all credit-specific features
+        // - No installment prompts (Epic 2)
+        // - No statement period tracking (Epic 3)
+        // - Transaction proceeds as standard expense (same as debit card)
+        if (pm.type === 'credit' && pm.credit_mode === false) {
+          logger.info('Simple Mode credit card detected - standard transaction flow', {
+            whatsappNumber,
+            userId: session.userId,
+            paymentMethodId,
+            paymentMethodName: paymentMethod
+          })
+          // Continue to standard transaction creation (no credit features)
+          // This is the desired behavior for Simple Mode (AC6.1, AC6.8)
+        }
+
+        // Future Epic 2: Credit Mode installment logic would go here
+        // if (pm.type === 'credit' && pm.credit_mode === true) {
+        //   // Prompt for installments, statement period, etc.
+        // }
+      }
+    }
+
     // Check for duplicate transactions
     const expenseData = {
       amount,
@@ -115,7 +186,16 @@ export async function handleAddExpense(
 
     const userReadableId = idData
 
-    const { data, error } = await supabase
+    // Story 2.0 Part 1: payment_method_id is now required after migration 041
+    // Ensure we have a payment_method_id before creating transaction
+    if (!paymentMethodId) {
+      // If no payment method was specified, use default cash payment method
+      const { findOrCreatePaymentMethod } = await import('../../utils/payment-method-helper.js')
+      const defaultPm = await findOrCreatePaymentMethod(session.userId, 'Cash', 'cash')
+      paymentMethodId = defaultPm?.id || null
+    }
+
+    const { data, error} = await supabase
       .from('transactions')
       .insert({
         user_id: session.userId,
@@ -124,7 +204,7 @@ export async function handleAddExpense(
         category_id: categoryId,
         description: description || null,
         date: transactionDate,
-        payment_method: paymentMethod || null,
+        payment_method_id: paymentMethodId, // Required field (Story 2.0)
         user_readable_id: userReadableId,
         match_confidence: matchConfidence,
         match_type: categoryMatch.matchType,
@@ -156,7 +236,25 @@ export async function handleAddExpense(
     // Get category name for tracking
     const categoryName = data.category?.name || 'Sem categoria'
 
-    // Track successful transaction creation
+    // Story 2.0 Part 1: Get payment method for analytics (AC1.8)
+    let paymentMethodType = null
+    let paymentMethodMode = null
+    if (paymentMethodId) {
+      const { data: pm } = await supabase
+        .from('payment_methods')
+        .select('type, credit_mode')
+        .eq('id', paymentMethodId)
+        .single()
+
+      if (pm) {
+        paymentMethodType = pm.type
+        paymentMethodMode = pm.type === 'credit'
+          ? (pm.credit_mode === true ? 'credit' : pm.credit_mode === false ? 'simple' : null)
+          : null
+      }
+    }
+
+    // Track successful transaction creation with payment method mode
     trackEvent(
       WhatsAppAnalyticsEvent.WHATSAPP_TRANSACTION_CREATED,
       session.userId,
@@ -168,7 +266,11 @@ export async function handleAddExpense(
         [WhatsAppAnalyticsProperty.CATEGORY_ID]: categoryId,
         [WhatsAppAnalyticsProperty.CATEGORY_NAME]: categoryName,
         [WhatsAppAnalyticsProperty.CATEGORY_MATCHING_METHOD]: categoryMatch.matchType,
+        [WhatsAppAnalyticsProperty.PAYMENT_METHOD_ID]: paymentMethodId,
+        payment_method_type: paymentMethodType,
+        payment_method_mode: paymentMethodMode,
         category_match_confidence: matchConfidence,
+        channel: 'whatsapp',
       }
     )
 
@@ -185,6 +287,9 @@ export async function handleAddExpense(
         }
       )
     }
+
+    // NOTE: Auto-linking removed - installments now create transactions upfront
+    // All installment transactions are created when the installment plan is created
 
     // Story 2.5: Record magic moment for first NLP-parsed expense
     // AC-2.5.1: First NLP expense sets magic_moment_at
@@ -256,11 +361,57 @@ export async function handleAddExpense(
       confidenceText = `\n\n⚠️ Categoria sugerida com ${Math.round(matchConfidence * 100)}% de certeza. Se estiver incorreta, você pode alterá-la.`
     }
 
+    // Story 3.6: Add statement period context for Credit Mode transactions
+    let statementPeriodText = ''
+    if (paymentMethodId) {
+      const { data: pm } = await supabase
+        .from('payment_methods')
+        .select('credit_mode, statement_closing_day, name')
+        .eq('id', paymentMethodId)
+        .single()
+
+      if (pm && pm.credit_mode === true && pm.statement_closing_day != null) {
+        // Calculate statement period for this transaction
+        const { getStatementPeriodForDate, formatStatementPeriod, getStatementPeriod } = await import('../../utils/statement-period-helpers.js')
+        const { getUserLocale } = await import('../../localization/i18n.js')
+
+        const userLocale = await getUserLocale(session.userId)
+        const locale = userLocale === 'en' ? 'en-US' : 'pt-BR'
+
+        const periodInfo = getStatementPeriodForDate(
+          pm.statement_closing_day,
+          new Date(transactionDate),
+          new Date()
+        )
+
+        // Get localized period name
+        const { messages: localeMessages } = userLocale === 'en'
+          ? await import('../../localization/en.js')
+          : await import('../../localization/pt-br.js')
+
+        const periodName = periodInfo.period === 'current'
+          ? localeMessages.statementPeriod?.currentPeriod || 'current'
+          : periodInfo.period === 'next'
+          ? localeMessages.statementPeriod?.nextPeriod || 'next'
+          : localeMessages.statementPeriod?.pastPeriod || 'past'
+
+        // Format period dates
+        const periodStart = formatStatementPeriod(periodInfo.periodStart, locale, true)
+        const periodEnd = formatStatementPeriod(periodInfo.periodEnd, locale, true)
+
+        const periodContext = localeMessages.statementPeriod?.periodContext || 'Statement {period} ({start} - {end})'
+        statementPeriodText = `\n📊 ${periodContext
+          .replace('{period}', periodName)
+          .replace('{start}', periodStart)
+          .replace('{end}', periodEnd)}`
+      }
+    }
+
     let response = ''
     if (type === 'income') {
-      response = messages.incomeAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText
+      response = messages.incomeAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText + statementPeriodText
     } else {
-      response = messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText
+      response = messages.expenseAdded(amount, categoryName, formattedDate) + paymentMethodText + transactionIdText + confidenceText + statementPeriodText
     }
 
     // Story 2.6: Contextual hints after actions

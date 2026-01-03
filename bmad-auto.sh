@@ -263,39 +263,89 @@ EOF
 }
 
 # Run Claude Code with prompt
+# Sets global CLAUDE_OUTPUT with the session output
 run_claude_session() {
     local prompt=$1
     local story_key=$2
-    
+
     log_info "Starting Claude Code session for: $story_key"
-    
+
+    CLAUDE_OUTPUT=""
+
     if [ "$DRY_RUN" = true ]; then
         echo "------- DRY RUN: Would send this prompt -------"
         echo "$prompt"
         echo "------------------------------------------------"
         return 0
     fi
-    
+
     cd "$PROJECT_DIR"
-    
+
     # Write prompt to temp file to handle multi-line and special characters
     local prompt_file=$(mktemp)
+    local output_file=$(mktemp)
     echo "$prompt" > "$prompt_file"
-    
+
     if [ "$INTERACTIVE" = true ]; then
         # Interactive mode - stays open for manual control
         log_info "Running in INTERACTIVE mode (session stays open)"
-        cat "$prompt_file" | claude
+        cat "$prompt_file" | claude | tee "$output_file"
     else
         # Headless mode (-p) - exits after completion
         # Read prompt from stdin to avoid shell expansion issues
-        cat "$prompt_file" | claude -p --dangerously-skip-permissions
+        cat "$prompt_file" | claude -p --dangerously-skip-permissions | tee "$output_file"
     fi
-    
+
     local exit_code=$?
-    rm -f "$prompt_file"
-    
+    CLAUDE_OUTPUT=$(cat "$output_file")
+    rm -f "$prompt_file" "$output_file"
+
     return $exit_code
+}
+
+# Check if output contains BMAD_ISSUES and extract the message
+check_for_issues() {
+    local output=$1
+
+    # Look for BMAD_ISSUES: and extract the rest of the line
+    local issues_line=$(echo "$output" | grep -o "BMAD_ISSUES:.*" | head -1)
+
+    if [ -n "$issues_line" ]; then
+        # Extract the message after BMAD_ISSUES:
+        echo "${issues_line#BMAD_ISSUES:}" | sed 's/^ *//'
+        return 0
+    fi
+
+    return 1
+}
+
+# Build prompt for fixing issues found in code review
+build_fix_issues_prompt() {
+    local story_key=$1
+    local story_file=$2
+    local issues=$3
+    local context_file="${story_file%.md}_context.xml"
+
+    cat <<EOF
+# BMAD Task: Fix Code Review Issues
+
+Story: $story_key
+Story file: $story_file
+Context file: $context_file
+
+## Issues Found in Code Review:
+$issues
+
+## Instructions:
+1. Read the story file and context file
+2. Address ALL the issues listed above
+3. Update the "Dev Agent Record" section with fixes made
+4. Run tests to ensure everything passes
+5. Once fixed, update sprint-status.yaml: change "$story_key: in-progress" to "$story_key: review"
+
+When fixes are complete, exit with: BMAD_COMPLETE: $story_key review
+If you need to continue in another session, exit with: BMAD_CONTINUE: $story_key in-progress
+EOF
 }
 
 # Main loop
@@ -358,14 +408,30 @@ main() {
         
         # Build and run prompt
         local prompt=$(build_prompt "$story_key" "$action" "$current_status" "$story_file")
-        
+
         run_claude_session "$prompt" "$story_key"
-        
+
+        # Check if code-review found issues - fallback to dev to fix them
+        if [ "$action" = "code-review" ]; then
+            local issues=$(check_for_issues "$CLAUDE_OUTPUT")
+            if [ -n "$issues" ]; then
+                log_warn "Code review found issues: $issues"
+                log_info "Falling back to dev-story to fix issues..."
+
+                # Build fix prompt and run another session
+                local fix_prompt=$(build_fix_issues_prompt "$story_key" "$story_file" "$issues")
+                run_claude_session "$fix_prompt" "$story_key"
+
+                # After fixing, the loop will continue and pick up the next action
+                # (which should be code-review again if status was set back to review)
+            fi
+        fi
+
         if [ "$SINGLE_RUN" = true ]; then
             log_info "Single run mode - stopping after one action"
             exit 0
         fi
-        
+
         # Small delay between sessions
         log_info "Waiting 2 seconds before checking next action..."
         sleep 2

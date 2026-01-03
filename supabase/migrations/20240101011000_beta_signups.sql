@@ -1,0 +1,1 @@
+../../fe/scripts/011_beta_signups.sql

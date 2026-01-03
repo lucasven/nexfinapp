@@ -1,0 +1,1027 @@
+<story-context>
+  <story-id>2-7-delete-installment-plan</story-id>
+  <story-title>Delete Installment Plan</story-title>
+  <epic-id>epic-2</epic-id>
+  <epic-title>Parcelamento Intelligence</epic-title>
+
+  <story-summary>
+    Enable users to permanently delete installment plans (parcelamentos) with clear warning dialogs showing the impact of deletion. This feature allows users to remove incorrect entries, duplicate installments, or purchases they no longer want to track. Preserves paid transaction history while removing the plan and pending payments atomically. Supports both Web frontend and WhatsApp conversational deletion flows.
+  </story-summary>
+
+  <context-why>
+    <problem>
+      Users make mistakes when creating installments (wrong card selected, incorrect purchase details, duplicate entries) or decide not to track certain purchases. Unlike early payoff (Story 2.5) which marks a plan as complete, deletion is for removing unwanted or incorrect data permanently. Without deletion functionality, users must either live with incorrect data or request database-level intervention from support. Traditional expense trackers often delete all related data (including paid transactions), causing data loss and audit trail destruction.
+    </problem>
+
+    <user-need>
+      Users need the ability to permanently delete installment plans with:
+      - Clear confirmation warning showing all implications of deletion
+      - Visibility into what will be deleted (plan + pending payments)
+      - Visibility into what will be preserved (paid transactions remain, become orphaned)
+      - Understanding of impact on future commitments dashboard
+      - Irreversibility warning (cannot undo deletion)
+      - Atomic execution (all-or-nothing, no partial state)
+      - Support for both Web and WhatsApp deletion flows
+      - Immediate UI updates across all affected components
+      - Assurance that paid transaction history is preserved for audit trail
+    </user-need>
+
+    <epic-context>
+      This is Story 2.7 of Epic 2 (Parcelamento Intelligence), NexFinApp's killer feature for proper Brazilian installment tracking. Story 2.7 enables critical data cleanup workflows that align with real-world scenarios:
+      - User created installment by mistake (wrong card, duplicate entry)
+      - User discovers purchase details are incorrect beyond repair via edit
+      - User decides not to track certain purchases anymore
+      - User wants to clean up test data or experimental installments
+
+      This story integrates with:
+      - Story 2.4: "Deletar" button on installments list page (currently disabled)
+      - Story 2.3: Future commitments dashboard updates when pending payments removed
+      - Story 2.5: Payoff for legitimate completion, Delete for permanent removal (distinct use cases)
+      - Story 2.6: Edit for corrections, Delete for complete removal (complementary features)
+      - Story 2.0: Atomic transaction pattern ensures no partial deletion
+      - Epic 1: CASCADE DELETE foreign key automatically removes child payments
+    </epic-context>
+  </context-why>
+
+  <context-what>
+    <functional-requirements>
+      <requirement id="FR22">Delete installment plan permanently</requirement>
+      <requirement id="FR22.1">Preserve paid transaction history (orphan, don't delete)</requirement>
+      <requirement id="FR22.2">Remove pending payments via CASCADE</requirement>
+      <requirement id="FR13">Future commitments update when pending payments removed</requirement>
+    </functional-requirements>
+
+    <deliverables>
+      <deliverable>DeleteInstallmentDialog component with comprehensive warning</deliverable>
+      <deliverable>deleteInstallment server action with atomic deletion logic</deliverable>
+      <deliverable>executeAtomicDeletion function (orphan paid transactions → CASCADE delete)</deliverable>
+      <deliverable>Confirmation warning showing plan details, payment counts, consequences</deliverable>
+      <deliverable>Success toast with deletion impact summary</deliverable>
+      <deliverable>Immediate UI updates: installments list + future commitments refresh</deliverable>
+      <deliverable>Enable "Deletar" button on installment cards (Story 2.4 integration)</deliverable>
+      <deliverable>WhatsApp deletion flow (conversational: list → select → confirm → execute)</deliverable>
+      <deliverable>PostHog analytics events: INSTALLMENT_DELETED, INSTALLMENT_DELETE_FAILED</deliverable>
+      <deliverable>Localization support for pt-BR and English</deliverable>
+      <deliverable>Error handling for invalid deletion, unauthorized access, rollback on error</deliverable>
+    </deliverables>
+
+    <acceptance-criteria>
+      <ac id="AC7.1">
+        <title>Confirmation Warning</title>
+        <requirements>
+          Confirmation Dialog Content:
+
+          Title: ⚠️ Deletar Parcelamento?
+
+          Body Structure:
+          1. "Você está prestes a deletar permanentemente:"
+             - Plan description (e.g., "Celular Samsung Galaxy S24")
+             - Payment method name (e.g., "Nubank Crédito")
+             - Total amount and installments (e.g., "R$ 1.200,00 em 12x de R$ 100,00")
+
+          2. "Status atual:"
+             - Paid count and amount (e.g., "3 parcelas pagas (R$ 300,00)")
+             - Pending count and amount (e.g., "9 parcelas pendentes (R$ 900,00)")
+
+          3. "⚠️ O que vai acontecer:"
+             - "O plano de parcelamento será removido permanentemente"
+             - "X parcelas pendentes serão canceladas e deletadas"
+             - "Y transações pagas permanecem no histórico (sem vínculo com parcelamento)"
+             - "R$ Z removidos dos compromissos futuros"
+             - "Esta ação não pode ser desfeita"
+
+          4. Confirmation prompt: "Tem certeza que deseja deletar este parcelamento?"
+
+          5. Buttons:
+             - "Cancelar" (neutral styling, left-aligned)
+             - "Deletar Permanentemente" (destructive/red styling, right-aligned)
+
+          Key Elements:
+          - ⚠️ Warning icon prominently displayed
+          - Destructive button styling (red background, high contrast)
+          - Irreversibility warning clearly stated
+          - All numeric details accurate (counts, amounts)
+          - ESC key closes dialog
+          - Focus trap within dialog
+          - Accessible (aria labels, screen reader support)
+          - Responsive layout (mobile and desktop)
+
+          Validation:
+          - Test dialog shows correct plan details
+          - Test paid/pending counts and amounts accurate
+          - Test all warning messages present and clear
+          - Test "Cancelar" dismisses dialog without deletion
+          - Test "Deletar Permanentemente" button labeled correctly
+          - Test destructive styling on delete button
+          - Test all localization keys work (pt-BR and en)
+        </requirements>
+      </ac>
+
+      <ac id="AC7.2">
+        <title>Deletion Execution</title>
+        <requirements>
+          Database Operations (Atomic Transaction):
+
+          Step 1: Verify Ownership
+          - SELECT id, user_id FROM installment_plans WHERE id = $plan_id AND user_id = $user_id
+          - If no rows: Reject with "Unauthorized" error
+          - RLS policy + explicit check for defense in depth
+
+          Step 2: Count Payments for Confirmation Response
+          - SELECT COUNT(CASE WHEN status = 'paid' THEN 1 END) as paid_count,
+                   COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count
+            FROM installment_payments WHERE plan_id = $plan_id
+          - Return counts in response for success toast
+
+          Step 3: Orphan Paid Transactions (Preserve History)
+          - UPDATE transactions t
+            SET installment_payment_id = NULL, updated_at = NOW()
+            FROM installment_payments ip
+            WHERE t.id = ip.transaction_id
+              AND ip.plan_id = $plan_id
+              AND ip.status = 'paid'
+          - Rationale: Paid transactions are historical facts, should not be deleted
+
+          Step 4: Delete Plan (CASCADE Deletes All Payments)
+          - DELETE FROM installment_plans WHERE id = $plan_id AND user_id = $user_id
+          - CASCADE automatically deletes ALL installment_payments (both paid and pending)
+          - ON DELETE CASCADE foreign key constraint (defined in Epic 1 Story 1.1)
+
+          Server Action Implementation:
+          - File: fe/lib/actions/installments.ts
+          - Function: deleteInstallment(planId: string)
+          - Returns: { success: boolean; error?: string; deletedData?: DeleteResultData }
+
+          DeleteResultData Interface:
+          {
+            planId: string
+            description: string
+            paidCount: number
+            pendingCount: number
+            paidAmount: number
+            pendingAmount: number
+          }
+
+          Success Response:
+          {
+            "success": true,
+            "deletedData": {
+              "planId": "uuid-123",
+              "description": "Celular Samsung",
+              "paidCount": 3,
+              "pendingCount": 9,
+              "paidAmount": 300.00,
+              "pendingAmount": 900.00
+            }
+          }
+
+          Error Responses:
+          - { success: false, error: "Parcelamento não encontrado" } - Plan ID doesn't exist
+          - { success: false, error: "Você não tem permissão para deletar este parcelamento" } - Cross-user access attempt
+          - { success: false, error: "Erro ao deletar parcelamento. Tente novamente." } - Database error
+
+          Atomicity Guarantee:
+          - All operations wrapped in single database transaction
+          - If any step fails, entire transaction rolls back (no partial deletion)
+          - Paid transactions remain if deletion fails (safe default)
+          - Transaction COMMIT only after all steps succeed
+
+          Validation:
+          - Test plan deleted from installment_plans table
+          - Test all payments deleted from installment_payments (paid and pending)
+          - Test paid transactions remain in transactions table
+          - Test paid transactions have installment_payment_id = NULL
+          - Test unauthorized deletion rejected (cross-user)
+          - Test non-existent plan ID rejected
+          - Test rollback on database error (no partial state)
+          - Test atomic behavior (all-or-nothing)
+        </requirements>
+      </ac>
+
+      <ac id="AC7.3">
+        <title>Success Feedback</title>
+        <requirements>
+          Success Toast Content:
+          ✅ Parcelamento deletado
+
+          [Description] removido permanentemente.
+          • X parcelas pendentes deletadas
+          • Y transações pagas preservadas
+          • Compromissos futuros atualizados
+
+          Toast Behavior:
+          - Auto-dismiss after 5 seconds
+          - Green/success styling
+          - Accessible (screen reader announcement)
+          - Shows key impact metrics (pending deleted, paid preserved)
+          - Position: Top-right (desktop), Top-center (mobile)
+
+          UI Updates (Immediate):
+
+          1. Installments List Page (Story 2.4):
+             - Deleted plan removed from Active tab
+             - If on "Detalhes" modal for deleted plan: Modal closes automatically
+             - List count decrements
+             - Empty state shown if no installments remain
+             - Test integration with InstallmentsClient component
+
+          2. Future Commitments Dashboard (Story 2.3):
+             - Monthly totals recalculated (pending payments removed)
+             - If month now has R$ 0 due, remove month from list
+             - Widget refreshes to show updated commitments
+             - Test integration with dashboard component
+
+          3. Paid Transactions (Transaction History):
+             - Paid transactions remain visible in history
+             - Installment badge/link removed (no longer linked to plan)
+             - Transaction description unchanged
+             - Transaction amount unchanged
+             - Filter: Transactions with installment_payment_id = NULL
+
+          Data Refresh Strategy:
+          1. Close confirmation dialog
+          2. Show success toast with details
+          3. Refetch installments list (removes deleted plan) via revalidatePath
+          4. Trigger future commitments refresh (updates totals) via revalidatePath
+          5. Track analytics event: INSTALLMENT_DELETED
+
+          Validation:
+          - Test toast displays with correct details (description, counts)
+          - Test installments list updates (plan removed)
+          - Test future commitments update (totals recalculated)
+          - Test paid transactions remain visible
+          - Test empty state shown if no installments left
+          - Test analytics event fires with correct properties
+        </requirements>
+      </ac>
+
+      <ac id="AC7.4">
+        <title>WhatsApp Support</title>
+        <requirements>
+          WhatsApp Deletion Flow (Multi-Step Conversation):
+
+          Step 1: Intent Recognition
+          User messages:
+          - "deletar parcelamento do celular"
+          - "apagar compra do notebook"
+          - "remover parcelamento"
+
+          AI extracts:
+          {
+            action: 'delete_installment',
+            description: 'celular' (optional, can be null),
+            intent: 'remove installment plan'
+          }
+
+          Step 2: List Active Installments
+          Bot response:
+          "Qual parcelamento você quer deletar?
+
+          1️⃣ Celular Samsung - R$ 1.200 em 12x
+             • 3 pagas, 9 pendentes
+
+          2️⃣ Notebook Dell - R$ 3.600 em 18x
+             • 5 pagas, 13 pendentes
+
+          3️⃣ Sofá - R$ 800 em 4x
+             • 1 paga, 3 pendentes
+
+          Responda com o número (ex: 1) ou 'cancelar'"
+
+          Step 3: User Selects
+          User: "1"
+          - Parse number, validate range (1-N)
+          - If invalid: "Número inválido. Escolha entre 1 e 3"
+          - If "cancelar": "Deleção cancelada."
+
+          Step 4: Confirmation Warning
+          Bot response:
+          "⚠️ Confirme a Deleção
+
+          Você vai deletar permanentemente:
+
+          📝 Celular Samsung Galaxy S24
+          💰 R$ 1.200,00 em 12x de R$ 100,00
+
+          Status:
+          • 3 parcelas pagas (R$ 300,00)
+          • 9 parcelas pendentes (R$ 900,00)
+
+          ⚠️ O que vai acontecer:
+          • Plano removido permanentemente
+          • 9 parcelas pendentes deletadas
+          • 3 transações pagas preservadas
+          • R$ 900 removidos dos compromissos futuros
+          • Ação irreversível
+
+          Confirmar deleção?
+          Responda: 'confirmar' ou 'cancelar'"
+
+          Step 5: User Confirms
+          User: "confirmar"
+          - If "cancelar": "Deleção cancelada."
+          - If timeout (5 minutes): "⏱️ Tempo esgotado. Deleção cancelada por segurança."
+
+          Step 6: Execute Deletion
+          - Call deleteInstallment(planId) server action
+          - Same backend logic as web
+          - Handle success/error
+
+          Step 7: Success Message
+          Bot response:
+          "✅ Parcelamento Deletado
+
+          Celular Samsung removido permanentemente.
+
+          📊 Impacto:
+          • 9 parcelas pendentes deletadas
+          • 3 transações pagas preservadas
+          • R$ 900,00 removidos dos compromissos futuros
+
+          Seus compromissos futuros foram atualizados."
+
+          Error Handling:
+          - Database error: "❌ Erro ao deletar parcelamento. Tente novamente mais tarde."
+          - Plan not found: "❌ Parcelamento não encontrado."
+          - Unauthorized: "❌ Você não tem permissão para deletar este parcelamento."
+
+          Timeout Handling:
+          - If no response within 5 minutes: "⏱️ Tempo esgotado. Deleção cancelada por segurança."
+          - Clear conversation state
+
+          Conversation State Management:
+          - File: whatsapp-bot/src/services/conversation/pending-delete-state.ts
+          - Interface PendingDeleteState:
+            {
+              userId: string
+              currentStep: 'list' | 'confirm'
+              selectedPlanId: string | null
+              planDetails: InstallmentPlan | null
+              createdAt: Date
+              expiresAt: Date // 5 minutes from createdAt
+            }
+
+          Validation:
+          - Test intent recognition for various phrases
+          - Test list active installments (correct formatting)
+          - Test user selection (number parsing, validation)
+          - Test confirmation warning (all details shown)
+          - Test "confirmar" executes deletion
+          - Test "cancelar" aborts without deletion
+          - Test success message with impact details
+          - Test error handling and timeout
+        </requirements>
+      </ac>
+    </acceptance-criteria>
+  </context-what>
+
+  <context-how>
+    <architecture>
+      <component name="DeleteInstallmentDialog">
+        <file>fe/components/installments/delete-installment-dialog.tsx</file>
+        <purpose>Confirmation dialog with comprehensive warning and deletion execution</purpose>
+        <dependencies>
+          - Radix AlertDialog component (for destructive action)
+          - getPayoffConfirmationData (reuse for fetching plan details + counts)
+          - deleteInstallment server action
+        </dependencies>
+        <key-functions>
+          - Fetch plan details on open (reuse getPayoffConfirmationData pattern)
+          - Display plan description, payment method, total, installments
+          - Show paid count/amount, pending count/amount
+          - Display comprehensive "O que vai acontecer:" section
+          - Validate ownership (implicit via server action)
+          - Handle success/error feedback
+          - Close dialog on cancel or success
+        </key-functions>
+      </component>
+
+      <component name="deleteInstallment">
+        <file>fe/lib/actions/installments.ts</file>
+        <purpose>Server action for permanently deleting installment plans</purpose>
+        <signature>
+          async function deleteInstallment(
+            planId: string
+          ): Promise&lt;{ success: boolean; error?: string; deletedData?: DeleteResultData }&gt;
+
+          interface DeleteResultData {
+            planId: string
+            description: string
+            paidCount: number
+            pendingCount: number
+            paidAmount: number
+            pendingAmount: number
+          }
+        </signature>
+        <key-logic>
+          - Validate planId UUID format
+          - Get authenticated user
+          - Call executeAtomicDeletion(planId, userId)
+          - Return success/error with deletion details
+          - Track analytics: INSTALLMENT_DELETED or INSTALLMENT_DELETE_FAILED
+          - Revalidate paths: "/" and "/[locale]/installments"
+        </key-logic>
+      </component>
+
+      <component name="executeAtomicDeletion">
+        <file>fe/lib/actions/installments.ts (helper function)</file>
+        <purpose>Perform atomic deletion with paid transaction preservation</purpose>
+        <key-logic>
+          Step 1: Verify ownership (RLS + explicit check)
+          - SELECT id, user_id FROM installment_plans
+          - WHERE id = $plan_id AND user_id = $user_id
+          - If no rows: Return { success: false, error: "Unauthorized" }
+
+          Step 2: Count payments for response
+          - SELECT status, amount FROM installment_payments
+          - WHERE plan_id = $plan_id
+          - Calculate: paidCount, pendingCount, paidAmount, pendingAmount
+
+          Step 3: Orphan paid transactions (preserve history)
+          - UPDATE transactions SET installment_payment_id = NULL
+          - FROM installment_payments ip
+          - WHERE transactions.id = ip.transaction_id
+          - AND ip.plan_id = $plan_id AND ip.status = 'paid'
+
+          Step 4: Delete plan (CASCADE deletes payments)
+          - DELETE FROM installment_plans
+          - WHERE id = $plan_id AND user_id = $user_id
+          - CASCADE automatically deletes all installment_payments
+
+          Step 5: Return success with deletion data
+          - Return DeleteResultData with counts and amounts
+        </key-logic>
+        <sql-pattern>
+          -- Wrapped in database transaction (implicit via Supabase client)
+          BEGIN TRANSACTION;
+
+          -- Step 1: Verify ownership
+          SELECT id FROM installment_plans
+          WHERE id = $plan_id AND user_id = $user_id;
+
+          -- Step 2: Count payments
+          SELECT status, amount FROM installment_payments
+          WHERE plan_id = $plan_id;
+
+          -- Step 3: Orphan paid transactions
+          UPDATE transactions
+          SET installment_payment_id = NULL, updated_at = NOW()
+          WHERE id IN (
+            SELECT transaction_id FROM installment_payments
+            WHERE plan_id = $plan_id AND status = 'paid'
+          );
+
+          -- Step 4: Delete plan (CASCADE deletes payments)
+          DELETE FROM installment_plans
+          WHERE id = $plan_id AND user_id = $user_id;
+
+          COMMIT;
+        </sql-pattern>
+      </component>
+
+      <component name="InstallmentDeleteHandler (WhatsApp)">
+        <file>whatsapp-bot/src/handlers/credit-card/installment-delete-handler.ts</file>
+        <purpose>Handle conversational deletion flow via WhatsApp</purpose>
+        <key-functions>
+          - handleDeleteRequest(userId, message, locale)
+          - List active installments (numbered)
+          - Parse user selection (number or "cancelar")
+          - Show confirmation warning with all details
+          - Parse confirmation ("confirmar" or "cancelar")
+          - Execute deletion via deleteInstallment server action
+          - Send success/error message
+          - Manage conversation state (PendingDeleteState)
+          - Handle timeout (5 minutes)
+        </key-functions>
+      </component>
+
+      <component name="PendingDeleteState">
+        <file>whatsapp-bot/src/services/conversation/pending-delete-state.ts</file>
+        <purpose>Track multi-step deletion conversation state</purpose>
+        <interface>
+          interface PendingDeleteState {
+            userId: string
+            currentStep: 'list' | 'confirm'
+            selectedPlanId: string | null
+            planDetails: InstallmentPlan | null
+            createdAt: Date
+            expiresAt: Date // 5 minutes from createdAt
+          }
+
+          storePendingDeleteContext(whatsappNumber, state)
+          getPendingDeleteContext(whatsappNumber): PendingDeleteState | null
+          clearPendingDeleteContext(whatsappNumber)
+        </interface>
+      </component>
+    </architecture>
+
+    <data-flow>
+      <flow name="Delete Flow (Web)">
+        1. User clicks "Deletar" on installment card
+        2. DeleteInstallmentDialog opens
+        3. Fetch plan details via getPayoffConfirmationData (reuse existing function)
+        4. Dialog shows:
+           - Plan description, payment method, total, installments
+           - Paid count/amount, pending count/amount
+           - Warning about consequences (bullets)
+           - Irreversibility warning
+        5. User clicks "Deletar Permanentemente"
+        6. deleteInstallment(planId)
+        7. executeAtomicDeletion():
+           a. Verify ownership (RLS + explicit check)
+           b. Count payments for response (paid/pending)
+           c. UPDATE transactions SET installment_payment_id = NULL (paid only)
+           d. DELETE installment_plans (CASCADE deletes payments)
+           e. COMMIT transaction
+        8. Return success with DeleteResultData
+        9. Close dialog, show success toast
+        10. Refetch installments list (removes deleted plan)
+        11. Refetch future commitments (updates totals)
+        12. Analytics: INSTALLMENT_DELETED
+      </flow>
+
+      <flow name="Delete Flow (WhatsApp)">
+        1. User sends: "deletar parcelamento do celular"
+        2. AI extracts delete intent
+        3. List active installments:
+           "1️⃣ Celular Samsung - R$ 1.200 em 12x
+            • 3 pagas, 9 pendentes
+
+            2️⃣ Notebook Dell - R$ 3.600 em 18x
+            • 5 pagas, 13 pendentes"
+        4. Store conversation state: step='list'
+        5. User responds: "1"
+        6. Update state: selectedPlanId=uuid, step='confirm'
+        7. Show confirmation warning:
+           "⚠️ Confirme a Deleção
+
+           Você vai deletar permanentemente:
+           📝 Celular Samsung
+           💰 R$ 1.200 em 12x
+
+           Status:
+           • 3 parcelas pagas
+           • 9 parcelas pendentes
+
+           ⚠️ O que vai acontecer:
+           • Plano removido permanentemente
+           • 9 parcelas pendentes deletadas
+           • 3 transações pagas preservadas
+
+           Confirmar? 'confirmar' ou 'cancelar'"
+        8. User responds: "confirmar"
+        9. Execute same backend deletion logic as web
+        10. Clear conversation state
+        11. Send success message:
+            "✅ Parcelamento Deletado
+
+            Celular Samsung removido.
+
+            📊 Impacto:
+            • 9 parcelas pendentes deletadas
+            • 3 transações pagas preservadas
+            • R$ 900 removidos dos compromissos"
+      </flow>
+    </data-flow>
+
+    <integration-points>
+      <integration point="Story 2.4: Installments List">
+        - Enable "Deletar" button on InstallmentCard component
+        - onClick → open DeleteInstallmentDialog with planId
+        - After successful deletion → refetch installments list
+        - Installment removed from list (or empty state shown)
+      </integration>
+
+      <integration point="Story 2.3: Future Commitments">
+        - After successful deletion → trigger dashboard refresh
+        - Remove monthly totals for deleted pending payments
+        - Remove months with R$ 0 due (if applicable)
+      </integration>
+
+      <integration point="Story 2.5: Payoff vs Delete">
+        - Payoff: Marks plan as 'paid_off', cancels pending, preserves plan record
+        - Delete: Removes plan permanently, CASCADE deletes payments, orphans paid transactions
+        - Distinct use cases, different database operations
+      </integration>
+
+      <integration point="Story 2.6: Edit vs Delete">
+        - Edit: Corrections/updates (recalculate pending, preserve paid)
+        - Delete: Complete removal (permanent, irreversible)
+        - Complementary features for different scenarios
+      </integration>
+
+      <integration point="Analytics">
+        - INSTALLMENT_DELETE_DIALOG_OPENED: userId, planId, paidCount, pendingCount, totalAmount
+        - INSTALLMENT_DELETED: userId, planId, description, paidCount, pendingCount, paidAmount, pendingAmount, channel, timestamp
+        - INSTALLMENT_DELETE_FAILED: userId, planId, errorType, errorMessage, timestamp
+        - INSTALLMENT_DELETE_CANCELLED: userId, planId, paidCount, pendingCount, timestamp
+      </integration>
+    </integration-points>
+
+    <edge-cases>
+      <case>Delete with All Payments Paid: Allow deletion, orphan all paid transactions, no pending to cancel</case>
+      <case>Delete with No Payments (Just Created): Simple deletion, no payments to orphan or cancel</case>
+      <case>Delete with Maximum Payments (60x): CASCADE delete all 60 payments efficiently, verify performance &lt; 200ms</case>
+      <case>Concurrent Deletion Attempts: Second attempt fails gracefully (plan not found)</case>
+      <case>Delete While Details Modal Open: Close details modal, show error if plan no longer exists</case>
+      <case>Delete with Linked Transactions: Unlink all transactions before deleting plan (set installment_payment_id = NULL)</case>
+      <case>Rollback on Error: Database error occurs, transaction rolls back, plan and payments remain unchanged</case>
+      <case>Cross-User Deletion Attempt: RLS + explicit ownership check rejects request with unauthorized error</case>
+    </edge-cases>
+  </context-how>
+
+  <context-dependencies>
+    <dependency type="blocker" status="complete">
+      <story>Story 2.0: Epic 2 Foundation</story>
+      <reason>Atomic transaction pattern established, CASCADE DELETE constraint exists from Epic 1</reason>
+    </dependency>
+
+    <dependency type="blocker" status="complete">
+      <story>Story 2.3: Future Commitments</story>
+      <reason>Future commitments dashboard exists, can be refreshed after deletion</reason>
+    </dependency>
+
+    <dependency type="blocker" status="complete">
+      <story>Story 2.4: View Installments</story>
+      <reason>Installments list page exists with "Deletar" button placeholder (currently disabled)</reason>
+    </dependency>
+
+    <dependency type="reference" status="complete">
+      <story>Story 2.5: Payoff Early</story>
+      <reason>Atomic operation pattern and confirmation dialog pattern can be referenced</reason>
+    </dependency>
+
+    <dependency type="reference" status="complete">
+      <story>Story 2.6: Edit Installment</story>
+      <reason>Edit for corrections, Delete for removal (complementary features, different use cases)</reason>
+    </dependency>
+
+    <dependency type="soft">
+      <story>Epic 1 Story 1.1: Database Schema</story>
+      <reason>ON DELETE CASCADE foreign key constraint already defined for installment_payments</reason>
+    </dependency>
+
+    <library>Radix UI: AlertDialog component (web)</library>
+    <library>next-intl: Internationalization (web)</library>
+    <library>PostHog: Analytics tracking</library>
+  </context-dependencies>
+
+  <context-testing>
+    <test-strategy>
+      <unit-tests>
+        File: fe/__tests__/actions/installments/delete.test.ts
+        Coverage: 85%+
+        Focus:
+        - Delete plan with only pending payments
+        - Delete plan with only paid payments
+        - Delete plan with mix of paid and pending
+        - Paid transactions orphaned (installment_payment_id = NULL)
+        - All payments deleted (CASCADE)
+        - Reject unauthorized access (cross-user)
+        - Reject non-existent plan ID
+        - Rollback on database error
+        Mock: Supabase client
+      </unit-tests>
+
+      <component-tests>
+        File: fe/__tests__/components/installments/delete-installment-dialog.test.tsx
+        Coverage: 85%+
+        Focus:
+        - Renders dialog with plan details
+        - Shows paid/pending counts correctly
+        - Shows warning messages
+        - "Cancelar" dismisses dialog without deletion
+        - "Deletar Permanentemente" triggers deletion
+        - Shows loading state during deletion
+        - Shows error message on failure
+        - Closes dialog on success
+        Mock: deleteInstallment server action
+      </component-tests>
+
+      <integration-tests>
+        - Click "Deletar" → Opens confirmation dialog
+        - Confirm deletion → Plan deleted from database
+        - Confirm deletion → All payments deleted
+        - Confirm deletion → Paid transactions remain
+        - Confirm deletion → Installments list updates
+        - Confirm deletion → Future commitments update
+        Use: Real test database
+      </integration-tests>
+
+      <whatsapp-tests>
+        - Intent recognition for delete request
+        - List active installments
+        - User selection parsing
+        - Confirmation message formatting
+        - "confirmar" executes deletion
+        - "cancelar" aborts without deletion
+        - Timeout after 5 minutes
+        - Success message sent
+        Use: Real test database
+      </whatsapp-tests>
+
+      <performance-tests>
+        - Measure deletion execution time (target &lt; 200ms)
+        - Test with varying payment counts (1, 12, 60)
+        - Test CASCADE delete performance
+        - Document performance results
+      </performance-tests>
+
+      <edge-case-tests>
+        - Delete with 0 paid payments (all pending)
+        - Delete with 0 pending payments (all paid)
+        - Delete with maximum payments (60)
+        - Delete immediately after creation
+        - Concurrent deletion attempts (race condition)
+        - Delete while details modal open (modal closes)
+      </edge-case-tests>
+
+      <manual-tests>
+        - Test deletion on web (mobile and desktop)
+        - Test deletion via WhatsApp
+        - Test both pt-BR and en locales
+        - Test all error scenarios
+        - Test success toast displays
+        - Test analytics events fire
+        - Verify UI updates correctly (list, future commitments)
+        - Verify paid transactions remain in transaction history
+      </manual-tests>
+    </test-strategy>
+  </context-testing>
+
+  <context-localization>
+    <locale>pt-BR (primary)</locale>
+    <locale>en (secondary)</locale>
+
+    <keys-required>
+      installments.delete.dialogTitle: 'Deletar Parcelamento?'
+      installments.delete.warningIntro: 'Você está prestes a deletar permanentemente:'
+      installments.delete.currentStatus: 'Status atual:'
+      installments.delete.paidPayments: '{{count}} parcelas pagas ({{amount}})'
+      installments.delete.pendingPayments: '{{count}} parcelas pendentes ({{amount}})'
+      installments.delete.whatHappens: '⚠️ O que vai acontecer:'
+      installments.delete.planRemoved: 'O plano será removido permanentemente'
+      installments.delete.pendingDeleted: '{{count}} parcelas pendentes serão deletadas'
+      installments.delete.paidPreserved: '{{count}} transações pagas permanecem (sem vínculo)'
+      installments.delete.commitmentsUpdated: '{{amount}} removidos dos compromissos futuros'
+      installments.delete.irreversible: 'Esta ação não pode ser desfeita'
+      installments.delete.confirmPrompt: 'Tem certeza que deseja deletar?'
+      installments.delete.buttonCancel: 'Cancelar'
+      installments.delete.buttonDelete: 'Deletar Permanentemente'
+      installments.delete.successTitle: 'Parcelamento deletado'
+      installments.delete.successDescription: '{{description}} removido permanentemente.'
+      installments.delete.successPendingDeleted: '{{count}} parcelas pendentes deletadas'
+      installments.delete.successPaidPreserved: '{{count}} transações pagas preservadas'
+      installments.delete.successCommitmentsUpdated: 'Compromissos futuros atualizados'
+      installments.delete.errorNotFound: 'Parcelamento não encontrado'
+      installments.delete.errorUnauthorized: 'Você não tem permissão para deletar este parcelamento'
+      installments.delete.errorGeneric: 'Erro ao deletar parcelamento. Tente novamente.'
+
+      WhatsApp bot (whatsapp-bot/src/localization/pt-br.ts):
+      installment.delete.listPrompt: 'Qual parcelamento você quer deletar?'
+      installment.delete.listItem: '{{number}} {{description}} - {{total}} em {{installments}}x'
+      installment.delete.listStatus: '• {{paid}} pagas, {{pending}} pendentes'
+      installment.delete.confirmTitle: '⚠️ Confirme a Deleção'
+      installment.delete.confirmIntro: 'Você vai deletar permanentemente:'
+      installment.delete.confirmStatus: 'Status:'
+      installment.delete.confirmWhatHappens: '⚠️ O que vai acontecer:'
+      installment.delete.confirmPrompt: 'Confirmar deleção? Responda: \'confirmar\' ou \'cancelar\''
+      installment.delete.successTitle: '✅ Parcelamento Deletado'
+      installment.delete.successDescription: '{{description}} removido permanentemente.'
+      installment.delete.successImpact: '📊 Impacto:'
+      installment.delete.errorMessage: '❌ Erro ao deletar parcelamento. Tente novamente mais tarde.'
+      installment.delete.timeoutMessage: '⏱️ Tempo esgotado. Deleção cancelada por segurança.'
+      installment.delete.cancelledMessage: '❌ Deleção cancelada.'
+    </keys-required>
+
+    <currency-formatting>
+      pt-BR: "R$ 1.234,56" (period thousands, comma decimals)
+      en: "R$ 1,234.56" (comma thousands, period decimals)
+      Use: Intl.NumberFormat
+    </currency-formatting>
+  </context-localization>
+
+  <context-risks>
+    <risk likelihood="medium" impact="high">
+      <title>Accidental Deletion by Users</title>
+      <description>Users may click delete without reading warning, causing data loss</description>
+      <mitigation>Clear confirmation warning, destructive button styling, irreversibility message</mitigation>
+      <acceptance>Support process for manual recovery (within 24 hours, from backups)</acceptance>
+    </risk>
+
+    <risk likelihood="low" impact="medium">
+      <title>Paid Transaction Orphaning Confusion</title>
+      <description>User confused why paid transactions still exist after deletion</description>
+      <mitigation>Clear explanation in confirmation warning, transaction history shows "no longer linked"</mitigation>
+      <monitoring>Track user questions about orphaned transactions</monitoring>
+    </risk>
+
+    <risk likelihood="very-low" impact="medium">
+      <title>CASCADE Delete Performance</title>
+      <description>Deletion takes > 200ms with 60 payments, feels sluggish</description>
+      <mitigation>Performance testing before release, monitoring in production</mitigation>
+      <target>&lt; 200ms for 95th percentile</target>
+    </risk>
+
+    <risk likelihood="very-low" impact="low">
+      <title>Concurrent Deletion Conflicts</title>
+      <description>User deletes from two tabs/devices simultaneously</description>
+      <mitigation>Handle "plan not found" error gracefully, second attempt returns error</mitigation>
+      <monitoring>Log concurrent deletion attempts</monitoring>
+    </risk>
+
+    <risk likelihood="low" impact="low">
+      <title>WhatsApp Timeout Confusion</title>
+      <description>User confused when conversation expires after 5 minutes</description>
+      <mitigation>Clear timeout message, restart flow easily</mitigation>
+      <monitoring>Track conversation timeouts</monitoring>
+    </risk>
+  </context-risks>
+
+  <context-nfr>
+    <performance>
+      <target metric="deletion-execution-time">
+        &lt; 200ms for deleting installment plan with CASCADE
+        Measured: Time from server action call to database commit
+      </target>
+      <target metric="dialog-render-time">
+        &lt; 500ms for fetching plan details and rendering confirmation dialog
+        Measured: Time from dialog open to content ready
+      </target>
+    </performance>
+
+    <security>
+      <requirement>Row-Level Security (RLS) enforced - users can only delete their own plans</requirement>
+      <requirement>Explicit ownership check (defense in depth): WHERE user_id = $user_id</requirement>
+      <requirement>Plan ID validation (UUID format)</requirement>
+      <requirement>Cross-user deletion attempts rejected with unauthorized error</requirement>
+    </security>
+
+    <reliability>
+      <requirement>Atomic deletion (all-or-nothing via database transaction)</requirement>
+      <requirement>Paid transactions ALWAYS preserved (UPDATE before DELETE)</requirement>
+      <requirement>CASCADE DELETE removes all child payments (ON DELETE CASCADE constraint)</requirement>
+      <requirement>Graceful error handling: clear user messages, no cryptic DB errors</requirement>
+      <requirement>Transaction rollback on error (no partial state)</requirement>
+    </reliability>
+
+    <observability>
+      <event>INSTALLMENT_DELETE_DIALOG_OPENED: userId, planId, paidCount, pendingCount, totalAmount</event>
+      <event>INSTALLMENT_DELETED: userId, planId, description, paidCount, pendingCount, paidAmount, pendingAmount, channel, timestamp</event>
+      <event>INSTALLMENT_DELETE_FAILED: userId, planId, errorType, errorMessage, timestamp</event>
+      <event>INSTALLMENT_DELETE_CANCELLED: userId, planId, paidCount, pendingCount, timestamp</event>
+      <metric>Deletion execution time (log if > 200ms)</metric>
+      <metric>Error rate (alert if > 5% of deletion attempts)</metric>
+    </observability>
+  </context-nfr>
+
+  <context-files>
+    <file path="fe/components/installments/delete-installment-dialog.tsx" type="new">
+      DeleteInstallmentDialog component - Confirmation dialog with comprehensive warning
+    </file>
+    <file path="fe/lib/actions/installments.ts" type="modify">
+      Add deleteInstallment server action, executeAtomicDeletion helper function
+    </file>
+    <file path="fe/app/[locale]/installments/installments-client.tsx" type="modify">
+      Enable "Deletar" button, add onClick handler to open DeleteInstallmentDialog
+    </file>
+    <file path="whatsapp-bot/src/handlers/credit-card/installment-delete-handler.ts" type="new">
+      WhatsApp deletion flow handler - Conversational: list → select → confirm → execute
+    </file>
+    <file path="whatsapp-bot/src/services/conversation/pending-delete-state.ts" type="new">
+      Conversation state management for multi-step deletion flow
+    </file>
+    <file path="whatsapp-bot/src/services/ai/ai-pattern-generator.ts" type="modify">
+      Add extract_delete_installment_request AI function
+    </file>
+    <file path="fe/lib/localization/pt-br.ts" type="modify">
+      Add installments.delete.* localization keys (18 keys)
+    </file>
+    <file path="fe/lib/localization/en.ts" type="modify">
+      Add installments.delete.* English translations
+    </file>
+    <file path="fe/lib/localization/types.ts" type="modify">
+      Add types for installments.delete keys
+    </file>
+    <file path="whatsapp-bot/src/localization/pt-br.ts" type="modify">
+      Add installment.delete.* WhatsApp localization keys (10 keys)
+    </file>
+    <file path="whatsapp-bot/src/localization/en.ts" type="modify">
+      Add installment.delete.* WhatsApp English translations
+    </file>
+    <file path="whatsapp-bot/src/localization/types.ts" type="modify">
+      Add types for installment.delete keys
+    </file>
+    <file path="fe/lib/analytics/events.ts" type="modify">
+      Add INSTALLMENT_DELETE_DIALOG_OPENED, INSTALLMENT_DELETED, INSTALLMENT_DELETE_FAILED, INSTALLMENT_DELETE_CANCELLED events
+    </file>
+    <file path="whatsapp-bot/src/analytics/events.ts" type="modify">
+      Add same deletion events as web (different channel value)
+    </file>
+    <file path="fe/__tests__/actions/installments/delete.test.ts" type="new">
+      Unit tests for deleteInstallment server action (85%+ coverage)
+    </file>
+    <file path="fe/__tests__/components/installments/delete-installment-dialog.test.tsx" type="new">
+      Component tests for DeleteInstallmentDialog (85%+ coverage)
+    </file>
+    <file path="whatsapp-bot/src/__tests__/handlers/credit-card/installment-delete-handler.test.ts" type="new">
+      Unit tests for WhatsApp deletion handler
+    </file>
+
+    <reference-files>
+      <file path="fe/lib/actions/installments.ts">
+        Existing server actions: getPayoffConfirmationData (reuse for fetching plan details)
+        Pattern reference: Atomic operations, error handling, analytics tracking
+      </file>
+      <file path="fe/components/installments/payoff-confirmation-dialog.tsx">
+        Dialog pattern reference: Radix AlertDialog, confirmation flow, destructive styling
+      </file>
+      <file path="whatsapp-bot/src/handlers/credit-card/installment-payoff-handler.ts">
+        WhatsApp flow pattern reference: Multi-step conversation, state management, confirmation
+      </file>
+      <file path="whatsapp-bot/src/services/conversation/pending-payoff-state.ts">
+        Conversation state pattern reference: Store/get/clear pattern, timeout handling
+      </file>
+      <file path="docs/sprint-artifacts/tech-spec-epic-2.md">
+        Epic 2 Technical Specification - Installment data model, CASCADE DELETE, NFRs
+      </file>
+      <file path="docs/sprint-artifacts/2-5-mark-installment-as-paid-off-early.md">
+        Story 2.5 reference: Atomic operation pattern, confirmation dialog, analytics
+      </file>
+      <file path="docs/sprint-artifacts/2-6-edit-installment-plan.md">
+        Story 2.6 reference: Edit for corrections, Delete for removal (complementary)
+      </file>
+    </reference-files>
+  </context-files>
+
+  <dev-notes>
+    <note priority="high">
+      Atomic Deletion is Critical for Data Integrity:
+      - Step 1: Verify ownership (RLS + explicit check)
+      - Step 2: Count payments for response (analytics)
+      - Step 3: Orphan paid transactions (UPDATE transactions SET installment_payment_id = NULL)
+      - Step 4: Delete plan (CASCADE automatically deletes all payments)
+      - Wrap in database transaction (all-or-nothing)
+      - Paid transactions MUST remain (historical facts)
+    </note>
+
+    <note priority="high">
+      Confirmation Warning is Critical UX:
+      - User must understand deletion is permanent and irreversible
+      - Show all details: plan info, paid/pending counts, consequences
+      - Use destructive/red styling on "Deletar Permanentemente" button
+      - Clear warning: "Esta ação não pode ser desfeita"
+      - Explain paid transactions will remain (orphaned, not deleted)
+      - Explain pending payments will be removed (cascade)
+    </note>
+
+    <note priority="high">
+      CASCADE DELETE Behavior:
+      - ON DELETE CASCADE foreign key constraint (from Epic 1 Story 1.1)
+      - Deleting installment_plan automatically deletes ALL installment_payments
+      - Both paid and pending payments are removed from installment_payments table
+      - Paid transactions remain in transactions table (orphaned via step 3)
+      - No manual deletion of payments needed (database handles it)
+    </note>
+
+    <note priority="medium">
+      Paid Transaction Preservation:
+      - Paid transactions are historical facts, should not be deleted
+      - UPDATE transactions SET installment_payment_id = NULL before deleting plan
+      - Transactions become "orphaned" (no longer linked to installment)
+      - Users can still see paid transactions in transaction history
+      - Transaction description and amount unchanged
+      - Acceptable trade-off: Lose installment context for data integrity
+    </note>
+
+    <note priority="medium">
+      WhatsApp Multi-Step Flow:
+      - Step 1: List active installments (numbered)
+      - Step 2: User selects by number
+      - Step 3: Confirmation warning (same details as web)
+      - Step 4: User confirms with "confirmar"
+      - Step 5: Execute deletion (same backend as web)
+      - Step 6: Success message with impact
+      - Conversation state managed via PendingDeleteState
+      - Timeout after 5 minutes (security measure)
+    </note>
+
+    <note priority="medium">
+      Performance Targets:
+      - Deletion execution: &lt; 200ms (NFR)
+      - Dialog render: &lt; 500ms (good UX)
+      - Test with 60 payments (maximum)
+      - CASCADE DELETE is efficient (indexed foreign key)
+      - Monitor in production, alert if exceeded
+    </note>
+
+    <note priority="low">
+      Analytics Events:
+      - INSTALLMENT_DELETE_DIALOG_OPENED: Track dialog opens
+      - INSTALLMENT_DELETED: Track successful deletions (with counts)
+      - INSTALLMENT_DELETE_FAILED: Track failures (with error type)
+      - INSTALLMENT_DELETE_CANCELLED: Track cancellations
+      - Include channel (web/whatsapp), counts, amounts, timestamp
+    </note>
+  </dev-notes>
+</story-context>

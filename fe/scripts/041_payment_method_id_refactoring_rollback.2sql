@@ -1,0 +1,90 @@
+-- Rollback Migration: Payment Method ID Refactoring
+-- Purpose: Revert transactions.payment_method_id changes back to TEXT field
+-- Date: 2025-12-02
+-- Epic: 2 - Parcelamento Intelligence
+-- Story: 2.0 - Epic 2 Foundation & Blockers Resolution (Part 1)
+-- Version: 041 Rollback
+
+-- WARNING: This rollback should only be run if the migration failed or needs to be reverted
+-- within 24-48 hours of deployment. After that window, data may have been created
+-- using the new schema that cannot be rolled back safely.
+
+-- ============================================================================
+-- SECTION 1: RESTORE payment_method TEXT column
+-- Purpose: Rename payment_method_legacy back to payment_method
+-- ============================================================================
+
+-- Check if payment_method_legacy exists before renaming
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'transactions' AND column_name = 'payment_method_legacy'
+  ) THEN
+    -- Rename payment_method_legacy back to payment_method
+    ALTER TABLE transactions RENAME COLUMN payment_method_legacy TO payment_method;
+    RAISE NOTICE 'Restored payment_method column from payment_method_legacy';
+  ELSE
+    RAISE WARNING 'payment_method_legacy column not found - rollback may be incomplete';
+  END IF;
+END $$;
+
+-- ============================================================================
+-- SECTION 2: REMOVE payment_method_id constraint
+-- Purpose: Make payment_method_id nullable again (optional)
+-- ============================================================================
+
+-- Remove NOT NULL constraint from payment_method_id
+ALTER TABLE transactions ALTER COLUMN payment_method_id DROP NOT NULL;
+
+RAISE NOTICE 'payment_method_id is now nullable again';
+
+-- ============================================================================
+-- SECTION 3: DROP new indexes
+-- Purpose: Remove indexes created for payment_method_id
+-- ============================================================================
+
+DROP INDEX IF EXISTS idx_transactions_user_payment_method;
+
+RAISE NOTICE 'Dropped composite index idx_transactions_user_payment_method';
+
+-- Note: idx_transactions_payment_method was created in migration 040,
+-- so we keep it in case other code depends on it
+
+-- ============================================================================
+-- SECTION 4: UPDATE column comments
+-- Purpose: Restore old documentation
+-- ============================================================================
+
+COMMENT ON COLUMN transactions.payment_method IS
+  'Payment method used for transaction (TEXT field for backward compatibility)';
+
+COMMENT ON COLUMN transactions.payment_method_id IS
+  'Optional foreign key to payment_methods table (nullable for backward compatibility)';
+
+-- ============================================================================
+-- ROLLBACK COMPLETE
+-- Expected execution time: < 10 seconds
+-- Post-rollback: Verify application works with payment_method TEXT field
+-- ============================================================================
+
+-- Post-rollback validation queries (run manually to verify):
+--
+-- 1. Verify payment_method column exists and is NOT NULL:
+-- SELECT column_name, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'transactions' AND column_name = 'payment_method';
+-- Expected: payment_method | YES (or NO depending on original schema)
+--
+-- 2. Verify payment_method_id is nullable:
+-- SELECT column_name, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'transactions' AND column_name = 'payment_method_id';
+-- Expected: payment_method_id | YES
+--
+-- 3. Verify payment_method_legacy is gone:
+-- SELECT COUNT(*)
+-- FROM information_schema.columns
+-- WHERE table_name = 'transactions' AND column_name = 'payment_method_legacy';
+-- Expected: 0

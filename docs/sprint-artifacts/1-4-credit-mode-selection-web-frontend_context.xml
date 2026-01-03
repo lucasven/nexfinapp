@@ -1,0 +1,732 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story-id>1-4-credit-mode-selection-web-frontend</story-id>
+  <story-title>Credit Mode Selection (Web Frontend)</story-title>
+  <epic-id>epic-1</epic-id>
+  <epic-title>Credit Mode Foundation</epic-title>
+  <generated-date>2025-12-02</generated-date>
+
+  <overview>
+    <summary>
+      Implement a modal dialog in the Next.js web frontend that allows users to choose between
+      Credit Mode (full credit card features) and Simple Mode (basic expense tracking) when adding
+      their first credit card transaction. This completes the web portion of the Credit Mode
+      Foundation epic, providing a consistent cross-platform experience alongside the WhatsApp
+      implementation (Story 1.3).
+    </summary>
+
+    <user-story>
+      As a web user adding my first credit card transaction,
+      I want to see a clear modal dialog explaining Credit Mode vs Simple Mode and choose my preference,
+      so that I can track my credit card expenses in a way that matches my financial habits.
+    </user-story>
+
+    <dependencies>
+      <dependency>
+        <story-id>1-1-database-schema-migration-for-credit-card-features</story-id>
+        <status>done</status>
+        <reason>Requires payment_methods.credit_mode column to exist</reason>
+      </dependency>
+      <dependency>
+        <story-id>1-2-first-credit-card-transaction-detection</story-id>
+        <status>done</status>
+        <reason>Requires needsCreditModeSelection() utility function</reason>
+      </dependency>
+      <dependency>
+        <component>Radix UI Dialog</component>
+        <status>available</status>
+        <location>fe/components/ui/dialog.tsx</location>
+      </dependency>
+      <dependency>
+        <component>next-intl localization</component>
+        <status>available</status>
+        <reason>For pt-BR and English translations</reason>
+      </dependency>
+      <dependency>
+        <component>PostHog analytics</component>
+        <status>available</status>
+        <reason>Track credit_mode_selected events</reason>
+      </dependency>
+    </dependencies>
+  </overview>
+
+  <architecture>
+    <flow-diagram>
+      <![CDATA[
+User submits transaction form with new credit card
+        │
+        ▼
+Check needsCreditModeSelection(paymentMethodId)
+        │
+        ▼ YES (credit_mode IS NULL)
+Store form data in component state
+        │
+        ▼
+Open CreditModeSelectionDialog modal
+        │
+        ├──────────────────┬──────────────────┐
+        ▼                  ▼                  ▼
+   Credit Mode      Simple Mode      Dismiss (ESC/backdrop)
+        │                  │                  │
+        ▼                  ▼                  ▼
+setCreditMode(id, true)  setCreditMode(id, false)  No action
+        │                  │                  │
+        ▼                  ▼                  ▼
+Update DB (TRUE)    Update DB (FALSE)    Form preserved
+        │                  │                  │
+        ▼                  ▼                  ▼
+Submit transaction  Submit transaction  User can retry
+        │                  │
+        ▼                  ▼
+Success toast      Success toast
+        │                  │
+        ▼                  ▼
+Track PostHog      Track PostHog
+        │                  │
+        ▼                  ▼
+   Redirect            Redirect
+      ]]>
+    </flow-diagram>
+
+    <components>
+      <component>
+        <name>CreditModeSelectionDialog</name>
+        <type>React Client Component</type>
+        <location>fe/components/transactions/credit-mode-selection-dialog.tsx</location>
+        <status>to-be-created</status>
+        <responsibility>
+          Displays modal dialog with Credit Mode vs Simple Mode options. Handles user selection,
+          calls setCreditMode server action, and triggers transaction submission on success.
+        </responsibility>
+        <interfaces>
+          <props>
+            <prop name="open" type="boolean" required="true">Controls dialog visibility</prop>
+            <prop name="onOpenChange" type="(open: boolean) => void" required="true">Callback when dialog state changes</prop>
+            <prop name="paymentMethodId" type="string" required="true">Payment method UUID to set mode for</prop>
+            <prop name="onModeSelected" type="(mode: boolean) => void" required="true">Callback after successful mode selection</prop>
+          </props>
+          <returns>JSX.Element (Radix Dialog with two-card layout)</returns>
+        </interfaces>
+        <dependencies>
+          <dep>@radix-ui/react-dialog (via fe/components/ui/dialog.tsx)</dep>
+          <dep>next-intl (useTranslations hook)</dep>
+          <dep>fe/lib/actions/payment-methods.ts (setCreditMode)</dep>
+          <dep>sonner (toast notifications)</dep>
+        </dependencies>
+      </component>
+
+      <component>
+        <name>setCreditMode</name>
+        <type>Next.js Server Action</type>
+        <location>fe/lib/actions/payment-methods.ts</location>
+        <status>to-be-created</status>
+        <responsibility>
+          Updates payment_methods.credit_mode column for first-time mode selection.
+          Only updates if credit_mode IS NULL (prevents accidental overwrites).
+        </responsibility>
+        <interfaces>
+          <signature>
+async function setCreditMode(
+  paymentMethodId: string,
+  creditMode: boolean
+): Promise&lt;{ success: boolean; error?: string }&gt;
+          </signature>
+          <parameters>
+            <param name="paymentMethodId" type="string">UUID of payment method</param>
+            <param name="creditMode" type="boolean">true = Credit Mode, false = Simple Mode</param>
+          </parameters>
+          <returns>
+            <field name="success" type="boolean">Whether operation succeeded</field>
+            <field name="error" type="string?" optional="true">Error message if failed</field>
+          </returns>
+        </interfaces>
+        <database-operations>
+          <update-query>
+UPDATE payment_methods
+SET credit_mode = $creditMode
+WHERE id = $paymentMethodId
+  AND user_id = $userId
+  AND credit_mode IS NULL
+          </update-query>
+        </database-operations>
+      </component>
+
+      <component>
+        <name>Transaction Form Integration</name>
+        <type>React Component (to be identified)</type>
+        <location>fe/components/transactions/add-transaction-form.tsx (or similar)</location>
+        <status>to-be-modified</status>
+        <responsibility>
+          Detect credit mode selection requirement on form submit. Show modal instead of
+          submitting transaction if needsCreditModeSelection returns true.
+        </responsibility>
+        <integration-points>
+          <point>Add state for CreditModeSelectionDialog (open/close)</point>
+          <point>Store form data in component state during modal interaction</point>
+          <point>Check needsCreditModeSelection before transaction submission</point>
+          <point>Submit transaction after successful mode selection</point>
+        </integration-points>
+      </component>
+    </components>
+
+    <technology-stack>
+      <frontend>
+        <framework>Next.js 15 (App Router with Server Components)</framework>
+        <ui-library>Radix UI (Dialog, Button primitives)</ui-library>
+        <styling>Tailwind CSS</styling>
+        <form-handling>React Hook Form + Zod validation (existing pattern)</form-handling>
+        <i18n>next-intl with locale-based routing (/[locale]/...)</i18n>
+        <state>React useState for modal and form state</state>
+        <notifications>Sonner toast library</notifications>
+      </frontend>
+      <backend>
+        <database>PostgreSQL (Supabase)</database>
+        <orm>Supabase client with RLS policies</orm>
+        <auth>Supabase Auth (getUser())</auth>
+        <analytics>PostHog</analytics>
+      </backend>
+    </technology-stack>
+  </architecture>
+
+  <existing-code-references>
+    <reference>
+      <file>whatsapp-bot/src/utils/credit-mode-detection.ts</file>
+      <function>needsCreditModeSelection(paymentMethodId: string): Promise&lt;boolean&gt;</function>
+      <relevance>
+        Reference implementation for detection logic. Frontend equivalent needed at
+        fe/lib/utils/credit-mode-detection.ts with same algorithm but using frontend Supabase client.
+      </relevance>
+      <key-logic>
+        <![CDATA[
+// Returns true when:
+// 1. payment_methods.type === 'credit'
+// 2. payment_methods.credit_mode IS NULL
+const needsSelection =
+  paymentMethod.type === 'credit' &&
+  paymentMethod.credit_mode === null
+        ]]>
+      </key-logic>
+    </reference>
+
+    <reference>
+      <file>fe/components/ui/dialog.tsx</file>
+      <component>Dialog primitives (Radix UI wrapper)</component>
+      <relevance>
+        Use these components for CreditModeSelectionDialog:
+        - Dialog (root)
+        - DialogContent (with backdrop)
+        - DialogTitle
+        - DialogHeader (optional for layout)
+      </relevance>
+      <styling-notes>
+        - DialogContent has max-w-lg default, override to max-w-[800px]
+        - Built-in fade/zoom animations via Radix
+        - Focus trap and ESC handling included
+      </styling-notes>
+    </reference>
+
+    <reference>
+      <file>fe/lib/actions/transactions.ts</file>
+      <line-range>68-95</line-range>
+      <relevance>
+        TODO comment indicates where credit mode detection will integrate:
+        - Currently payment_method is string (not ID-based)
+        - Need to refactor to use payment_method_id
+        - Integration placeholder already documented
+      </relevance>
+      <integration-note>
+        Story 1.4 requires refactoring transaction creation to use payment_method_id instead of
+        payment_method string. This enables calling needsCreditModeSelection() before creating transaction.
+      </integration-note>
+    </reference>
+
+    <reference>
+      <file>whatsapp-bot/src/handlers/credit-card/mode-selection.ts</file>
+      <relevance>
+        Reference for mode selection UX flow (WhatsApp version completed in Story 1.3).
+        Key patterns to replicate:
+        - Two-choice presentation (Credit vs Simple)
+        - Benefits list for each mode
+        - Comparison explanation
+        - Immediate database update on selection
+        - Analytics tracking
+      </relevance>
+    </reference>
+
+    <reference>
+      <file>fe/scripts/040_credit_card_management.sql</file>
+      <relevance>
+        Database migration that created payment_methods.credit_mode column.
+        Column definition:
+        - credit_mode BOOLEAN DEFAULT NULL
+        - NULL = mode not yet selected
+        - TRUE = Credit Mode enabled
+        - FALSE = Simple Mode enabled
+      </relevance>
+    </reference>
+  </existing-code-references>
+
+  <localization>
+    <language code="pt-BR">
+      <file>fe/messages/pt-BR.json</file>
+      <status>to-be-updated</status>
+      <required-keys>
+        <namespace>credit_mode</namespace>
+        <keys>
+          <key name="dialog_title">Escolha o Modo do Seu Cartão</key>
+          <key name="credit_mode_heading">Modo Crédito</key>
+          <key name="simple_mode_heading">Modo Simples</key>
+          <key name="credit_benefits" type="array">
+            ["Acompanhe parcelamentos (3x, 12x, etc)",
+             "Orçamento mensal personalizado",
+             "Lembrete de fechamento da fatura",
+             "Ideal para quem parcela compras"]
+          </key>
+          <key name="simple_benefits" type="array">
+            ["Trata como débito",
+             "Sem recursos de cartão de crédito",
+             "Acompanhamento simples de gastos",
+             "Ideal para quem paga a fatura em dia"]
+          </key>
+          <key name="whats_difference">Qual a diferença?</key>
+          <key name="comparison_table" type="object">
+            { expense_tracking, installments, statement_budgets, payment_reminders,
+              simplicity, both, yes, no, advanced, maximum }
+          </key>
+          <key name="choose_credit_button">Escolher Modo Crédito</key>
+          <key name="choose_simple_button">Escolher Modo Simples</key>
+          <key name="success_credit">Modo Crédito ativado!</key>
+          <key name="success_simple">Modo Simples ativado!</key>
+          <key name="error">Falha ao definir modo. Por favor, tente novamente.</key>
+        </keys>
+      </required-keys>
+    </language>
+
+    <language code="en">
+      <file>fe/messages/en.json</file>
+      <status>to-be-updated</status>
+      <required-keys>
+        <namespace>credit_mode</namespace>
+        <keys>
+          <key name="dialog_title">Choose Your Credit Card Mode</key>
+          <key name="credit_mode_heading">Credit Mode</key>
+          <key name="simple_mode_heading">Simple Mode</key>
+          <key name="credit_benefits" type="array">
+            ["Track installments (3x, 12x, etc)",
+             "Personal monthly budget",
+             "Statement closing reminders",
+             "Ideal for installment purchases"]
+          </key>
+          <key name="simple_benefits" type="array">
+            ["Treat credit card like debit",
+             "No extra credit features",
+             "Simple expense tracking",
+             "Ideal for paying in full monthly"]
+          </key>
+          <key name="whats_difference">What's the difference?</key>
+          <key name="comparison_table" type="object">Same structure as pt-BR</key>
+          <key name="choose_credit_button">Choose Credit Mode</key>
+          <key name="choose_simple_button">Choose Simple Mode</key>
+          <key name="success_credit">Credit Mode enabled!</key>
+          <key name="success_simple">Simple Mode enabled!</key>
+          <key name="error">Failed to set mode. Please try again.</key>
+        </keys>
+      </required-keys>
+    </language>
+
+    <tone-guidelines>
+      <principle>Awareness-First (ADR-005)</principle>
+      <guideline>Present both options neutrally without prescribing one as "better"</guideline>
+      <guideline>Use "Ideal for..." instead of "You should..." to avoid being prescriptive</guideline>
+      <guideline>Benefits should inform, not judge user's financial habits</guideline>
+      <example-good>"Ideal for installment purchases" (informative)</example-good>
+      <example-bad>"Only advanced users should..." (prescriptive)</example-bad>
+    </tone-guidelines>
+  </localization>
+
+  <analytics>
+    <event>
+      <name>credit_mode_selected</name>
+      <trigger>After successful mode selection (Credit or Simple)</trigger>
+      <properties>
+        <property name="userId" type="string">Authenticated user ID</property>
+        <property name="paymentMethodId" type="string">Payment method UUID</property>
+        <property name="mode" type="'credit' | 'simple'">Selected mode</property>
+        <property name="channel" type="'web'">Always 'web' for this story</property>
+        <property name="locale" type="'pt-BR' | 'en'">User's current locale</property>
+      </properties>
+      <implementation>
+        <![CDATA[
+// In setCreditMode server action (after successful DB update):
+await posthog.capture('credit_mode_selected', {
+  userId: user.id,
+  paymentMethodId,
+  mode: creditMode ? 'credit' : 'simple',
+  channel: 'web',
+  locale: headers().get('x-locale') || 'pt-BR'
+})
+        ]]>
+      </implementation>
+    </event>
+  </analytics>
+
+  <acceptance-criteria>
+    <criterion id="AC4.1">
+      <title>Mode Selection Modal Trigger</title>
+      <description>
+        When transaction form is submitted with a credit card where needsCreditModeSelection()
+        returns true, modal opens before transaction is saved. Form data is preserved but not
+        submitted. Modal is blocking with proper focus management.
+      </description>
+      <validation>
+        - Submit form with payment_method_id where credit_mode IS NULL
+        - Verify modal opens immediately
+        - Verify transaction NOT yet in database
+        - Verify form data still available in component state
+        - Test focus trap (Tab, Shift+Tab within modal only)
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.2">
+      <title>Modal Content and Layout</title>
+      <description>
+        Two option cards side-by-side on desktop, stacked on mobile. Each card has icon, heading,
+        benefits list, button. Expandable comparison section. Uses Radix UI components.
+      </description>
+      <validation>
+        - Desktop (≥768px): Cards side-by-side, 50/50 width
+        - Tablet (640-768px): Cards side-by-side with reduced padding
+        - Mobile (&lt;640px): Cards stacked, full width
+        - Both cards visible without scrolling on desktop
+        - Comparison section collapsed by default
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.6">
+      <title>Credit Mode Selection Flow</title>
+      <description>
+        User clicks "Choose Credit Mode", setCreditMode called, database updated, transaction
+        submitted, success toast shown, PostHog event tracked.
+      </description>
+      <validation>
+        - Click "Choose Credit Mode" button
+        - Verify payment_methods.credit_mode = TRUE in database
+        - Verify transaction created with original form data
+        - Verify success toast: "Credit Mode enabled!" (localized)
+        - Verify PostHog event with mode='credit', channel='web'
+        - Verify redirect to transactions list
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.7">
+      <title>Simple Mode Selection Flow</title>
+      <description>
+        User clicks "Choose Simple Mode", setCreditMode called, database updated, transaction
+        submitted, success toast shown, PostHog event tracked.
+      </description>
+      <validation>
+        - Click "Choose Simple Mode" button
+        - Verify payment_methods.credit_mode = FALSE in database
+        - Verify transaction created with original form data
+        - Verify success toast: "Simple Mode enabled!" (localized)
+        - Verify PostHog event with mode='simple', channel='web'
+        - Verify redirect to transactions list
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.8">
+      <title>Modal Dismissal Without Selection</title>
+      <description>
+        User clicks backdrop or presses ESC, modal closes, transaction NOT saved, form data
+        preserved for retry.
+      </description>
+      <validation>
+        - Press ESC key while modal is open
+        - Verify modal closes with fade animation
+        - Verify transaction NOT in database
+        - Verify form still shows entered data
+        - Verify user can edit and resubmit
+        - Test backdrop click (same behavior)
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.9">
+      <title>Portuguese Localization (pt-BR)</title>
+      <description>
+        All modal text in Brazilian Portuguese with natural, conversational tone. Follows
+        awareness-first principles (ADR-005).
+      </description>
+      <validation>
+        - Set locale to pt-BR (/pt-BR/transactions)
+        - Verify dialog title: "Escolha o Modo do Seu Cartão"
+        - Verify all benefits text in Portuguese
+        - Verify button labels in Portuguese
+        - Verify toast messages in Portuguese
+        - Review with native speaker for naturalness
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.10">
+      <title>English Localization (en)</title>
+      <description>
+        All modal text in English with clear, concise explanations. Follows awareness-first
+        principles (ADR-005).
+      </description>
+      <validation>
+        - Set locale to en (/en/transactions)
+        - Verify dialog title: "Choose Your Credit Card Mode"
+        - Verify all benefits text in English
+        - Verify button labels in English
+        - Verify toast messages in English
+      </validation>
+    </criterion>
+
+    <criterion id="AC4.12">
+      <title>Accessibility (WCAG 2.1 AA)</title>
+      <description>
+        Modal has proper ARIA labels, focus trap, keyboard navigation, screen reader support,
+        sufficient color contrast, visible focus indicators.
+      </description>
+      <validation>
+        - Test with VoiceOver (macOS) or NVDA (Windows)
+        - Verify modal title announced when opened
+        - Verify Tab cycles through interactive elements only
+        - Verify ESC closes modal
+        - Verify focus returns to trigger element on close
+        - Use contrast checker: min 4.5:1 for text
+        - Verify focus indicators visible on all buttons/links
+      </validation>
+    </criterion>
+  </acceptance-criteria>
+
+  <edge-cases>
+    <case id="EC1">
+      <scenario>User submits form multiple times quickly</scenario>
+      <handling>
+        Disable submit button after first click, show loading state. Modal opens only once
+        with first submission data. Prevent double-submission race conditions.
+      </handling>
+    </case>
+
+    <case id="EC2">
+      <scenario>Mode already set between form load and submit</scenario>
+      <handling>
+        Server action checks credit_mode IS NULL before updating. If already set by another
+        session, skip mode selection and save transaction normally. No error shown to user.
+      </handling>
+    </case>
+
+    <case id="EC3">
+      <scenario>Transaction creation fails after mode set</scenario>
+      <handling>
+        Mode change persists (not rolled back). Show error toast for transaction failure.
+        User can retry transaction (mode already set, won't prompt again).
+      </handling>
+    </case>
+
+    <case id="EC4">
+      <scenario>Network error during mode selection</scenario>
+      <handling>
+        Show error toast, keep modal open for retry. Transaction NOT saved, form data preserved.
+        User can retry mode selection or cancel.
+      </handling>
+    </case>
+
+    <case id="EC5">
+      <scenario>Viewport too small for modal (&lt;320px height)</scenario>
+      <handling>
+        Modal content scrollable with fixed max-height. Buttons remain accessible at bottom
+        (sticky positioning). No content cut off.
+      </handling>
+    </case>
+  </edge-cases>
+
+  <testing-strategy>
+    <component-tests>
+      <file>fe/__tests__/components/transactions/credit-mode-selection-dialog.test.tsx</file>
+      <coverage-target>90% (critical component)</coverage-target>
+      <test-cases>
+        <case>Renders with Credit and Simple mode options</case>
+        <case>Calls setCreditMode(true) when Credit Mode chosen</case>
+        <case>Calls setCreditMode(false) when Simple Mode chosen</case>
+        <case>Shows error toast when mode selection fails</case>
+        <case>Closes modal on backdrop click without selection</case>
+        <case>Renders in Portuguese when locale is pt-BR</case>
+        <case>Renders in English when locale is en</case>
+        <case>Disables buttons during loading state</case>
+        <case>Calls onModeSelected callback after success</case>
+      </test-cases>
+    </component-tests>
+
+    <integration-tests>
+      <file>fe/__tests__/integration/mode-selection-flow.test.tsx</file>
+      <test-cases>
+        <case>Full flow: Form submit → Modal open → Select Credit → Transaction saved</case>
+        <case>Full flow: Form submit → Modal open → Select Simple → Transaction saved</case>
+        <case>Modal dismissal: Form submit → Modal open → ESC → Form preserved</case>
+        <case>Error scenario: Database error during mode selection</case>
+        <case>Verify PostHog event tracking (mocked)</case>
+      </test-cases>
+    </integration-tests>
+
+    <manual-tests>
+      <browsers>
+        <browser>Chrome (desktop)</browser>
+        <browser>Firefox (desktop)</browser>
+        <browser>Safari (desktop)</browser>
+        <browser>iOS Safari (mobile)</browser>
+        <browser>Chrome Android (mobile)</browser>
+      </browsers>
+      <scenarios>
+        <scenario>Test keyboard-only navigation (no mouse)</scenario>
+        <scenario>Test with screen reader (VoiceOver or NVDA)</scenario>
+        <scenario>Test in pt-BR locale</scenario>
+        <scenario>Test in en locale</scenario>
+        <scenario>Verify layout on screen widths: 320px, 640px, 768px, 1920px</scenario>
+        <scenario>Verify animations are smooth (60fps target)</scenario>
+        <scenario>Verify PostHog events in dashboard</scenario>
+      </scenarios>
+    </manual-tests>
+  </testing-strategy>
+
+  <performance-targets>
+    <target>
+      <metric>Modal open animation</metric>
+      <goal>&lt; 200ms</goal>
+      <validation>Smooth fade-in transition, no jank</validation>
+    </target>
+    <target>
+      <metric>Mode selection response</metric>
+      <goal>&lt; 500ms</goal>
+      <validation>Server action + database update</validation>
+    </target>
+    <target>
+      <metric>Transaction submission after mode</metric>
+      <goal>&lt; 1 second</goal>
+      <validation>Total flow completion from mode select to redirect</validation>
+    </target>
+    <target>
+      <metric>Modal component bundle size</metric>
+      <goal>&lt; 20KB</goal>
+      <validation>Keep component lightweight, leverage Radix tree-shaking</validation>
+    </target>
+  </performance-targets>
+
+  <implementation-notes>
+    <note priority="high">
+      <title>Payment Method Refactoring Required</title>
+      <description>
+        Current transaction form uses payment_method as a string field. Story 1.4 requires
+        refactoring to use payment_method_id (UUID reference to payment_methods table). This
+        enables calling needsCreditModeSelection() before transaction creation.
+      </description>
+      <files-affected>
+        <file>fe/lib/actions/transactions.ts (createTransaction function)</file>
+        <file>fe/components/transactions/*.tsx (form components)</file>
+        <file>Database: transactions.payment_method column migration</file>
+      </files-affected>
+    </note>
+
+    <note priority="high">
+      <title>Frontend Credit Mode Detection Utility</title>
+      <description>
+        Create frontend equivalent of whatsapp-bot/src/utils/credit-mode-detection.ts at
+        fe/lib/utils/credit-mode-detection.ts. Use frontend Supabase client instead of service key.
+      </description>
+      <implementation>
+        <![CDATA[
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+
+export async function needsCreditModeSelection(
+  paymentMethodId: string
+): Promise<boolean> {
+  const supabase = createClientComponentClient()
+
+  const { data: paymentMethod } = await supabase
+    .from('payment_methods')
+    .select('type, credit_mode')
+    .eq('id', paymentMethodId)
+    .single()
+
+  return paymentMethod?.type === 'credit' &&
+         paymentMethod.credit_mode === null
+}
+        ]]>
+      </implementation>
+    </note>
+
+    <note priority="medium">
+      <title>Responsive Design Breakpoints</title>
+      <description>
+        Use Tailwind breakpoints: sm (640px), md (768px). Cards stack on mobile, side-by-side
+        on tablet+. Modal max-width 800px on desktop, 95vw on mobile.
+      </description>
+      <example-classes>
+        <class>grid grid-cols-1 md:grid-cols-2 gap-4 (for card layout)</class>
+        <class>max-w-[800px] w-[95vw] (for modal)</class>
+      </example-classes>
+    </note>
+
+    <note priority="low">
+      <title>Icon Selection</title>
+      <description>
+        Use Lucide icons (already in project): CreditCard for Credit Mode, Wallet for Simple Mode.
+        Add sparkles or similar visual distinction for Credit Mode card.
+      </description>
+    </note>
+  </implementation-notes>
+
+  <definition-of-done>
+    <criteria>
+      <item>✓ CreditModeSelectionDialog component created and styled</item>
+      <item>✓ setCreditMode server action implemented</item>
+      <item>✓ Localization keys added (pt-BR and en)</item>
+      <item>✓ Transaction form integration complete</item>
+      <item>✓ PostHog analytics tracking implemented</item>
+      <item>✓ All 12 acceptance criteria validated</item>
+      <item>✓ Component tests written (90% coverage target)</item>
+      <item>✓ Integration tests written</item>
+      <item>✓ Manual testing completed (all browsers)</item>
+      <item>✓ Accessibility testing passed (WCAG 2.1 AA)</item>
+      <item>✓ Code reviewed</item>
+      <item>✓ Documentation updated</item>
+    </criteria>
+  </definition-of-done>
+
+  <references>
+    <reference>
+      <title>Epic 1 Technical Specification</title>
+      <location>docs/sprint-artifacts/tech-spec-epic-1.md</location>
+      <sections>
+        <section>AC4: Credit Mode Selection (Web Frontend) - lines 1243-1285</section>
+        <section>Frontend Server Actions - lines 376-473</section>
+        <section>Localization Dependencies - lines 1087-1125</section>
+      </sections>
+    </reference>
+
+    <reference>
+      <title>Architecture Decision Records</title>
+      <location>docs/architecture/*.md</location>
+      <adrs>
+        <adr>ADR-004: Non-Destructive Mode Switching</adr>
+        <adr>ADR-005: Awareness-First Tone</adr>
+      </adrs>
+    </reference>
+
+    <reference>
+      <title>Project Structure Guide</title>
+      <location>CLAUDE.md</location>
+      <sections>
+        <section>Frontend Development (Next.js 15, Radix UI, next-intl)</section>
+        <section>Common Development Commands</section>
+        <section>Localization Patterns</section>
+      </sections>
+    </reference>
+
+    <reference>
+      <title>Related Story (WhatsApp Implementation)</title>
+      <location>docs/sprint-artifacts/1-3-credit-mode-vs-simple-mode-selection-whatsapp.md</location>
+      <relevance>Reference for UX flow and messaging consistency across platforms</relevance>
+    </reference>
+  </references>
+</story-context>

@@ -41,6 +41,8 @@ export default async function ProfilePage() {
           <AuthorizedGroupsCard />
         </div>
 
+        {/* CreditCardSettingsWrapper removed - settings now only in /credit-cards */}
+
         <div className="mt-8">
           <AccountSettingsSection
             userEmail={user?.email}

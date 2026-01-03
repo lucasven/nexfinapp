@@ -1,0 +1,642 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <story>
+    <id>4-5-system-category-for-credit-card-payments</id>
+    <title>System Category for Credit Card Payments</title>
+    <epic>Epic 4: Payment Reminders &amp; Auto-Accounting</epic>
+    <status>ready-for-dev</status>
+    <complexity>Low</complexity>
+    <estimated-effort>1-2 days</estimated-effort>
+    <dependencies>
+      <blocks>
+        <story>4.3 Auto-Create Payment Transaction</story>
+        <reason>Story 4.3 requires system category ID to create payment transactions</reason>
+      </blocks>
+    </dependencies>
+  </story>
+
+  <objective>
+    <summary>Create a system-managed category "Pagamento Cartão de Crédito" / "Credit Card Payment" that is protected from deletion and used exclusively for auto-generated credit card payment transactions.</summary>
+    <why>
+      <item>Story 4.3 (Auto-Create Payment Transaction) requires a category to assign to auto-generated payment transactions</item>
+      <item>System category ensures all auto-payments are consistently categorized</item>
+      <item>Protection prevents users from accidentally deleting a category that breaks auto-payment functionality</item>
+      <item>Separates credit card payments from regular expenses in reporting and budgets</item>
+    </why>
+    <how-it-works>
+      <step>1. Database migration creates system category record with is_system = true</step>
+      <step>2. Category marked as is_system prevents deletion via RLS policies</step>
+      <step>3. Frontend UI shows system category with "Sistema" badge and disables delete button</step>
+      <step>4. Auto-payment transaction creation (Story 4.3) queries and uses this category ID</step>
+      <step>5. Users can customize name/icon but cannot delete the category</step>
+    </how-it-works>
+  </objective>
+
+  <existing-infrastructure>
+    <database>
+      <table name="categories">
+        <description>Already supports is_system flag (designed for extensibility)</description>
+        <columns>
+          <column name="id" type="UUID" />
+          <column name="user_id" type="UUID" nullable="true" description="NULL for system categories" />
+          <column name="name" type="TEXT" description="pt-BR name" />
+          <column name="name_en" type="TEXT" description="English name" />
+          <column name="type" type="TEXT" values="income, expense" />
+          <column name="is_custom" type="BOOLEAN" />
+          <column name="is_system" type="BOOLEAN" description="Prevents deletion, NULL = system category" />
+          <column name="icon" type="TEXT" nullable="true" />
+          <column name="color" type="TEXT" nullable="true" />
+          <column name="created_at" type="TIMESTAMP" />
+          <column name="updated_at" type="TIMESTAMP" />
+        </columns>
+        <rls-policies>
+          <policy name="Users can view their own categories and system categories">
+            <type>SELECT</type>
+            <rule>user_id = auth.uid() OR is_system = true</rule>
+          </policy>
+          <policy name="Users cannot modify system categories">
+            <type>UPDATE</type>
+            <rule>user_id = auth.uid() AND is_system = false</rule>
+          </policy>
+          <policy name="Users cannot delete system categories">
+            <type>DELETE</type>
+            <rule>user_id = auth.uid() AND is_system = false</rule>
+          </policy>
+        </rls-policies>
+      </table>
+
+      <migration file="047_system_category_payment.sql">
+        <description>Creates system category for credit card payments</description>
+        <actions>
+          <action>Add is_system column if not exists</action>
+          <action>Create index on is_system for efficient queries</action>
+          <action>Insert "Pagamento Cartão de Crédito" (pt-BR) with is_system=true</action>
+          <action>Insert "Credit Card Payment" (en) with is_system=true</action>
+          <action>Create/update RLS policies for system category visibility and protection</action>
+        </actions>
+        <idempotency>Uses WHERE NOT EXISTS to prevent duplicates on re-run</idempotency>
+        <rollback file="047_system_category_payment_rollback.sql">
+          <action>Delete system categories by is_system=true and name match</action>
+        </rollback>
+      </migration>
+    </database>
+
+    <frontend>
+      <component path="fe/lib/actions/categories.ts">
+        <description>Server actions for category CRUD operations</description>
+        <functions>
+          <function name="getCategories">
+            <description>Fetches user categories and default categories</description>
+            <query>SELECT * FROM categories WHERE user_id = auth.uid() OR user_id IS NULL</query>
+            <returns>Array of Category objects</returns>
+            <note>Already supports user_id IS NULL for system categories</note>
+          </function>
+          <function name="deleteCategory">
+            <description>Deletes a category with ownership and usage checks</description>
+            <current-checks>
+              <check>Verify is_custom = true (cannot delete default categories)</check>
+              <check>Verify user_id = auth.uid() (ownership)</check>
+              <check>Check category usage in transactions, budgets, recurring</check>
+            </current-checks>
+            <required-modification>Add is_system check before delete attempt</required-modification>
+          </function>
+          <function name="updateCategory">
+            <description>Updates category name, icon, color</description>
+            <current-behavior>Allows updates to custom categories only</current-behavior>
+            <required-modification>Add is_system check to prevent modification (or allow with warning)</required-modification>
+          </function>
+        </functions>
+      </component>
+
+      <component path="fe/app/[locale]/categories/categories-client.tsx">
+        <description>Category list UI with edit/delete buttons</description>
+        <current-behavior>
+          <item>Displays all categories (income/expense)</item>
+          <item>Shows "Custom" badge for is_custom=true categories</item>
+          <item>Disables delete button for is_custom=false categories</item>
+          <item>Allows edit for all categories</item>
+        </current-behavior>
+        <required-modifications>
+          <modification>Add "Sistema" badge for is_system=true categories</modification>
+          <modification>Disable delete button for is_system=true categories</modification>
+          <modification>Add tooltip to delete button explaining system category protection</modification>
+          <modification>Conditional rendering: {category.is_system &amp;&amp; &lt;Badge&gt;Sistema&lt;/Badge&gt;}</modification>
+        </required-modifications>
+      </component>
+
+      <component path="fe/lib/types.ts">
+        <description>TypeScript type definitions</description>
+        <current-type>
+          <code>
+interface Category {
+  id: string
+  name: string
+  type: "income" | "expense"
+  icon: string | null
+  color: string | null
+  is_custom: boolean
+  user_id: string | null
+  created_at: string
+}
+          </code>
+        </current-type>
+        <required-modification>Add is_system field to Category interface</required-modification>
+        <updated-type>
+          <code>
+interface Category {
+  id: string
+  name: string
+  type: "income" | "expense"
+  icon: string | null
+  color: string | null
+  is_custom: boolean
+  is_system?: boolean  // NEW: System category flag
+  user_id: string | null
+  created_at: string
+}
+          </code>
+        </updated-type>
+      </component>
+
+      <localization>
+        <file path="fe/lib/localization/pt-br.ts">
+          <required-keys>
+            <key name="category.systemBadge">Sistema</key>
+            <key name="category.cannotDeleteSystemCategory">Categorias do sistema não podem ser deletadas</key>
+            <key name="category.deleteSystemCategoryTooltip">Categoria do sistema não pode ser deletada</key>
+          </required-keys>
+        </file>
+        <file path="fe/lib/localization/en.ts">
+          <required-keys>
+            <key name="category.systemBadge">System</key>
+            <key name="category.cannotDeleteSystemCategory">System categories cannot be deleted</key>
+            <key name="category.deleteSystemCategoryTooltip">System category cannot be deleted</key>
+          </required-keys>
+        </file>
+        <file path="fe/lib/localization/types.ts">
+          <required-modification>Add categories section to Messages interface</required-modification>
+        </file>
+      </localization>
+    </frontend>
+
+    <whatsapp-bot>
+      <component path="whatsapp-bot/src/services/scheduler/transaction-creator.ts">
+        <description>Auto-payment transaction creation service (Story 4.3)</description>
+        <current-implementation>
+          <function name="createAutoPaymentTransaction">
+            <description>Creates payment transaction when statement closes</description>
+            <steps>
+              <step>1. Check idempotency (transaction already exists?)</step>
+              <step>2. Get system category ID for "Pagamento Cartão de Crédito" (REQUIRES THIS STORY)</step>
+              <step>3. Get user's default bank account (or NULL)</step>
+              <step>4. Format description (localized)</step>
+              <step>5. Create transaction record</step>
+              <step>6. Track PostHog event</step>
+            </steps>
+          </function>
+          <function name="getSystemCategoryId">
+            <description>Queries system category by name and is_system flag</description>
+            <current-query>
+              <code>
+const { data, error } = await supabase
+  .from('categories')
+  .select('id')
+  .eq('is_system', true)
+  .eq('name', 'Pagamento Cartão de Crédito')
+  .limit(1)
+  .maybeSingle()
+              </code>
+            </current-query>
+            <error-handling>Returns null if not found, logs error to deploy Story 4.5 first</error-handling>
+            <caching>No in-memory cache currently (could be added for performance)</caching>
+          </function>
+        </current-implementation>
+        <required-modification>
+          <item>Add in-memory caching for system category ID (performance optimization)</item>
+          <item>Cache invalidates on server restart (acceptable, rare event)</item>
+          <item>Example: let cachedSystemCategoryId: string | null = null</item>
+        </required-modification>
+      </component>
+    </whatsapp-bot>
+  </existing-infrastructure>
+
+  <implementation-guidance>
+    <task-breakdown>
+      <task id="1" priority="critical">
+        <title>Database Migration for System Category</title>
+        <subtasks>
+          <subtask>1.1: Verify migration script 047_system_category_payment.sql is correct</subtask>
+          <subtask>1.2: Test migration on local Supabase instance</subtask>
+          <subtask>1.3: Verify RLS policies prevent system category deletion</subtask>
+          <subtask>1.4: Test rollback script works correctly</subtask>
+          <subtask>1.5: Document migration in docs/MIGRATION_047_DEPLOYMENT.md</subtask>
+        </subtasks>
+        <validation>
+          <test>Run migration → Query categories table → Verify is_system=true record exists</test>
+          <test>Attempt to delete as regular user → Verify RLS blocks deletion</test>
+          <test>Run migration twice → Verify only one system category exists (idempotency)</test>
+        </validation>
+      </task>
+
+      <task id="2" priority="high">
+        <title>System Category ID Retrieval Helper</title>
+        <subtasks>
+          <subtask>2.1: Add in-memory caching to getSystemCategoryId()</subtask>
+          <subtask>2.2: Query system category on first call, cache result</subtask>
+          <subtask>2.3: Add error handling for missing category</subtask>
+          <subtask>2.4: Add logging for category query performance</subtask>
+        </subtasks>
+        <validation>
+          <test>Unit test: System category exists → Returns ID</test>
+          <test>Unit test: System category missing → Returns null with error log</test>
+          <test>Unit test: Second call uses cache (no database query)</test>
+        </validation>
+      </task>
+
+      <task id="3" priority="high">
+        <title>Frontend Category List Updates</title>
+        <subtasks>
+          <subtask>3.1: Add is_system field to Category interface in types.ts</subtask>
+          <subtask>3.2: Add "Sistema" badge rendering in categories-client.tsx</subtask>
+          <subtask>3.3: Disable delete button for is_system=true categories</subtask>
+          <subtask>3.4: Add tooltip to delete button explaining protection</subtask>
+          <subtask>3.5: Verify system category appears in category dropdowns</subtask>
+        </subtasks>
+        <validation>
+          <test>Manual: View category list → Verify "Sistema" badge displayed</test>
+          <test>Manual: Hover over delete button → Verify tooltip shown</test>
+          <test>Manual: Click delete button → Verify disabled/no action</test>
+        </validation>
+      </task>
+
+      <task id="4" priority="medium">
+        <title>Server Action Protection</title>
+        <subtasks>
+          <subtask>4.1: Update deleteCategory() to check is_system flag</subtask>
+          <subtask>4.2: Return user-friendly error if is_system=true</subtask>
+          <subtask>4.3: Update updateCategory() to handle system categories (allow or block)</subtask>
+          <subtask>4.4: Add unit tests for system category protection</subtask>
+        </subtasks>
+        <validation>
+          <test>Unit test: deleteCategory(systemCategoryId) → Returns error</test>
+          <test>Unit test: deleteCategory(regularCategoryId) → Deletes successfully</test>
+          <test>Integration test: API call to delete system category → Rejected by RLS</test>
+        </validation>
+      </task>
+
+      <task id="5" priority="high">
+        <title>Localization</title>
+        <subtasks>
+          <subtask>5.1: Add category keys to pt-br.ts (systemBadge, cannotDeleteSystemCategory, deleteSystemCategoryTooltip)</subtask>
+          <subtask>5.2: Add category keys to en.ts (English translations)</subtask>
+          <subtask>5.3: Update types.ts to include categories section in Messages interface</subtask>
+          <subtask>5.4: Verify all UI strings use localization keys</subtask>
+        </subtasks>
+        <validation>
+          <test>Manual: Switch to pt-BR → Verify "Sistema" badge</test>
+          <test>Manual: Switch to en → Verify "System" badge</test>
+          <test>Manual: Verify error messages localized</test>
+        </validation>
+      </task>
+
+      <task id="6" priority="critical">
+        <title>Integration with Auto-Payment Creation (Story 4.3)</title>
+        <subtasks>
+          <subtask>6.1: Verify getSystemCategoryId() is called before transaction creation</subtask>
+          <subtask>6.2: Verify transaction INSERT uses system category ID</subtask>
+          <subtask>6.3: Add error handling if system category missing</subtask>
+          <subtask>6.4: Track PostHog event if category not found</subtask>
+        </subtasks>
+        <validation>
+          <test>Integration test: Auto-payment creation → Verify uses correct category ID</test>
+          <test>Integration test: System category missing → Verify error logged and payment skipped</test>
+          <test>E2E test: Run auto-payment job → Verify transactions have system category</test>
+        </validation>
+      </task>
+
+      <task id="7" priority="medium">
+        <title>Testing</title>
+        <subtasks>
+          <subtask>7.1: Unit tests for getSystemCategoryId() (exists, missing, cache)</subtask>
+          <subtask>7.2: Unit tests for deleteCategory() (system vs regular)</subtask>
+          <subtask>7.3: Integration tests for migration idempotency</subtask>
+          <subtask>7.4: Integration tests for RLS policies</subtask>
+          <subtask>7.5: E2E manual tests for frontend UI</subtask>
+          <subtask>7.6: Regression tests for existing category functionality</subtask>
+        </subtasks>
+      </task>
+
+      <task id="8" priority="low">
+        <title>Documentation</title>
+        <subtasks>
+          <subtask>8.1: Update CLAUDE.md with system category details</subtask>
+          <subtask>8.2: Create MIGRATION_047_DEPLOYMENT.md</subtask>
+          <subtask>8.3: Document RLS policies for system categories</subtask>
+          <subtask>8.4: Document integration with Story 4.3</subtask>
+        </subtasks>
+      </task>
+
+      <task id="9" priority="critical">
+        <title>Deployment</title>
+        <subtasks>
+          <subtask>9.1: Test migration on staging environment</subtask>
+          <subtask>9.2: Apply migration 047 to production database</subtask>
+          <subtask>9.3: Deploy frontend code</subtask>
+          <subtask>9.4: Deploy WhatsApp bot code</subtask>
+          <subtask>9.5: Verify system category exists in production</subtask>
+          <subtask>9.6: Monitor logs for errors</subtask>
+          <subtask>9.7: Mark Story 4.5 as done in sprint-status.yaml</subtask>
+        </subtasks>
+      </task>
+    </task-breakdown>
+
+    <architectural-decisions>
+      <decision id="1">
+        <title>Reuse Existing Categories Table (Not New Table)</title>
+        <rationale>Categories table already supports is_system flag, no need for new infrastructure</rationale>
+        <alternative-considered>Create new system_categories table (rejected - overengineering)</alternative-considered>
+        <benefit>No new infrastructure, reuses existing RLS policies, simpler maintenance</benefit>
+        <trade-off>None (existing schema already supports system categories)</trade-off>
+      </decision>
+
+      <decision id="2">
+        <title>user_id = NULL for System Category (Not Shared User)</title>
+        <rationale>System category should be visible to ALL users, not owned by one user</rationale>
+        <alternative-considered>Create shared user account (rejected - complex, unnecessary)</alternative-considered>
+        <benefit>RLS policies already handle user_id IS NULL visibility</benefit>
+        <trade-off>None (standard pattern for system-wide records)</trade-off>
+      </decision>
+
+      <decision id="3">
+        <title>Allow Customization (Name/Icon) but Prevent Deletion</title>
+        <rationale>Users may want to customize display without breaking functionality</rationale>
+        <alternative-considered>Completely immutable (rejected - too restrictive)</alternative-considered>
+        <benefit>Flexibility for users while protecting critical functionality</benefit>
+        <trade-off>Users could rename to confusing names (acceptable, their choice)</trade-off>
+      </decision>
+
+      <decision id="4">
+        <title>In-Memory Caching for Category ID (Not Database Query Each Time)</title>
+        <rationale>System category ID doesn't change, no need to query every time</rationale>
+        <alternative-considered>Query database each time (rejected - unnecessary load)</alternative-considered>
+        <benefit>Reduces database queries, improves performance</benefit>
+        <trade-off>Cache invalidates on server restart (acceptable, rare event)</trade-off>
+      </decision>
+    </architectural-decisions>
+
+    <edge-cases>
+      <edge-case id="1">
+        <scenario>User Has Category with Same Name</scenario>
+        <description>User already has category "Pagamento Cartão de Crédito" (user_id = user123)</description>
+        <resolution>
+          <item>System category inserted with user_id = NULL (different record)</item>
+          <item>Both categories visible to user</item>
+          <item>User's category can be deleted, system category cannot</item>
+          <item>Auto-payment uses system category (user_id IS NULL), not user's category</item>
+        </resolution>
+      </edge-case>
+
+      <edge-case id="2">
+        <scenario>User Customizes System Category Name</scenario>
+        <description>User renames system category to "Pagto CC"</description>
+        <resolution>
+          <item>Auto-payment creation falls back to query by is_system=true AND type='expense'</item>
+          <item>Only one system expense category exists, so query succeeds</item>
+          <item>Transactions show customized name in transaction list</item>
+        </resolution>
+      </edge-case>
+
+      <edge-case id="3">
+        <scenario>Migration Run Multiple Times</scenario>
+        <description>Developer runs migration 047 multiple times</description>
+        <resolution>
+          <item>WHERE NOT EXISTS prevents duplicates</item>
+          <item>Only one system category exists</item>
+          <item>Safe to run migration multiple times (idempotent)</item>
+        </resolution>
+      </edge-case>
+
+      <edge-case id="4">
+        <scenario>Rollback After Auto-Payments Created</scenario>
+        <description>Migration rolled back after auto-payment transactions exist</description>
+        <resolution>
+          <item>Rollback deletes system category</item>
+          <item>Existing transactions have invalid category_id (foreign key orphaned)</item>
+          <item>SOLUTION: Don't rollback after auto-payments created (destructive)</item>
+          <item>If rollback necessary: Manually update transactions to different category first</item>
+        </resolution>
+      </edge-case>
+    </edge-cases>
+
+    <performance-targets>
+      <target id="NFR-Epic4-P5">
+        <metric>System Category Query Time</metric>
+        <target>&lt; 50ms (first query, uncached)</target>
+        <expected>~20-30ms on typical connection</expected>
+        <cached>&lt; 1ms (in-memory lookup)</cached>
+      </target>
+
+      <target id="NFR-Epic4-P6">
+        <metric>Category List Display Time</metric>
+        <target>&lt; 100ms (includes system category)</target>
+        <expected>~50-70ms (same as existing category queries)</expected>
+        <impact>No performance impact (one additional category record)</impact>
+      </target>
+    </performance-targets>
+
+    <testing-strategy>
+      <unit-tests>
+        <test>getSystemCategoryId() - System category exists → Returns ID</test>
+        <test>getSystemCategoryId() - System category missing → Returns null with error</test>
+        <test>getSystemCategoryId() - Second call uses cache (no database query)</test>
+        <test>deleteCategory() - System category → Returns error</test>
+        <test>deleteCategory() - Regular category → Deletes successfully</test>
+      </unit-tests>
+
+      <integration-tests>
+        <test>Migration idempotency: Run migration twice → Only one record</test>
+        <test>RLS DELETE policy: Attempt to delete as user → Blocked</test>
+        <test>Auto-payment creation: Uses correct system category ID</test>
+        <test>Category visibility: System category visible to all users</test>
+      </integration-tests>
+
+      <e2e-tests>
+        <test>System category appears in category list with "Sistema" badge</test>
+        <test>Delete button disabled for system category</test>
+        <test>Tooltip shows on hover: "Categoria do sistema não pode ser deletada"</test>
+        <test>Edit system category name → Allowed</test>
+        <test>Edit system category icon → Allowed</test>
+        <test>Attempt to delete via API → Rejected</test>
+      </e2e-tests>
+
+      <regression-tests>
+        <test>Existing user categories unaffected</test>
+        <test>Existing category CRUD operations working</test>
+        <test>Transaction categorization working</test>
+        <test>Budget calculations include system category</test>
+      </regression-tests>
+    </testing-strategy>
+
+    <risks-and-mitigations>
+      <risk id="RISK-1" likelihood="Low" impact="Low">
+        <title>User Confusion About System Category</title>
+        <description>Users may not understand why system category cannot be deleted</description>
+        <mitigation>
+          <item>Clear "Sistema" badge provides visual distinction</item>
+          <item>Tooltip on delete button explains protection</item>
+          <item>Documentation in help section</item>
+        </mitigation>
+      </risk>
+
+      <risk id="RISK-2" likelihood="Very Low" impact="High">
+        <title>System Category Accidentally Deleted (Bypassing Protection)</title>
+        <description>System category deleted despite three layers of protection</description>
+        <mitigation>
+          <item>Three layers of protection: UI + Server Action + RLS</item>
+          <item>Monitoring and alerts for missing system category</item>
+          <item>Auto-payment job logs error if category not found</item>
+        </mitigation>
+      </risk>
+
+      <risk id="RISK-3" likelihood="Low" impact="Medium">
+        <title>Migration Fails on Production Database</title>
+        <description>Migration 047 fails during production deployment</description>
+        <mitigation>
+          <item>Test on staging environment first</item>
+          <item>Rollback script available</item>
+          <item>Deployment documentation with verification queries</item>
+          <item>Story 4.3 cannot run until this story completes</item>
+        </mitigation>
+      </risk>
+    </risks-and-mitigations>
+  </implementation-guidance>
+
+  <success-criteria>
+    <criteria id="AC4.5.1">
+      <title>System Category Creation via Migration</title>
+      <verification>
+        <test>Migration 047 applied successfully</test>
+        <test>Category exists in database with is_system = true</test>
+        <test>Both name (pt-BR) and name_en (en) fields populated</test>
+        <test>Migration idempotent (can run multiple times)</test>
+        <test>Rollback script works correctly</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.2">
+      <title>System Category Protection (Prevent Deletion)</title>
+      <verification>
+        <test>RLS DELETE policy prevents deletion of is_system=true categories</test>
+        <test>Frontend delete button disabled for system category</test>
+        <test>Server action validates is_system=false before delete</test>
+        <test>All three layers of protection verified</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.3">
+      <title>System Category Visibility in Frontend</title>
+      <verification>
+        <test>System category appears in category lists</test>
+        <test>"Sistema" badge displayed next to category name</test>
+        <test>Delete button disabled with tooltip explanation</test>
+        <test>Category appears in all selection contexts (transaction form, settings, etc.)</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.4">
+      <title>Category ID Retrieval for Auto-Payment Creation</title>
+      <verification>
+        <test>getSystemCategoryId() helper function works</test>
+        <test>Caching reduces database queries</test>
+        <test>Error handling for missing category</test>
+        <test>Auto-payment creation uses correct category ID</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.5">
+      <title>Localization Support (pt-BR and English)</title>
+      <verification>
+        <test>pt-BR users see "Pagamento Cartão de Crédito"</test>
+        <test>English users see "Credit Card Payment"</test>
+        <test>All UI strings localized (badge, error messages, tooltips)</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.6">
+      <title>Integration with Auto-Payment Transaction Creation (Story 4.3)</title>
+      <verification>
+        <test>Auto-payment creation uses system category ID</test>
+        <test>Transactions categorized correctly</test>
+        <test>Error handling if category missing</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.7">
+      <title>Backward Compatibility (Existing Categories Unaffected)</title>
+      <verification>
+        <test>Existing user categories unaffected</test>
+        <test>Existing category CRUD operations working</test>
+        <test>Transaction categorization working</test>
+        <test>Budget calculations include system category</test>
+      </verification>
+    </criteria>
+
+    <criteria id="AC4.5.8">
+      <title>System Category in Transaction Reports and Budgets</title>
+      <verification>
+        <test>Auto-payment transactions show system category name</test>
+        <test>System category appears in category breakdown reports</test>
+        <test>Budget calculations include system category expenses</test>
+      </verification>
+    </criteria>
+  </success-criteria>
+
+  <deployment-checklist>
+    <pre-deployment>
+      <item>Verify migration 047 ready to apply</item>
+      <item>Run all tests (unit, integration)</item>
+      <item>Test on staging environment</item>
+      <item>Verify RLS policies active</item>
+      <item>Verify system category query works</item>
+    </pre-deployment>
+
+    <deployment>
+      <item>Apply migration 047 to production database</item>
+      <item>Verify system category exists: SELECT * FROM categories WHERE is_system = true</item>
+      <item>Deploy frontend code</item>
+      <item>Deploy WhatsApp bot code</item>
+      <item>Monitor logs for errors</item>
+    </deployment>
+
+    <post-deployment>
+      <item>Verify system category appears in frontend category lists</item>
+      <item>Verify delete button disabled for system category</item>
+      <item>Verify auto-payment creation uses correct category (Story 4.3)</item>
+      <item>Monitor error rates (target: 0% failures)</item>
+      <item>Update sprint-status.yaml: 4-5 → done</item>
+      <item>Story 4.3 can now safely run (dependency satisfied)</item>
+    </post-deployment>
+  </deployment-checklist>
+
+  <notes>
+    <note type="critical">
+      <title>Story 4.3 Dependency</title>
+      <content>Story 4.3 (Auto-Create Payment Transaction) CANNOT run without this story complete. Migration 047 MUST be applied before auto-payment scheduler starts.</content>
+    </note>
+
+    <note type="info">
+      <title>Architecture Decision</title>
+      <content>Reusing existing categories table with is_system flag is the simplest and most maintainable approach. No new tables needed.</content>
+    </note>
+
+    <note type="warning">
+      <title>Rollback Warning</title>
+      <content>Do NOT rollback after auto-payment transactions are created. Rollback will orphan category_id foreign keys.</content>
+    </note>
+
+    <note type="info">
+      <title>User Customization</title>
+      <content>Users CAN customize system category name/icon but CANNOT delete. This provides flexibility while protecting functionality.</content>
+    </note>
+  </notes>
+</story-context>

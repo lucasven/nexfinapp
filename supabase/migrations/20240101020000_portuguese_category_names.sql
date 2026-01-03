@@ -1,0 +1,1 @@
+../../fe/scripts/020_portuguese_category_names.sql

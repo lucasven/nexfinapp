@@ -1,0 +1,1 @@
+../../fe/scripts/047_system_category_payment.sql

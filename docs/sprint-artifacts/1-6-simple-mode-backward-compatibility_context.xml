@@ -1,0 +1,627 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Story Context: 1-6-simple-mode-backward-compatibility -->
+<!-- Generated: 2025-12-02 -->
+<!-- Epic: 1 - Credit Card Foundation -->
+<!-- Status: ready-for-dev -->
+
+<story-context>
+  <metadata>
+    <story-id>1-6-simple-mode-backward-compatibility</story-id>
+    <story-title>Simple Mode Backward Compatibility</story-title>
+    <epic>Epic 1 - Credit Card Foundation</epic>
+    <status>ready-for-dev</status>
+    <complexity>Medium</complexity>
+    <estimated-effort>1-2 days</estimated-effort>
+    <story-file>docs/sprint-artifacts/1-6-simple-mode-backward-compatibility.md</story-file>
+    <tech-spec>docs/sprint-artifacts/tech-spec-epic-1.md</tech-spec>
+    <tech-spec-section>AC6: Simple Mode Backward Compatibility (lines 1338-1370)</tech-spec-section>
+  </metadata>
+
+  <objective>
+    <summary>
+      Ensure that users who choose Simple Mode (credit_mode = FALSE) experience credit card tracking
+      identically to debit card tracking, with no credit-specific features (installments, statement periods,
+      credit budgets). This story validates backward compatibility for existing users post-migration
+      and confirms Simple Mode behaves as intended.
+    </summary>
+
+    <user-story>
+      As a user who chose Simple Mode for my credit card (or an existing user with pre-migration credit cards),
+      I want my credit card transactions to work exactly like debit card transactions with no credit-specific features,
+      so that I can track expenses simply without being interrupted by installment prompts, statement periods, or credit budgets.
+    </user-story>
+
+    <core-principle>
+      Simple Mode Guarantee: When credit_mode = FALSE, the user experience is functionally identical to using
+      a debit card. No installment prompts, no statement tracking, calendar month budgets only.
+    </core-principle>
+  </objective>
+
+  <dependencies>
+    <required-stories>
+      <story id="1-1" status="done">
+        Database Schema Migration for Credit Card Features
+        - Adds payment_methods.credit_mode column (BOOLEAN DEFAULT NULL)
+        - File: fe/scripts/040_credit_card_management.sql
+      </story>
+      <story id="1-2" status="done">
+        First Credit Card Transaction Detection
+        - Function: needsCreditModeSelection(paymentMethodId)
+        - Files: fe/lib/utils/credit-mode-detection.ts, whatsapp-bot/src/utils/credit-mode-detection.ts
+      </story>
+      <story id="1-3" status="done">
+        Credit Mode vs Simple Mode Selection (WhatsApp)
+        - WhatsApp mode selection flow
+        - File: whatsapp-bot/src/handlers/credit-card/mode-selection.ts
+      </story>
+      <story id="1-4" status="done">
+        Credit Mode Selection (Web Frontend)
+        - Web mode selection UI components
+        - Files: fe/components/transactions/credit-mode-selection-dialog.tsx
+      </story>
+      <story id="1-5" status="done">
+        Mode Switching with Data Implications Warning
+        - Functions: setCreditMode(), switchCreditMode()
+        - File: fe/lib/actions/payment-methods.ts
+      </story>
+    </required-stories>
+
+    <external-dependencies>
+      <dependency>PostgreSQL 13+ with pgvector extension (existing)</dependency>
+      <dependency>Supabase client libraries (existing)</dependency>
+      <dependency>Next.js 15 with next-intl (existing)</dependency>
+      <dependency>WhatsApp bot with Baileys (existing)</dependency>
+    </external-dependencies>
+  </dependencies>
+
+  <architecture-context>
+    <database-schema>
+      <table name="payment_methods">
+        <purpose>Stores user payment methods with credit mode preferences</purpose>
+        <relevant-columns>
+          <column name="id" type="UUID">Primary key</column>
+          <column name="user_id" type="UUID">Foreign key to auth.users</column>
+          <column name="name" type="TEXT">User-friendly name (e.g., "Nubank")</column>
+          <column name="type" type="TEXT">Payment type: 'credit', 'debit', 'cash', 'pix', 'other'</column>
+          <column name="credit_mode" type="BOOLEAN">
+            TRUE = Credit Mode (installments, statements)
+            FALSE = Simple Mode (basic tracking)
+            NULL = Not yet chosen (post-migration default)
+          </column>
+          <column name="statement_closing_day" type="INTEGER">
+            Day of month when statement closes (1-31)
+            Ignored when credit_mode = FALSE
+          </column>
+          <column name="payment_due_day" type="INTEGER">
+            Days after closing when payment is due
+            Ignored when credit_mode = FALSE
+          </column>
+          <column name="monthly_budget" type="DECIMAL(10,2)">
+            User-defined budget per statement period
+            Ignored when credit_mode = FALSE
+          </column>
+        </relevant-columns>
+        <migration-file>fe/scripts/040_credit_card_management.sql</migration-file>
+        <migration-notes>
+          Migration sets credit_mode = NULL for all existing credit cards.
+          No auto-population on migration (backward compatibility requirement).
+        </migration-notes>
+      </table>
+
+      <table name="installment_plans">
+        <purpose>Tracks installment purchase plans (Epic 2 feature)</purpose>
+        <relevant-columns>
+          <column name="id" type="UUID">Primary key</column>
+          <column name="user_id" type="UUID">Foreign key to auth.users</column>
+          <column name="payment_method_id" type="UUID">Foreign key to payment_methods</column>
+          <column name="status" type="TEXT">active, paid_off, cancelled</column>
+        </relevant-columns>
+        <simple-mode-behavior>
+          Historical installment_plans remain in database when user switches to Simple Mode,
+          but are completely hidden in UI. No new plans created in Simple Mode.
+        </simple-mode-behavior>
+      </table>
+    </database-schema>
+
+    <key-functions>
+      <function name="needsCreditModeSelection" location="fe/lib/utils/credit-mode-detection.ts, whatsapp-bot/src/utils/credit-mode-detection.ts">
+        <signature>async function needsCreditModeSelection(paymentMethodId: string): Promise&lt;boolean&gt;</signature>
+        <purpose>Detects if payment method requires mode selection before transaction</purpose>
+        <logic>Returns true when type='credit' AND credit_mode IS NULL</logic>
+        <performance>Target: &lt; 100ms query execution</performance>
+      </function>
+
+      <function name="setCreditMode" location="fe/lib/actions/payment-methods.ts">
+        <signature>async function setCreditMode(paymentMethodId: string, creditMode: boolean): Promise&lt;{success: boolean, error?: string}&gt;</signature>
+        <purpose>Sets credit mode for first-time selection (NULL → TRUE/FALSE)</purpose>
+        <validation>Only updates if credit_mode is currently NULL</validation>
+      </function>
+
+      <function name="switchCreditMode" location="fe/lib/actions/payment-methods.ts">
+        <signature>async function switchCreditMode(paymentMethodId: string, newMode: boolean): Promise&lt;{success: boolean, error?: string, hasActiveInstallments?: boolean}&gt;</signature>
+        <purpose>Allows mode switching with data implications warning</purpose>
+        <validation>Checks for active installment_plans before allowing Credit→Simple switch</validation>
+      </function>
+    </key-functions>
+
+    <existing-code-patterns>
+      <pattern name="Transaction Creation (WhatsApp)">
+        <file>whatsapp-bot/src/handlers/transactions/expenses.ts</file>
+        <current-implementation>
+          Lines 64-100: Payment method detection and credit mode selection trigger
+          - Calls needsCreditModeSelection() to check if mode selection needed
+          - If true, stores pending transaction and sends mode selection prompt
+          - If false, proceeds with normal transaction creation
+        </current-implementation>
+        <simple-mode-requirement>
+          When credit_mode = FALSE, skip all credit-specific logic:
+          - No installment prompts
+          - No statement period detection
+          - Use standard transaction confirmation message
+        </simple-mode-requirement>
+      </pattern>
+
+      <pattern name="Transaction Form (Web)">
+        <file>fe/components/transaction-dialog.tsx</file>
+        <current-implementation>
+          Lines 30-33: TODO comment for credit mode selection integration
+          Lines 75-83: Placeholder for mode selection before transaction creation
+        </current-implementation>
+        <simple-mode-requirement>
+          Conditionally render installment fields:
+          - Show installment inputs only if selectedPaymentMethod.credit_mode === true
+          - Hide all credit-specific UI if credit_mode === false
+          - Standard form for credit_mode === null (until mode selected)
+        </simple-mode-requirement>
+      </pattern>
+
+      <pattern name="Budget Calculation">
+        <file>Location varies by implementation</file>
+        <current-behavior>Likely uses calendar month for all payment methods currently</current-behavior>
+        <simple-mode-requirement>
+          For Simple Mode cards (credit_mode = FALSE):
+          - Use calendar month boundaries (startOfMonth, endOfMonth)
+          - Ignore payment_methods.statement_closing_day even if set
+          - Budget period calculation identical to debit cards
+
+          For Credit Mode cards (credit_mode = TRUE):
+          - Use statement period based on statement_closing_day
+          - Calculate rolling statement windows
+        </simple-mode-requirement>
+      </pattern>
+
+      <pattern name="Dashboard Widgets">
+        <file>Dashboard and transaction list components (locations vary)</file>
+        <simple-mode-requirement>
+          Conditionally render credit-specific widgets:
+          - Filter paymentMethods to creditModeCards = paymentMethods.filter(pm => pm.credit_mode === true)
+          - Only show StatementPeriodWidget, InstallmentSummaryWidget for creditModeCards
+          - Simple Mode cards appear in standard transaction list with no special widgets
+        </simple-mode-requirement>
+      </pattern>
+    </existing-code-patterns>
+  </architecture-context>
+
+  <implementation-guidance>
+    <primary-focus>
+      This story is primarily about VALIDATION and TESTING, not new feature development.
+      Most implementation already exists from Stories 1.1-1.5. The work here is to:
+      1. Add conditional checks for credit_mode throughout the codebase
+      2. Ensure Simple Mode (credit_mode = FALSE) truly behaves like debit tracking
+      3. Verify backward compatibility for existing users (credit_mode = NULL)
+      4. Write comprehensive tests for edge cases
+    </primary-focus>
+
+    <files-to-modify>
+      <file path="whatsapp-bot/src/handlers/transactions/expenses.ts">
+        <change type="add-check">
+          Add Simple Mode check after mode selection logic (around line 100+):
+          ```typescript
+          // Simple Mode: Skip installment prompts
+          if (pm.credit_mode === false) {
+            // Create transaction normally (no installment logic)
+            return await createSimpleTransaction(userId, transactionData)
+          }
+          ```
+        </change>
+        <acceptance-criteria>AC6.1, AC6.8</acceptance-criteria>
+      </file>
+
+      <file path="fe/components/transaction-dialog.tsx">
+        <change type="add-conditional-rendering">
+          Replace TODO comments (lines 30-33, 75-83) with actual conditional logic:
+          ```typescript
+          const showInstallmentFields =
+            selectedPaymentMethod?.type === 'credit' &&
+            selectedPaymentMethod?.credit_mode === true
+
+          {showInstallmentFields && <InstallmentInputs />}
+          ```
+        </change>
+        <acceptance-criteria>AC6.1, AC6.7</acceptance-criteria>
+      </file>
+
+      <file path="fe/components/settings/credit-card-settings.tsx">
+        <change type="add-badge">
+          Add Simple Mode badge display:
+          - Show "Simple Mode" or "Modo Simples" badge when credit_mode = FALSE
+          - Hide credit card detail fields (statement dates, budget) for Simple Mode
+          - Show "Switch to Credit Mode" button
+        </change>
+        <acceptance-criteria>AC6.13</acceptance-criteria>
+      </file>
+
+      <file path="Budget calculation files (location varies)">
+        <change type="add-period-logic">
+          Add conditional budget period calculation:
+          ```typescript
+          function calculateBudgetPeriod(paymentMethod, date) {
+            // Simple Mode or non-credit: Use calendar month
+            if (paymentMethod.credit_mode === false || paymentMethod.type !== 'credit') {
+              return { start: startOfMonth(date), end: endOfMonth(date) }
+            }
+
+            // Credit Mode: Use statement period
+            if (paymentMethod.credit_mode === true && paymentMethod.statement_closing_day) {
+              return calculateStatementPeriod(date, paymentMethod.statement_closing_day)
+            }
+
+            // Fallback: Calendar month
+            return { start: startOfMonth(date), end: endOfMonth(date) }
+          }
+          ```
+        </change>
+        <acceptance-criteria>AC6.5, AC6.15</acceptance-criteria>
+      </file>
+
+      <file path="Dashboard components (locations vary)">
+        <change type="add-conditional-widgets">
+          Filter credit cards by mode before rendering widgets:
+          ```typescript
+          const creditModeCards = paymentMethods.filter(pm => pm.credit_mode === true)
+
+          {creditModeCards.length > 0 && (
+            <>
+              <StatementPeriodWidget cards={creditModeCards} />
+              <InstallmentSummaryWidget cards={creditModeCards} />
+            </>
+          )}
+          ```
+        </change>
+        <acceptance-criteria>AC6.4, AC6.7</acceptance-criteria>
+      </file>
+
+      <file path="fe/lib/localization/pt-br.ts">
+        <change type="add-keys">
+          Add Simple Mode localization:
+          ```typescript
+          credit_mode: {
+            simple_mode_badge: "Modo Simples",
+            simple_mode_description: "Acompanhamento simples de despesas, sem recursos de crédito",
+          }
+          ```
+        </change>
+        <acceptance-criteria>AC6.19</acceptance-criteria>
+      </file>
+
+      <file path="fe/lib/localization/en.ts">
+        <change type="add-keys">
+          Add Simple Mode localization:
+          ```typescript
+          credit_mode: {
+            simple_mode_badge: "Simple Mode",
+            simple_mode_description: "Simple expense tracking, no credit features",
+          }
+          ```
+        </change>
+        <acceptance-criteria>AC6.20</acceptance-criteria>
+      </file>
+
+      <file path="fe/lib/analytics/events.ts">
+        <change type="update-event">
+          Add payment_method_mode property to transaction_created event:
+          ```typescript
+          {
+            event: 'transaction_created',
+            // ... existing properties
+            paymentMethodMode: 'credit' | 'simple' | null,  // NEW
+          }
+          ```
+        </change>
+        <acceptance-criteria>AC6.16</acceptance-criteria>
+      </file>
+    </files-to-modify>
+
+    <files-to-verify>
+      <file path="fe/scripts/040_credit_card_management.sql">
+        <verification>
+          Confirm line 45: `ADD COLUMN IF NOT EXISTS credit_mode BOOLEAN DEFAULT NULL`
+          Ensure no UPDATE statements auto-populate credit_mode for existing rows
+        </verification>
+        <acceptance-criteria>AC6.2</acceptance-criteria>
+      </file>
+    </files-to-verify>
+
+    <no-new-files>
+      This story does not require any new files. All changes are modifications
+      to existing files or additions to existing components.
+    </no-new-files>
+  </implementation-guidance>
+
+  <testing-strategy>
+    <unit-tests>
+      <test file="whatsapp-bot/src/__tests__/handlers/transactions/expenses.test.ts">
+        <case>Simple Mode transaction creation without installment prompts</case>
+        <case>Budget calculation with Simple Mode uses calendar month</case>
+        <case>Migration sets credit_mode to NULL for existing cards</case>
+      </test>
+
+      <test file="fe/__tests__/components/transaction-dialog.test.tsx">
+        <case>Installment fields hidden when credit_mode = FALSE</case>
+        <case>Installment fields shown when credit_mode = TRUE</case>
+        <case>Standard form shown when credit_mode = NULL</case>
+      </test>
+
+      <test file="fe/__tests__/utils/budget-calculation.test.ts">
+        <case>Calendar month used for Simple Mode cards</case>
+        <case>Statement period used for Credit Mode cards</case>
+        <case>Statement dates ignored when credit_mode = FALSE (even if set)</case>
+      </test>
+    </unit-tests>
+
+    <integration-tests>
+      <test name="Simple Mode Transaction Flow (Web)">
+        <steps>
+          1. Create user with Simple Mode credit card (credit_mode = FALSE)
+          2. Open transaction form
+          3. Select Simple Mode card
+          4. Verify no installment fields visible
+          5. Submit transaction
+          6. Verify success and no credit-specific confirmations
+        </steps>
+        <acceptance-criteria>AC6.1, AC6.7, AC6.9</acceptance-criteria>
+      </test>
+
+      <test name="Simple Mode Transaction Flow (WhatsApp)">
+        <steps>
+          1. Create user with Simple Mode credit card
+          2. Send expense message with card name
+          3. Verify no installment prompts appear
+          4. Verify transaction confirmation is standard format
+          5. Verify no statement period tracking
+        </steps>
+        <acceptance-criteria>AC6.1, AC6.8, AC6.9</acceptance-criteria>
+      </test>
+
+      <test name="Backward Compatibility (Existing User Post-Migration)">
+        <steps>
+          1. Create credit card before migration (simulate)
+          2. Run migration 040_credit_card_management.sql
+          3. Verify credit_mode = NULL
+          4. Login as user, view dashboard (no errors, no prompts)
+          5. Add first transaction
+          6. Verify mode selection prompt appears
+          7. Choose Simple Mode
+          8. Verify transaction completes normally
+        </steps>
+        <acceptance-criteria>AC6.2, AC6.3, AC6.14, AC6.17</acceptance-criteria>
+      </test>
+
+      <test name="Mixed Mode User (Multiple Cards)">
+        <steps>
+          1. Create user with 3 credit cards
+          2. Set Card A: credit_mode = TRUE (Credit Mode)
+          3. Set Card B: credit_mode = FALSE (Simple Mode)
+          4. Set Card C: credit_mode = NULL (not chosen)
+          5. Add transaction with Card A (verify installment prompt)
+          6. Add transaction with Card B (verify no installment prompt)
+          7. Add transaction with Card C (verify mode selection appears)
+          8. View dashboard (verify different UI for each mode)
+        </steps>
+        <acceptance-criteria>AC6.11</acceptance-criteria>
+      </test>
+
+      <test name="Budget Reports with Simple Mode">
+        <steps>
+          1. Create Simple Mode card with statement_closing_day = 15 (ignored)
+          2. Add transactions on Dec 10, Dec 20, Dec 30
+          3. View budget report for December
+          4. Verify all three transactions included (calendar month used)
+          5. Verify no statement period (Nov 16 - Dec 15) logic applied
+        </steps>
+        <acceptance-criteria>AC6.5, AC6.15, AC6.18</acceptance-criteria>
+      </test>
+    </integration-tests>
+
+    <edge-cases>
+      <case id="Edge-1" title="Simple Mode with Historical Credit Mode Data">
+        <scenario>
+          User previously used Credit Mode, has paid_off installment_plans,
+          then switches to Simple Mode
+        </scenario>
+        <expected-behavior>
+          Historical installment_plans remain in database (not deleted).
+          UI shows NO installment data for Simple Mode user.
+          Current transactions behave as Simple Mode (no credit features).
+        </expected-behavior>
+        <acceptance-criteria>AC6.10</acceptance-criteria>
+      </case>
+
+      <case id="Edge-2" title="Simple Mode with Manually Set Statement Dates">
+        <scenario>
+          Credit card has credit_mode = FALSE but statement_closing_day = 15
+          and payment_due_day = 10 (set from previous Credit Mode or manual edit)
+        </scenario>
+        <expected-behavior>
+          Statement dates completely ignored by all features.
+          Budget calculation uses calendar month.
+          No statement-related UI shown.
+        </expected-behavior>
+        <acceptance-criteria>AC6.6, AC6.18</acceptance-criteria>
+      </case>
+
+      <case id="Edge-3" title="NULL Mode Post-Migration">
+        <scenario>
+          Existing user with credit_mode = NULL views dashboard after migration
+        </scenario>
+        <expected-behavior>
+          No errors or crashes.
+          Card appears in payment method list normally.
+          No mode selection prompt until user adds new transaction.
+        </expected-behavior>
+        <acceptance-criteria>AC6.17</acceptance-criteria>
+      </case>
+
+      <case id="Edge-4" title="Multiple Cards - One Simple, One Credit">
+        <scenario>
+          User has Card A (Credit Mode) and Card B (Simple Mode).
+          Adds transaction with Card A, then Card B.
+        </scenario>
+        <expected-behavior>
+          Card A transaction shows installment prompt.
+          Card B transaction shows no installment prompt.
+          Each card respects its mode independently.
+        </expected-behavior>
+        <acceptance-criteria>AC6.11</acceptance-criteria>
+      </case>
+    </edge-cases>
+
+    <manual-test-checklist>
+      <item>Existing credit card user logs in post-migration (no immediate prompts)</item>
+      <item>Add first transaction with NULL mode card (mode selection appears)</item>
+      <item>Choose Simple Mode (transaction completes normally)</item>
+      <item>Add another Simple Mode transaction (no installment prompt)</item>
+      <item>View dashboard (no credit widgets for Simple Mode card)</item>
+      <item>Check budget reports (calendar month used, not statement period)</item>
+      <item>Mixed mode: Create second card in Credit Mode (verify different behavior)</item>
+      <item>Settings page shows "Simple Mode" badge and switch button</item>
+      <item>Portuguese localization correct</item>
+      <item>English localization correct</item>
+    </manual-test-checklist>
+  </testing-strategy>
+
+  <acceptance-criteria-summary>
+    <critical-acs>
+      <ac id="AC6.1">Simple Mode Transaction Creation - No installment prompts</ac>
+      <ac id="AC6.2">Pre-Migration Credit Cards Default to NULL</ac>
+      <ac id="AC6.3">First Transaction After Migration Triggers Mode Selection</ac>
+      <ac id="AC6.5">Simple Mode Budget Calculation - Calendar Month</ac>
+      <ac id="AC6.9">Simple Mode Experience Identical to Debit</ac>
+      <ac id="AC6.14">Backward Compatibility - Existing Transaction Flow</ac>
+    </critical-acs>
+
+    <ui-acs>
+      <ac id="AC6.4">Simple Mode Dashboard Display</ac>
+      <ac id="AC6.7">Simple Mode - No Credit-Specific UI Elements (Web)</ac>
+      <ac id="AC6.8">Simple Mode - No Credit-Specific Prompts (WhatsApp)</ac>
+      <ac id="AC6.13">Simple Mode Settings Display</ac>
+    </ui-acs>
+
+    <edge-case-acs>
+      <ac id="AC6.10">Simple Mode with Historical Credit Mode Data</ac>
+      <ac id="AC6.11">Multiple Cards - Mixed Modes Supported</ac>
+      <ac id="AC6.17">Edge Case - NULL Mode After Migration</ac>
+      <ac id="AC6.18">Edge Case - Simple Mode with Manually Set Statement Dates</ac>
+    </edge-case-acs>
+
+    <localization-acs>
+      <ac id="AC6.19">Portuguese Localization</ac>
+      <ac id="AC6.20">English Localization</ac>
+    </localization-acs>
+
+    <analytics-acs>
+      <ac id="AC6.16">Analytics Tracking - Mode Usage</ac>
+    </analytics-acs>
+  </acceptance-criteria-summary>
+
+  <performance-requirements>
+    <requirement id="NFR-Query">
+      needsCreditModeSelection() query executes in &lt; 100ms
+    </requirement>
+    <requirement id="NFR-Migration">
+      Migration 040 completes in &lt; 30 seconds (already validated in Story 1.1)
+    </requirement>
+    <requirement id="NFR-UX">
+      No additional latency for Simple Mode users (conditional rendering only)
+    </requirement>
+  </performance-requirements>
+
+  <localization-requirements>
+    <locale code="pt-BR">
+      <key>credit_mode.simple_mode_badge</key>
+      <value>Modo Simples</value>
+    </locale>
+    <locale code="pt-BR">
+      <key>credit_mode.simple_mode_description</key>
+      <value>Acompanhamento simples de despesas, sem recursos de crédito</value>
+    </locale>
+    <locale code="en">
+      <key>credit_mode.simple_mode_badge</key>
+      <value>Simple Mode</value>
+    </locale>
+    <locale code="en">
+      <key>credit_mode.simple_mode_description</key>
+      <value>Simple expense tracking, no credit features</value>
+    </locale>
+  </localization-requirements>
+
+  <tech-spec-references>
+    <reference section="AC6: Simple Mode Backward Compatibility" lines="1338-1370">
+      tech-spec-epic-1.md
+    </reference>
+    <reference section="Simple Mode Guarantee" lines="54-57">
+      tech-spec-epic-1.md
+    </reference>
+    <reference section="Backward Compatibility Requirements" lines="886-889, NFR32">
+      tech-spec-epic-1.md
+    </reference>
+  </tech-spec-references>
+
+  <related-documentation>
+    <doc path="CLAUDE.md">
+      Project overview, architecture, common development patterns
+    </doc>
+    <doc path="docs/sprint-artifacts/1-1-database-schema-migration-for-credit-card-features.md">
+      Story 1.1 - Database schema foundation
+    </doc>
+    <doc path="docs/sprint-artifacts/1-2-first-credit-card-transaction-detection.md">
+      Story 1.2 - needsCreditModeSelection() function
+    </doc>
+    <doc path="docs/sprint-artifacts/1-3-credit-mode-vs-simple-mode-selection-whatsapp.md">
+      Story 1.3 - WhatsApp mode selection
+    </doc>
+    <doc path="docs/sprint-artifacts/1-4-credit-mode-selection-web-frontend.md">
+      Story 1.4 - Web mode selection
+    </doc>
+    <doc path="docs/sprint-artifacts/1-5-mode-switching-with-data-implications-warning.md">
+      Story 1.5 - Mode switching logic
+    </doc>
+  </related-documentation>
+
+  <dev-notes>
+    <note priority="high">
+      This story is primarily VALIDATION work, not new feature development.
+      Focus on comprehensive testing and ensuring Simple Mode truly behaves like debit tracking.
+    </note>
+
+    <note priority="high">
+      Backward compatibility is CRITICAL. Existing users must see zero changes until they add
+      a new transaction. Migration must not auto-populate credit_mode.
+    </note>
+
+    <note priority="medium">
+      When in doubt about Simple Mode behavior, ask: "Would this appear for a debit card?"
+      If the answer is NO, it should not appear for Simple Mode.
+    </note>
+
+    <note priority="medium">
+      Mixed mode scenarios (multiple cards, different modes) must be thoroughly tested.
+      Each card operates independently according to its mode setting.
+    </note>
+
+    <note priority="low">
+      Historical installment data should remain in database when switching to Simple Mode,
+      but be completely hidden in UI. Do not delete historical data.
+    </note>
+  </dev-notes>
+</story-context>

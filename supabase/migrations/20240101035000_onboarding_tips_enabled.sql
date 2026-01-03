@@ -1,0 +1,1 @@
+../../fe/scripts/035_onboarding_tips_enabled.sql

@@ -74,6 +74,14 @@ function setupSupabaseMock(data: any, error: any = null) {
     limit: jest.fn().mockResolvedValue({ data, error }),
   }
 
+  // Mock for user_profiles select chain
+  const userProfilesSelectChain = {
+    in: jest.fn().mockResolvedValue({
+      data: data?.map((m: any) => ({ user_id: m.user_id, locale: 'pt-BR' })) || [],
+      error: null
+    }),
+  }
+
   mockSupabaseFrom.mockImplementation((table: string) => {
     if (table === 'engagement_message_queue') {
       return {

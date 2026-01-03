@@ -1,0 +1,432 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3-6</storyId>
+    <title>Current vs Next Statement Distinction</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-03</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/3-6-current-vs-next-statement-distinction.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Credit Mode user</asA>
+    <iWant>to see which statement period each transaction belongs to (current, next, or past)</iWant>
+    <soThat>I understand when each expense will be billed and can track my spending against the correct statement cycle</soThat>
+    <tasks>
+      - Task 1: Backend Period Calculation Function (statement period helper, batch calculator, tests)
+      - Task 2: Frontend Statement Badge Component (badge component, variants, localization, tests)
+      - Task 3: Transaction List Integration (extend component, layout updates, performance optimization)
+      - Task 4: WhatsApp Integration (expense confirmation with period context, localization)
+      - Task 5: Transaction Dialog Integration (period display in dialog, tests)
+      - Task 6: Performance Optimization (caching, batch calculations, performance tests)
+      - Task 7: Analytics and Logging (PostHog events, performance logging)
+      - Task 8: Testing (unit, integration, performance, manual tests)
+      - Task 9: Documentation (CLAUDE.md updates, code documentation)
+      - Task 10: Deployment (pre-deployment checklist, production deploy, validation)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    AC6.1: Statement Period Badge Display
+      - Each credit card transaction displays badge indicating statement period
+      - Badge types: "Fatura atual" (blue), "Próxima fatura" (gray), "Fatura passada" (light gray)
+      - Display rules: Only for Credit Mode payment methods with statement_closing_day set
+      - Mobile responsiveness: Full labels on desktop, abbreviated on mobile
+      - Component: fe/components/statement/statement-badge.tsx (new)
+      - Validation: Unit tests for each period, manual tests for desktop/mobile
+
+    AC6.2: Period Calculation Logic
+      - Accurate statement period determination for each transaction
+      - Logic: Get closing_day → Calculate period boundaries → Compare transaction date
+      - Edge cases: Feb 31, month boundaries, leap years, closing date edge cases
+      - Consistency: Use same calculate_statement_period() as Stories 3.3, 3.4, 3.5
+      - Server function: getStatementPeriodForDate(paymentMethodId, date)
+      - Performance: < 50ms period calculation (Epic3-P1)
+      - Validation: Unit tests for edge cases, integration tests for consistency
+
+    AC6.3: Transaction List Integration
+      - Statement badges integrated into existing transaction list without disrupting UX
+      - Integration points: Main list, transaction cards (mobile), transaction details modal
+      - Layout: Badge next to amount (Option A) or second line on mobile (Option B)
+      - Performance: < 100ms for 50 transactions (Epic3-P4)
+      - Extend: fe/components/transaction-list.tsx
+      - Validation: Manual tests for layout, performance tests for rendering speed
+
+    AC6.4: WhatsApp Transaction Display
+      - WhatsApp transaction messages include statement period context
+      - Format pt-BR: "📊 Fatura atual (6 Dez - 5 Jan)"
+      - Format en: "📊 Current statement (Dec 6 - Jan 5)"
+      - Display rules: Credit Mode payment methods only, show period dates
+      - Modify: whatsapp-bot/src/handlers/transactions/expenses.ts
+      - Validation: Integration tests, manual tests for both locales
+
+    AC6.5: Performance Requirements
+      - Badge calculation and rendering must not slow down transaction list
+      - Targets: Period calc < 5ms, batch 50 transactions < 100ms (Epic3-P4)
+      - Strategies: Cache period boundaries (1-hour), batch calculation, memoization
+      - Monitoring: Log calculation time, alert if > 100ms for 50 transactions
+      - Validation: Performance tests with 50+ transactions, load tests with 200 transactions
+
+    AC6.6: Localization and Internationalization
+      - Statement period badges localized for pt-BR and en
+      - Keys: currentBadge, nextBadge, pastBadge, currentBadgeShort, nextBadgeShort, pastBadgeShort
+      - Date formatting: Use Intl.DateTimeFormat for locale-specific dates
+      - Add keys to: fe/lib/localization/pt-br.ts, en.ts, whatsapp-bot/src/localization/
+      - Validation: Manual tests for both locales, abbreviated badges use correct locale
+
+    AC6.7: Awareness-First Design
+      - Statement period badges follow awareness-first design principles
+      - Neutral colors: Blue (current), Gray (next), Light gray (past) - NO RED
+      - Non-judgmental language: "Fatura atual" not "DUE SOON"
+      - Subtle presentation: Small badge, consistent placement, non-intrusive
+      - CSS: Tailwind classes for neutral colors and small size
+      - Validation: Manual tests for colors, user testing confirms design is clear
+
+    AC6.8: Error Handling and Edge Cases
+      - Graceful handling where period cannot be determined
+      - Edge cases: No closing date → No badge, Simple Mode → No badge
+      - Error strategy: Try calculation → Log error → Return null → Continue normally
+      - No crashes: Transaction list works even if badge calculation fails
+      - Validation: Unit tests for edge cases, manual tests for error scenarios
+
+    AC6.9: Analytics and Monitoring
+      - Track badge usage and performance metrics
+      - PostHog event: statement_period_badge_viewed (transaction count, badge distribution, render time)
+      - Logging: Badge calculation time, period calculation errors, performance warnings
+      - Dashboards: Usage metrics, performance metrics, adoption metrics
+      - Validation: Manual tests verify PostHog events, integration tests for event properties
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification: Statement-Aware Budgets</title>
+        <section>Statement badge component, period calculation, performance targets</section>
+        <snippet>Defines statement period badge requirements, Epic3-P1 (period calc < 50ms), Epic3-P4 (badge rendering < 100ms for 50 transactions), awareness-first design principles (neutral colors, no judgment), and consistency requirements (same calculate_statement_period() function across features).</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-1-set-statement-closing-date.md</path>
+        <title>Story 3.1: Set Statement Closing Date (DONE)</title>
+        <section>Statement closing date configuration and period calculation</section>
+        <snippet>Implemented statement_closing_day column and calculate_statement_period() function. Foundation for badge period calculation in Story 3.6. Function handles edge cases (Feb 31, leap years, month boundaries).</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-3-budget-progress-dashboard-statement-period.md</path>
+        <title>Story 3.3: Budget Progress Dashboard (DONE)</title>
+        <section>Budget widget shows current period total</section>
+        <snippet>Budget widget displays current statement period total. Transaction badges in Story 3.6 clarify which transactions are included in that total. Uses calculate_statement_period() for consistency.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/3-5-pre-statement-summary-with-category-breakdown.md</path>
+        <title>Story 3.5: Pre-Statement Summary (DONE)</title>
+        <section>Statement summary groups transactions by period</section>
+        <snippet>Statement summary groups transactions by current period. Badges in Story 3.6 provide visual confirmation of period grouping. Uses shared statement period calculation.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>fe/lib/utils/statement-period.ts</path>
+        <kind>utility</kind>
+        <symbol>getStatementPeriod(), formatStatementPeriod(), isDateInPeriod()</symbol>
+        <lines>1-130</lines>
+        <reason>Existing statement period calculation utility. Core logic for determining period boundaries. Use getStatementPeriod() to calculate current/next period boundaries. Extend with getStatementPeriodForDate() function for badge classification. Already handles edge cases (month boundaries, leap years).</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/transaction-list.tsx</path>
+        <kind>component</kind>
+        <symbol>TransactionList</symbol>
+        <lines>1-100</lines>
+        <reason>Existing transaction list component. Extend to display statement badges for Credit Mode transactions. Add badge column or append to amount column. Integrate StatementBadge component conditionally based on payment method credit_mode flag.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/transaction-dialog.tsx</path>
+        <kind>component</kind>
+        <symbol>TransactionDialog</symbol>
+        <lines>N/A</lines>
+        <reason>Transaction details dialog. Add statement period display in detail view for Credit Mode transactions. Show full period dates: "Fatura atual: 6 Dez - 5 Jan". Helps user understand exact billing period.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/handlers/transactions/expenses.ts</path>
+        <kind>handler</kind>
+        <symbol>handleAddExpense</symbol>
+        <lines>1-100</lines>
+        <reason>Expense addition handler for WhatsApp. Extend confirmation message to include statement period context for Credit Mode payment methods. Add period calculation logic and localized period display.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/scripts/044_statement_period_calculation.sql</path>
+        <kind>database-migration</kind>
+        <symbol>calculate_statement_period()</symbol>
+        <lines>13-70</lines>
+        <reason>Database function for statement period calculation. Single source of truth. Use to ensure consistency across budget widget, statement summary, and badges. Handles all edge cases (Feb 31, leap years, month boundaries).</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>pt-BR messages</symbol>
+        <lines>N/A</lines>
+        <reason>Portuguese localization file. Add statementPeriod section with badge labels: currentBadge, nextBadge, pastBadge, currentBadgeShort, nextBadgeShort, pastBadgeShort, periodContext. Follow existing patterns for nested keys.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>English messages</symbol>
+        <lines>N/A</lines>
+        <reason>English localization file. Add statementPeriod section with English translations. Ensure date/currency formatting matches locale conventions.</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>WhatsApp pt-BR messages</symbol>
+        <lines>N/A</lines>
+        <reason>WhatsApp Portuguese localization. Add statementPeriod section for expense confirmation messages. Format: "📊 Fatura atual (6 Dez - 5 Jan)".</reason>
+      </artifact>
+      <artifact>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>WhatsApp English messages</symbol>
+        <lines>N/A</lines>
+        <reason>WhatsApp English localization. Add statementPeriod section with English translations. Format: "📊 Current statement (Dec 6 - Jan 5)".</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/analytics/events.ts</path>
+        <kind>analytics</kind>
+        <symbol>PostHog event tracking</symbol>
+        <lines>N/A</lines>
+        <reason>Analytics event definitions. Add statement_period_badge_viewed event with properties: userId, paymentMethodId, transactionCount, currentStatementCount, nextStatementCount, pastStatementCount, renderTime.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/types.ts</path>
+        <kind>types</kind>
+        <symbol>Transaction, PaymentMethod interfaces</symbol>
+        <lines>N/A</lines>
+        <reason>Core type definitions. Add StatementPeriodBadge type with period: 'current' | 'next' | 'past', periodStart, periodEnd. Extend Transaction type if needed for badge display.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/components/budget/budget-progress-widget.tsx</path>
+        <kind>component</kind>
+        <symbol>BudgetProgressWidget</symbol>
+        <lines>N/A</lines>
+        <reason>Budget widget from Story 3.3. Shows current statement period total. Reference for awareness-first design (neutral colors, non-judgmental language). Badge colors should match widget color scheme.</reason>
+      </artifact>
+      <artifact>
+        <path>fe/lib/actions/budget.ts</path>
+        <kind>server-action</kind>
+        <symbol>getBudgetProgress(), calculate_statement_budget_spent()</symbol>
+        <lines>N/A</lines>
+        <reason>Budget calculation server actions. Use calculate_statement_budget_spent() to ensure badge period calculations match budget widget totals. Consistency is critical for user trust.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <prerequisite>
+        <storyId>3.1</storyId>
+        <title>Set Statement Closing Date</title>
+        <status>COMPLETE</status>
+        <provides>statement_closing_day column, calculate_statement_period() function</provides>
+      </prerequisite>
+      <prerequisite>
+        <storyId>3.3</storyId>
+        <title>Budget Progress Dashboard</title>
+        <status>COMPLETE</status>
+        <provides>Budget widget for period reference, period calculation consistency</provides>
+      </prerequisite>
+      <prerequisite>
+        <storyId>3.5</storyId>
+        <title>Pre-Statement Summary</title>
+        <status>COMPLETE</status>
+        <provides>Statement summary for context, period grouping logic</provides>
+      </prerequisite>
+    </dependencies>
+  </artifacts>
+
+  <technicalContext>
+    <architecture>
+      <overview>Epic 3 extends NexFinApp with statement-aware budget tracking. Story 3.6 adds visual period badges to transaction lists and WhatsApp confirmations, completing the statement-aware UX. Uses shared calculate_statement_period() database function for consistency across all features.</overview>
+      <components>
+        <frontend>
+          <component name="StatementBadge" path="fe/components/statement/statement-badge.tsx" status="NEW">Small badge component displaying statement period (current/next/past) with neutral colors</component>
+          <component name="TransactionList" path="fe/components/transaction-list.tsx" status="EXTEND">Add badge rendering conditionally for Credit Mode transactions</component>
+          <component name="TransactionDialog" path="fe/components/transaction-dialog.tsx" status="EXTEND">Add period display in transaction details modal</component>
+        </frontend>
+        <backend>
+          <service name="StatementPeriodHelper" path="fe/lib/utils/statement-period.ts" status="EXTEND">Add getStatementPeriodForDate() and getBadgesForTransactions() functions</service>
+          <handler name="ExpenseHandler" path="whatsapp-bot/src/handlers/transactions/expenses.ts" status="EXTEND">Add period context to expense confirmation messages</handler>
+        </backend>
+        <database>
+          <function name="calculate_statement_period" migration="044" status="EXISTS">Single source of truth for period calculations</function>
+        </database>
+      </components>
+    </architecture>
+
+    <dataFlow>
+      <flow name="Badge Display Flow">
+        1. User navigates to transaction list
+        2. TransactionList component loads transactions
+        3. For each Credit Mode transaction:
+           a. Get payment method with statement_closing_day
+           b. Call getStatementPeriodForDate(closingDay, transaction.date)
+           c. Calculate current period boundaries (cached)
+           d. Compare transaction date to boundaries
+           e. Determine period: current, next, or past
+        4. Render StatementBadge component with period
+        5. Badge displays next to transaction amount
+        6. Track PostHog event: statement_period_badge_viewed
+      </flow>
+      <flow name="Batch Calculation Flow">
+        1. Transaction list loads 50 transactions
+        2. Group transactions by payment_method_id
+        3. For each unique payment method:
+           a. Get statement_closing_day
+           b. Calculate current period boundaries (once)
+           c. Cache boundaries in Map&lt;payment_method_id, boundaries&gt;
+        4. For each transaction:
+           a. Lookup cached boundaries by payment_method_id
+           b. Compare transaction.date to boundaries
+           c. Assign badge: current, next, or past
+        5. Return Map&lt;transaction_id, badge_info&gt;
+        6. Render badges for all transactions
+        7. Total time: < 100ms for 50 transactions ✅
+      </flow>
+    </dataFlow>
+
+    <performance>
+      <target id="Epic3-P1" metric="Statement period calculation" threshold="< 50ms" />
+      <target id="Epic3-P4" metric="Badge rendering for 50 transactions" threshold="< 100ms" />
+      <strategy name="Period Boundary Caching">Calculate period boundaries once per payment method, cache for 1 hour</strategy>
+      <strategy name="Batch Badge Calculation">Group transactions by payment method, calculate all badges in single pass</strategy>
+      <strategy name="Memoization">Use React.memo for StatementBadge component to avoid re-renders</strategy>
+    </performance>
+
+    <designPrinciples>
+      <principle name="Awareness-First Design">
+        - Neutral colors: Blue (current), Gray (next), Light gray (past) - NO RED
+        - Non-judgmental language: "Fatura atual" not "DUE SOON"
+        - Subtle presentation: Small badge, consistent placement, non-intrusive
+        - No alarm or urgency: Provides information without pressure
+      </principle>
+      <principle name="Consistency">
+        - Use same calculate_statement_period() function as Stories 3.3, 3.4, 3.5
+        - Period boundaries must match budget widget and statement summary
+        - Single source of truth for period calculation
+      </principle>
+      <principle name="Conditional Display">
+        - Only show badges for Credit Mode payment methods (credit_mode = true)
+        - Only show badges when statement_closing_day is set
+        - No badge for Simple Mode or payment methods without closing date
+      </principle>
+    </designPrinciples>
+
+    <edgeCases>
+      <case id="1" scenario="No Statement Closing Date">No badge shown, transaction displays normally</case>
+      <case id="2" scenario="Simple Mode Transaction">No badge shown, Simple Mode doesn't use statement periods</case>
+      <case id="3" scenario="Transaction Date = Closing Date">Considered last day of current period, badge: "Fatura atual"</case>
+      <case id="4" scenario="Transaction Date = Closing Date + 1">First day of next period, badge: "Próxima fatura"</case>
+      <case id="5" scenario="Transaction Far in Past">Badge: "Fatura passada", no specific past period calculated</case>
+      <case id="6" scenario="Transaction Far in Future">Calculate future period, badge: "Próxima fatura"</case>
+      <case id="7" scenario="Period Calculation Error">Catch error, log with context, no badge shown, transaction list continues</case>
+    </edgeCases>
+  </technicalContext>
+
+  <testingStrategy>
+    <unitTests>
+      <test>Period calculation: Current, next, past determination</test>
+      <test>Badge component: Renders correctly for each period</test>
+      <test>Batch calculation: Correct badges for 50 transactions</test>
+      <test>Localization: Correct labels for pt-BR and en</test>
+      <test>Edge cases: Closing day, month boundaries, Feb 31</test>
+    </unitTests>
+
+    <integrationTests>
+      <test>Transaction list: Badges render correctly for Credit Mode transactions</test>
+      <test>WhatsApp: Period shown in expense confirmation</test>
+      <test>Dialog: Period shown in transaction details</test>
+      <test>Period consistency: Badges match budget widget period</test>
+    </integrationTests>
+
+    <performanceTests>
+      <test>Render 50 transactions with badges < 100ms (Epic3-P4)</test>
+      <test>Period calculation < 50ms (Epic3-P1)</test>
+      <test>Smooth scrolling with 200 transactions</test>
+      <test>Badge calculation does not degrade transaction list performance</test>
+    </performanceTests>
+
+    <manualTests>
+      <test>Desktop: Verify badge layout and colors (neutral blues/grays)</test>
+      <test>Mobile: Verify compact badges work and don't break layout</test>
+      <test>Verify neutral colors (awareness-first): NO red for any period</test>
+      <test>Test both locales (pt-BR, en): Labels and date formatting</test>
+      <test>Test edge cases: No closing date → No badge, Simple Mode → No badge</test>
+    </manualTests>
+  </testingStrategy>
+
+  <devNotes>
+    <note title="Why This Story Last?">
+      Epic 3 includes 6 stories (3.1-3.6). Story 3.6 is implemented last because:
+      1. Depends on All Previous Stories: Uses closing date (3.1), references budget widget (3.3), complements summary (3.5)
+      2. Enhances Existing Features: Builds on top of completed transaction list and budget tracking
+      3. Polish and Clarity: Adds final layer of transparency to statement-aware budgets
+      4. Non-Blocking: Other stories provide core value; this adds clarity and completeness
+      5. Completes Epic 3 Vision: Final piece of statement-aware UX (dashboard, lists, summaries, badges)
+    </note>
+
+    <note title="Architecture Decisions">
+      <decision name="Client-Side Badge Calculation">
+        - Why: Avoid repeated database calls for period calculation
+        - Implementation: Calculate period boundaries once, cache in React state, apply to all transactions
+        - Benefit: Fast rendering, no additional database load
+      </decision>
+      <decision name="Subtle Badge Design">
+        - Why: Provide information without cluttering UI or overwhelming user
+        - Implementation: Small badge, neutral colors, consistent placement
+        - Benefit: Clarity without pressure, consistent with Epic 3 philosophy
+      </decision>
+      <decision name="Conditional Badge Display (Credit Mode Only)">
+        - Why: Statement periods only relevant for Credit Mode payment methods
+        - Implementation: Check credit_mode flag and statement_closing_day before rendering badge
+        - Benefit: Consistent with mode separation, no confusion
+      </decision>
+      <decision name="Abbreviated Badges on Mobile">
+        - Why: Save space on small screens, maintain readability
+        - Implementation: "Fatura atual" becomes "Atual" on mobile
+        - Benefit: Compact layout, still informative
+      </decision>
+    </note>
+
+    <note title="Integration with Completed Stories">
+      - Story 3.1 (COMPLETE): Uses statement_closing_day and calculate_statement_period()
+      - Story 3.3 (COMPLETE): Budget widget shows period total, badges clarify which transactions are included
+      - Story 3.5 (COMPLETE): Statement summary groups by period, badges provide visual confirmation
+    </note>
+
+    <note title="Awareness-First Language Examples">
+      pt-BR:
+      - Current: "Fatura atual" (blue) - Informational, neutral
+      - Next: "Próxima fatura" (gray) - Neutral, forward-looking
+      - Past: "Fatura passada" (light gray) - De-emphasized, historical
+
+      en:
+      - Current: "Current statement" (blue)
+      - Next: "Next statement" (gray)
+      - Past: "Past statement" (light gray)
+
+      Color Palette: Blue (#3b82f6), Gray (#6b7280), Light gray (#d1d5db) - NO RED
+    </note>
+
+    <note title="Success Criteria Summary">
+      This story is DONE when:
+      1. ✅ Frontend badges display correctly (current/next/past) with neutral colors
+      2. ✅ Period calculation accurate with edge cases handled
+      3. ✅ Transaction list integration works on desktop and mobile
+      4. ✅ WhatsApp confirmations include period context
+      5. ✅ Localized (pt-BR, en) with proper date formatting
+      6. ✅ Performance targets met (< 50ms period calc, < 100ms for 50 transactions)
+      7. ✅ Consistency verified (periods match budget widget and summary)
+      8. ✅ Analytics tracked, tests pass, documentation updated
+      9. ✅ Deployed to production with no errors
+      10. ✅ Epic 3 complete, ready for retrospective
+    </note>
+  </devNotes>
+</story-context>

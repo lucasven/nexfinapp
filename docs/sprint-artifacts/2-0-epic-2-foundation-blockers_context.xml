@@ -1,0 +1,675 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <meta>
+    <story-id>2-0-epic-2-foundation-blockers</story-id>
+    <story-title>Epic 2 Foundation &amp; Blockers Resolution</story-title>
+    <epic-id>epic-2</epic-id>
+    <epic-title>Parcelamento Intelligence</epic-title>
+    <status>ready-for-dev</status>
+    <generated-date>2025-12-02</generated-date>
+    <complexity>high</complexity>
+    <estimated-effort>3-5 days</estimated-effort>
+    <criticality>BLOCKER for Epic 2</criticality>
+  </meta>
+
+  <story-overview>
+    <description>
+      As a developer preparing for Epic 2 (Parcelamento Intelligence), I want to resolve all Epic 1 technical debt blockers and set up the necessary infrastructure, so that Epic 2 stories can be implemented safely with proper testing, atomic transactions, and clean payment method handling.
+    </description>
+
+    <why-critical>
+      Epic 1 retrospective identified 3 critical technical debt items that BLOCK Epic 2 implementation:
+      - TD-1: No atomic transactions for mode switching (PostgreSQL RPC functions needed)
+      - TD-2: Payment method ID refactoring needed (TEXT field → UUID foreign key)
+      - TD-3: Test coverage gap (0% for complex flows)
+
+      Without this foundation, Epic 2 implementation would be unsafe and error-prone.
+    </why-critical>
+
+    <blockers-resolved>
+      1. Transaction form can't detect selected payment method's credit_mode (TD-2)
+      2. Multi-table operations have partial state risk (TD-1)
+      3. No safety net for refactoring or new features (TD-3)
+    </blockers-resolved>
+  </story-overview>
+
+  <epic-context>
+    <epic-summary>
+      Epic 2 delivers the killer feature that differentiates NexFinApp from generic expense trackers: parcelamento (installment) intelligence. Brazilian users commonly purchase items "parcelado em 12x" (split into 12 monthly payments), and no mainstream tracker handles this culturally-specific pattern properly.
+
+      Epic 2 builds on Epic 1's Credit Mode foundation, implementing functional requirements FR13-FR23 from the PRD. The two-table data model (installment_plans + installment_payments) was established in Epic 1 Story 1.1 and is ready for use.
+    </epic-summary>
+
+    <key-innovation>
+      While credit trackers show "you spent R$1,200," NexFinApp shows "you'll pay R$100/month for the next 12 months"—the information users actually need for budgeting.
+    </key-innovation>
+  </epic-context>
+
+  <architecture-references>
+    <adr id="ADR-001" title="Installment Data Model + Statement-Aware Budget Periods" status="Accepted">
+      <summary>
+        Two-table installment storage (installment_plans + installment_payments) with statement-period budget calculations.
+        - Total installments: 1-60 (database CHECK constraint)
+        - Status values: 'active', 'paid_off', 'cancelled' (enum)
+        - Cascade delete: Deleting plan removes all child payments
+        - RLS policies: User-level security enforced
+      </summary>
+      <epic-2-impact>
+        Mode switching with active installments handled by Epic 1 Story 1.5. Users in Credit Mode can create installments; mode checks already implemented.
+      </epic-2-impact>
+    </adr>
+
+    <database-schema>
+      <table name="installment_plans" created-in="Epic 1 Story 1.1">
+        <columns>
+          - id UUID PRIMARY KEY
+          - user_id UUID REFERENCES auth.users(id)
+          - description TEXT NOT NULL
+          - total_amount DECIMAL(10,2) NOT NULL
+          - total_installments INTEGER CHECK (1-60)
+          - status TEXT CHECK ('active', 'paid_off', 'cancelled')
+          - merchant TEXT
+          - category_id UUID REFERENCES categories(id)
+          - payment_method_id UUID REFERENCES payment_methods(id)
+        </columns>
+        <indexes>
+          - idx_installment_plans_user_status ON (user_id, status)
+        </indexes>
+      </table>
+
+      <table name="installment_payments" created-in="Epic 1 Story 1.1">
+        <columns>
+          - id UUID PRIMARY KEY
+          - plan_id UUID REFERENCES installment_plans(id) ON DELETE CASCADE
+          - transaction_id UUID REFERENCES transactions(id) ON DELETE SET NULL
+          - installment_number INTEGER CHECK (&gt; 0)
+          - amount DECIMAL(10,2) NOT NULL
+          - due_date DATE NOT NULL
+          - status TEXT CHECK ('pending', 'paid', 'cancelled')
+        </columns>
+        <indexes>
+          - idx_installment_payments_plan ON (plan_id)
+          - idx_installment_payments_due_date_status ON (due_date, status)
+        </indexes>
+      </table>
+
+      <table name="transactions">
+        <current-schema>
+          - payment_method TEXT (LEGACY - to be refactored in Part 1)
+        </current-schema>
+        <new-schema>
+          - payment_method_id UUID REFERENCES payment_methods(id) ON DELETE RESTRICT
+          - Index: idx_transactions_payment_method_id
+        </new-schema>
+      </table>
+
+      <table name="payment_methods">
+        <columns>
+          - id UUID PRIMARY KEY
+          - user_id UUID
+          - name TEXT
+          - type TEXT ('credit', 'debit', 'cash')
+          - credit_mode BOOLEAN (TRUE for Credit Mode credit cards)
+          - statement_closing_day INTEGER
+          - payment_due_day INTEGER
+          - monthly_budget DECIMAL(10,2)
+        </columns>
+      </table>
+    </database-schema>
+  </architecture-references>
+
+  <technical-debt-resolution>
+    <td-1 title="Atomic Transactions for Mode Switching" status="IN PROGRESS">
+      <problem>
+        Multi-table operations (installment_plans + installment_payments) have partial state risk. Supabase client in Next.js doesn't support database transactions.
+      </problem>
+      <solution>
+        PostgreSQL RPC functions wrap operations in transactions (Story 2.0 Part 3).
+        - create_installment_plan_atomic()
+        - delete_installment_plan_atomic()
+        - switch_credit_mode_atomic()
+      </solution>
+      <benefit>Database guarantees atomicity, no partial state possible</benefit>
+    </td-1>
+
+    <td-2 title="Payment Method ID Refactoring" status="IN PROGRESS">
+      <problem>
+        Transaction form can't conditionally show installment fields without knowing the selected payment method's credit_mode. Current TEXT field doesn't provide this information.
+      </problem>
+      <solution>
+        Change transactions.payment_method from TEXT to UUID foreign key (Story 2.0 Part 1).
+        - Migration: 041_payment_method_id_refactoring.sql
+        - Data migration: Map existing TEXT values to UUIDs
+        - Transaction form: Use SELECT dropdown with full payment method objects
+      </solution>
+      <benefit>Single query gets transaction + payment method data. Enables conditional rendering.</benefit>
+    </td-2>
+
+    <td-3 title="Test Coverage Gap" status="IN PROGRESS">
+      <problem>
+        Epic 1 Story 1.5 had 0% test coverage. Installment logic is complex (parent/child relationships). Without test infrastructure, we'd be implementing blind.
+      </problem>
+      <solution>
+        Set up test infrastructure before features (Story 2.0 Part 2).
+        - Frontend: Jest + React Testing Library
+        - Supabase test client (mocks + real test database)
+        - Example unit tests (70%+ coverage target)
+      </solution>
+      <benefit>Catch bugs early, enable safe refactoring, 70%+ coverage for Epic 2</benefit>
+    </td-3>
+  </technical-debt-resolution>
+
+  <part-1-payment-method-id-refactoring>
+    <overview>
+      Refactor transactions.payment_method from TEXT to UUID foreign key to enable conditional UI rendering based on payment method properties (specifically credit_mode).
+    </overview>
+
+    <migration-strategy>
+      <phase-1>
+        Add payment_method_id UUID column (nullable during migration)
+        - ALTER TABLE transactions ADD COLUMN payment_method_id UUID REFERENCES payment_methods(id)
+        - CREATE INDEX idx_transactions_payment_method_id ON transactions(payment_method_id)
+      </phase-1>
+
+      <phase-2>
+        Data migration: Map existing TEXT values to UUIDs
+        - Standard mappings: "Cartão de Crédito" → Find user's credit card
+        - Fuzzy matching for custom names
+        - Log unmapped transactions for manual review
+      </phase-2>
+
+      <phase-3>
+        Make NOT NULL and remove old column
+        - ALTER TABLE transactions ALTER COLUMN payment_method_id SET NOT NULL
+        - ALTER TABLE transactions DROP COLUMN payment_method (or rename to payment_method_legacy)
+      </phase-3>
+    </migration-strategy>
+
+    <code-changes>
+      <server-actions file="fe/lib/actions/transactions.ts">
+        - createTransaction(): Accept payment_method_id UUID (not TEXT)
+        - updateTransaction(): Accept payment_method_id UUID
+        - Validate payment_method_id exists and belongs to user
+      </server-actions>
+
+      <transaction-form file="fe/components/transaction-dialog.tsx">
+        - Replace TEXT input with SELECT dropdown
+        - Load user's payment methods
+        - Show payment method type and mode in dropdown
+        - Enable conditional rendering based on selected payment method
+      </transaction-form>
+
+      <conditional-fields>
+        <code>
+          const selectedPaymentMethod = paymentMethods.find(pm =&gt; pm.id === selectedPaymentMethodId)
+          const showInstallmentFields =
+            selectedPaymentMethod?.type === 'credit' &amp;&amp;
+            selectedPaymentMethod?.credit_mode === true
+
+          {showInstallmentFields &amp;&amp; (
+            &lt;InstallmentFieldsGroup /&gt;
+          )}
+        </code>
+      </conditional-fields>
+
+      <whatsapp-handler file="whatsapp-bot/src/handlers/transactions/expenses.ts">
+        - Store payment_method_id UUID in transaction record (not TEXT)
+        - Payment method identification remains unchanged (NLP extracts name, lookup finds UUID)
+      </whatsapp-handler>
+
+      <analytics file="fe/lib/analytics/events.ts">
+        Add paymentMethodMode property to TRANSACTION_CREATED event:
+        - paymentMethodId: string (UUID)
+        - paymentMethodType: 'credit' | 'debit' | 'cash'
+        - paymentMethodMode: 'credit' | 'simple' | null (NEW)
+      </analytics>
+    </code-changes>
+  </part-1-payment-method-id-refactoring>
+
+  <part-2-test-infrastructure>
+    <overview>
+      Set up comprehensive test infrastructure for frontend and WhatsApp bot to ensure 70%+ code coverage and prevent regression.
+    </overview>
+
+    <frontend-setup>
+      <dependencies>
+        - jest@latest
+        - @testing-library/react@latest
+        - @testing-library/jest-dom@latest
+        - @testing-library/user-event@latest
+      </dependencies>
+
+      <configuration>
+        - jest.config.js for Next.js 15
+        - jest.setup.js for test environment
+        - TypeScript configuration for test files
+      </configuration>
+
+      <test-scripts>
+        - npm test: Run all tests
+        - npm test:watch: Watch mode
+        - npm test:coverage: Generate coverage reports
+      </test-scripts>
+
+      <supabase-test-client file="fe/__tests__/helpers/supabase-test-client.ts">
+        Mock Supabase client for unit tests with jest.fn() mocks.
+        Use real Supabase test database for integration tests (separate from production).
+      </supabase-test-client>
+
+      <test-database>
+        - Create separate Supabase test project OR test schema
+        - Environment variables: TEST_SUPABASE_URL, TEST_SUPABASE_SERVICE_KEY
+        - Seed script for test data (users, payment methods, categories)
+        - Cleanup script to reset test database between runs
+      </test-database>
+    </frontend-setup>
+
+    <example-tests>
+      <server-action-tests file="fe/lib/actions/__tests__/payment-methods.test.ts">
+        Test switchCreditMode() server action:
+        - Switches mode directly when no active installments
+        - Requires confirmation when switching with active installments
+        - Pays off installments when cleanupInstallments=true
+        - Returns error when payment method not found
+        - Returns error when user not authenticated
+        Minimum 70% coverage for switchCreditMode() function
+      </server-action-tests>
+
+      <component-tests file="fe/components/__tests__/transaction-dialog.test.tsx">
+        Test transaction form conditional rendering:
+        - Shows installment fields for Credit Mode credit cards
+        - Hides installment fields for Simple Mode credit cards
+        - Hides installment fields for debit/cash payment methods
+        - Validates payment method selection before submit
+      </component-tests>
+    </example-tests>
+
+    <coverage-thresholds>
+      jest: {
+        coverageThreshold: {
+          global: {
+            branches: 70,
+            functions: 70,
+            lines: 70,
+            statements: 70
+          }
+        }
+      }
+    </coverage-thresholds>
+
+    <whatsapp-bot-tests>
+      - Verify existing test setup (already exists from Epic 1)
+      - Ensure tests pass: npm test in whatsapp-bot/ directory
+      - Current coverage: 16/16 tests passing
+      - Add test utilities for database setup/teardown
+    </whatsapp-bot-tests>
+  </part-2-test-infrastructure>
+
+  <part-3-atomic-transaction-functions>
+    <overview>
+      Implement PostgreSQL RPC functions to ensure atomic multi-table operations for mode switching, installment plan creation, and deletion.
+    </overview>
+
+    <migration file="fe/scripts/042_atomic_transaction_functions.sql">
+      Create three PostgreSQL functions:
+      1. switch_credit_mode_atomic()
+      2. create_installment_plan_atomic()
+      3. delete_installment_plan_atomic()
+    </migration>
+
+    <function-1 name="switch_credit_mode_atomic">
+      <signature>
+        CREATE OR REPLACE FUNCTION switch_credit_mode_atomic(
+          p_user_id UUID,
+          p_payment_method_id UUID,
+          p_new_mode BOOLEAN,
+          p_cleanup_installments BOOLEAN DEFAULT FALSE
+        ) RETURNS TABLE(success BOOLEAN, error_message TEXT)
+      </signature>
+
+      <behavior>
+        1. Validate payment method ownership
+        2. If cleanup requested: Mark installment plans as paid_off, cancel pending payments
+        3. Update payment_methods.credit_mode
+        4. COMMIT transaction (all-or-nothing)
+        5. Return success=true or error details
+      </behavior>
+
+      <error-handling>
+        EXCEPTION WHEN OTHERS THEN
+          -- Automatic rollback on error
+          RETURN QUERY SELECT FALSE, SQLERRM;
+      </error-handling>
+    </function-1>
+
+    <function-2 name="create_installment_plan_atomic">
+      <signature>
+        CREATE OR REPLACE FUNCTION create_installment_plan_atomic(
+          p_user_id UUID,
+          p_payment_method_id UUID,
+          p_description TEXT,
+          p_total_amount DECIMAL(10,2),
+          p_total_installments INTEGER,
+          p_merchant TEXT,
+          p_category_id UUID,
+          p_first_payment_date DATE
+        ) RETURNS TABLE(plan_id UUID, success BOOLEAN, error_message TEXT)
+      </signature>
+
+      <behavior>
+        1. Validate inputs (installments 1-60, amount &gt; 0)
+        2. Validate payment method is Credit Mode credit card
+        3. Calculate payment amount per installment (rounded to 2 decimals)
+        4. INSERT installment_plans record
+        5. FOR i=1 to N: INSERT installment_payments records
+        6. COMMIT transaction (all-or-nothing)
+        7. Return plan_id and success=true or error details
+      </behavior>
+
+      <performance-target>
+        &lt; 500ms for creating installment plan + 60 monthly payments
+      </performance-target>
+    </function-2>
+
+    <function-3 name="delete_installment_plan_atomic">
+      <signature>
+        CREATE OR REPLACE FUNCTION delete_installment_plan_atomic(
+          p_user_id UUID,
+          p_plan_id UUID,
+          p_delete_type TEXT -- 'cancel' or 'paid_off'
+        ) RETURNS TABLE(success BOOLEAN, error_message TEXT)
+      </signature>
+
+      <behavior>
+        1. Validate ownership
+        2. Update installment_plans.status to 'cancelled' or 'paid_off'
+        3. Cancel all pending installment_payments
+        4. COMMIT transaction (all-or-nothing)
+        5. Return success=true or error details
+      </behavior>
+    </function-3>
+
+    <server-action-integration file="fe/lib/actions/payment-methods.ts">
+      Update switchCreditMode() to use PostgreSQL function:
+
+      <code>
+        // Check for active installments first (if switching to Simple Mode)
+        if (newMode === false &amp;&amp; !options?.cleanupInstallments) {
+          const { data: installments } = await supabase
+            .from('installment_plans')
+            .select('id')
+            .eq('payment_method_id', paymentMethodId)
+            .eq('status', 'active')
+
+          if (installments?.length &gt; 0) {
+            return { requiresConfirmation: true, activeInstallments: installments.length }
+          }
+        }
+
+        // Call PostgreSQL function for atomic mode switch
+        const { data, error } = await supabase.rpc('switch_credit_mode_atomic', {
+          p_user_id: user.id,
+          p_payment_method_id: paymentMethodId,
+          p_new_mode: newMode,
+          p_cleanup_installments: options?.cleanupInstallments || false
+        })
+      </code>
+    </server-action-integration>
+
+    <rpc-types file="fe/lib/supabase/rpc-types.ts">
+      TypeScript interfaces for all RPC function params and results:
+      - SwitchCreditModeParams
+      - SwitchCreditModeResult
+      - CreateInstallmentPlanParams
+      - CreateInstallmentPlanResult
+      - DeleteInstallmentPlanParams
+      - DeleteInstallmentPlanResult
+    </rpc-types>
+
+    <testing>
+      Test atomic transaction functions:
+      - Test rollback on error (simulate constraint violations)
+      - Test mode switch rollback if installment update fails
+      - Test installment creation rollback if payment creation fails
+      - Performance test: Create 60 installments, verify &lt; 500ms
+      - Load test: Create 100 installment plans in parallel
+    </testing>
+  </part-3-atomic-transaction-functions>
+
+  <acceptance-criteria-summary>
+    <part-1 title="Payment Method ID Refactoring (10 ACs)">
+      AC1.1: Database migration for payment_method_id
+      AC1.2: Data migration for existing transactions
+      AC1.3: Make payment_method_id required (NOT NULL)
+      AC1.4: Update transaction server actions (web)
+      AC1.5: Update transaction form component (web)
+      AC1.6: Conditional installment fields (web)
+      AC1.7: Update WhatsApp transaction handler
+      AC1.8: Update analytics events
+      AC1.9: Backward compatibility - legacy transactions
+      AC1.10: Validation &amp; error handling
+    </part-1>
+
+    <part-2 title="Test Infrastructure Setup (10 ACs)">
+      AC2.1: Frontend test setup (Jest + React Testing Library)
+      AC2.2: Supabase test client setup
+      AC2.3: Test database setup
+      AC2.4: Example unit tests for server actions
+      AC2.5: Example component tests
+      AC2.6: WhatsApp bot test infrastructure
+      AC2.7: CI pipeline configuration (optional)
+      AC2.8: Test coverage reporting (70%+ threshold)
+      AC2.9: Test documentation
+      AC2.10: Validate test infrastructure works
+    </part-2>
+
+    <part-3 title="Atomic Transaction Functions (10 ACs)">
+      AC3.1: PostgreSQL function for mode switching
+      AC3.2: PostgreSQL function for installment plan creation
+      AC3.3: PostgreSQL function for installment plan deletion
+      AC3.4: Update switchCreditMode() to use PostgreSQL function
+      AC3.5: Add Supabase RPC types
+      AC3.6: Test atomic transaction functions
+      AC3.7: Database function documentation
+      AC3.8: Performance testing (60 installments &lt; 500ms)
+      AC3.9: Migration rollback script
+      AC3.10: Epic 1 TD-1 validation
+    </part-3>
+
+    <total-acceptance-criteria>30 ACs total</total-acceptance-criteria>
+  </acceptance-criteria-summary>
+
+  <dependencies-and-epic-2-stories>
+    <epic-1-dependencies>
+      ✅ installment_plans and installment_payments tables (Story 1.1)
+      ✅ payment_methods.credit_mode flag (Story 1.1)
+      ✅ Credit Mode detection in transaction flow (Story 1.2)
+      ✅ Simple Mode gating (Story 1.6)
+    </epic-1-dependencies>
+
+    <story-2-0-enables>
+      This foundation story blocks all other Epic 2 stories (2.1-2.8):
+      - Story 2.1: Add Installment Purchase (WhatsApp) - needs atomic functions
+      - Story 2.2: Add Installment Purchase (Web Frontend) - needs payment method ID refactoring
+      - Story 2.3: Future Commitments Dashboard - needs test infrastructure patterns
+      - Story 2.4: View All Installments - needs test infrastructure
+      - Story 2.5: Mark Installment as Paid Off Early - needs atomic functions
+      - Story 2.6: Edit Installment Plan - needs atomic functions
+      - Story 2.7: Delete Installment Plan - needs atomic functions
+      - Story 2.8: Installment Impact on Budget Tracking - needs test infrastructure
+    </story-2-0-enables>
+  </dependencies-and-epic-2-stories>
+
+  <success-criteria>
+    <criterion-1>
+      ✅ Payment method ID refactoring complete:
+      - Transaction form uses UUID dropdown
+      - Installment fields render conditionally
+      - Analytics track paymentMethodMode
+    </criterion-1>
+
+    <criterion-2>
+      ✅ Test infrastructure working:
+      - Frontend tests run: npm test
+      - Coverage reports generate: npm run test:coverage
+      - Example tests pass (70%+ coverage)
+    </criterion-2>
+
+    <criterion-3>
+      ✅ Atomic transactions implemented:
+      - Mode switch uses PostgreSQL function
+      - Installment plan creation function ready (Epic 2 will use)
+      - Rollback behavior verified
+    </criterion-3>
+
+    <criterion-4>
+      ✅ All 3 Epic 1 technical debts marked RESOLVED:
+      - TD-1: Atomic transactions ✅
+      - TD-2: Payment method ID ✅
+      - TD-3: Test coverage ✅
+    </criterion-4>
+
+    <criterion-5>
+      ✅ Documentation complete:
+      - TESTING.md created
+      - database-functions.md created
+      - Migration runbook ready
+    </criterion-5>
+
+    <criterion-6>
+      ✅ Ready to start Epic 2:
+      - No blockers remaining
+      - Infrastructure solid
+      - Team confident
+    </criterion-6>
+  </success-criteria>
+
+  <risks-and-mitigation>
+    <risk-1 probability="Medium" impact="High">
+      <title>Data migration loses transactions</title>
+      <mitigation>
+        - Extensive testing on staging database copy first
+        - Manual review of unmapped transactions
+        - Provide admin script for manual resolution
+        - Rollback window: 24 hours (before old payment_method column dropped)
+      </mitigation>
+    </risk-1>
+
+    <risk-2 probability="Low" impact="Medium">
+      <title>PostgreSQL functions too slow</title>
+      <mitigation>
+        - Performance testing with 60 installments
+        - Target: &lt; 500ms for 60-installment creation
+        - Optimization: Bulk INSERT for payments if needed
+      </mitigation>
+    </risk-2>
+
+    <risk-3 probability="Medium" impact="Medium">
+      <title>Test setup takes longer than expected</title>
+      <mitigation>
+        - Timebox to 1 day
+        - Use Next.js 15 official testing docs
+        - Defer CI pipeline setup if needed (focus on local tests)
+      </mitigation>
+    </risk-3>
+  </risks-and-mitigation>
+
+  <rollback-plan>
+    <if-migration-fails>
+      1. Rollback database migrations:
+         psql $DATABASE_URL &lt; 042_atomic_transaction_functions_rollback.sql
+         psql $DATABASE_URL &lt; 041_payment_method_id_refactoring_rollback.sql
+
+      2. Revert code changes:
+         - Restore previous transaction-dialog.tsx (TEXT field)
+         - Restore previous transactions.ts server actions
+         - Restore previous switchCreditMode() (direct Supabase queries)
+
+      3. Verify application works:
+         - Test transaction creation (web + WhatsApp)
+         - Test mode switching
+         - Check error logs
+    </if-migration-fails>
+
+    <rollback-window>
+      Migrations are reversible within 24 hours (before old payment_method column dropped).
+    </rollback-window>
+  </rollback-plan>
+
+  <files-to-modify>
+    <frontend>
+      - fe/scripts/041_payment_method_id_refactoring.sql (CREATE)
+      - fe/scripts/042_atomic_transaction_functions.sql (CREATE)
+      - fe/lib/actions/transactions.ts (MODIFY)
+      - fe/lib/actions/payment-methods.ts (MODIFY)
+      - fe/lib/supabase/rpc-types.ts (CREATE)
+      - fe/components/transaction-dialog.tsx (MODIFY)
+      - fe/lib/analytics/events.ts (MODIFY)
+      - jest.config.js (CREATE)
+      - jest.setup.js (CREATE)
+      - fe/__tests__/helpers/supabase-test-client.ts (CREATE)
+      - fe/lib/actions/__tests__/payment-methods.test.ts (CREATE)
+      - fe/lib/actions/__tests__/atomic-transactions.test.ts (CREATE)
+      - fe/components/__tests__/transaction-dialog.test.tsx (CREATE)
+      - fe/TESTING.md (CREATE)
+    </frontend>
+
+    <whatsapp-bot>
+      - whatsapp-bot/src/handlers/transactions/expenses.ts (MODIFY)
+    </whatsapp-bot>
+
+    <documentation>
+      - docs/database-functions.md (CREATE)
+      - docs/sprint-artifacts/epic-1-retrospective.md (UPDATE - mark TDs as RESOLVED)
+    </documentation>
+  </files-to-modify>
+
+  <test-strategy>
+    <unit-tests>
+      - Payment method ID validation
+      - Atomic function rollback scenarios
+      - Conditional rendering logic
+      - Budget calculation with installments
+      Coverage target: 70%
+    </unit-tests>
+
+    <component-tests>
+      - Transaction form with Credit Mode card (shows installment fields)
+      - Transaction form with Simple Mode card (hides installment fields)
+      - Payment method dropdown rendering
+      Coverage target: 70%
+    </component-tests>
+
+    <integration-tests>
+      - Create transaction (web) → database stores UUID
+      - Switch credit mode → atomic update verified
+      - Migration script → all transactions mapped
+    </integration-tests>
+
+    <performance-tests>
+      - Create 60-installment plan &lt; 500ms
+      - Mode switch with 10 active installments &lt; 1000ms
+      - Data migration &lt; 5 minutes for 10k transactions
+    </performance-tests>
+  </test-strategy>
+
+  <implementation-notes>
+    <developer-guidance>
+      This is a foundation story, not a user-facing feature. Success measured by: Epic 2 stories can start without blockers.
+
+      High test coverage required (70%+) - this sets the standard for Epic 2.
+
+      Migration strategy must preserve all existing data (zero loss tolerance).
+
+      All 3 parts (Payment Method ID, Test Infrastructure, Atomic Functions) are related refactorings. Efficient to do together in one story.
+    </developer-guidance>
+
+    <implementation-order>
+      1. Part 2 first (Test Infrastructure) - enables testing of Parts 1 &amp; 3
+      2. Part 3 (Atomic Functions) - unblocks Epic 2 atomic operations
+      3. Part 1 (Payment Method ID) - enables conditional UI in Epic 2 Story 2.2
+
+      Alternatively: Parts can be done in parallel by different developers if needed.
+    </implementation-order>
+  </implementation-notes>
+</story-context>

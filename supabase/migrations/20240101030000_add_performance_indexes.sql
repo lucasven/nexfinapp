@@ -1,0 +1,1 @@
+../../fe/scripts/030_add_performance_indexes.sql

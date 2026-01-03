@@ -1,0 +1,1 @@
+../../fe/scripts/012_admin_policies.sql

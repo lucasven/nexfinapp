@@ -1,0 +1,970 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <story-id>2-8-installment-impact-on-budget-tracking</story-id>
+    <story-title>Installment Impact on Budget Tracking</story-title>
+    <epic>Epic 2: Parcelamento Intelligence</epic>
+    <status>ready-for-dev</status>
+    <generated-date>2025-12-03</generated-date>
+    <generated-by>SM Agent (BMAD story-ready workflow)</generated-by>
+  </metadata>
+
+  <story-objective>
+    <summary>
+      Enable accurate budget tracking by including installment payments in budget calculations.
+      Only the monthly payment due in the current statement period counts toward budget, not the full purchase amount.
+      This ensures Brazilian users see actual monthly spending obligations (R$ 100/month) rather than inflated totals (R$ 1,200).
+    </summary>
+
+    <user-value>
+      Users purchasing items "parcelado" need budget tracking that reflects Brazilian reality:
+      you don't spend R$ 1,200 this month, you spend R$ 100/month for 12 months.
+      Current budget trackers fail at this, showing inflated spending that scares users.
+      NexFinApp's budget intelligence shows truth: monthly obligations, not total commitments.
+    </user-value>
+
+    <cultural-context>
+      Brazilian users think in terms of "parcelas" (monthly payments), not total purchase amounts.
+      A R$ 1,200 phone in 12x impacts the user's budget the same as a R$ 100 expense -
+      this story makes that reality visible in budget calculations and dashboards.
+    </cultural-context>
+  </story-objective>
+
+  <acceptance-criteria>
+    <ac id="8.1" title="Monthly Payment Counts (Not Total)">
+      <requirement>
+        Only the installment payment due in the current period counts toward budget, not the full purchase amount
+      </requirement>
+
+      <scenarios>
+        <scenario name="Single Installment Purchase">
+          <given>
+            - User has Credit Mode credit card
+            - Statement period: December 6, 2024 - January 5, 2025
+            - User creates installment: R$ 1,200 in 12x on December 10, 2024
+            - First payment due: December 10, 2024 (R$ 100)
+            - Monthly payments: R$ 100 each
+          </given>
+          <when>User views budget for current statement period</when>
+          <then>
+            - Budget shows R$ 100 spent (NOT R$ 1,200)
+            - Budget calculation includes ONLY December payment (R$ 100)
+            - Future payments (January onward) do NOT count yet
+          </then>
+        </scenario>
+
+        <scenario name="Multiple Installments in Same Period">
+          <given>
+            - Statement period: December 6, 2024 - January 5, 2025
+            - Installment 1: R$ 1,200 in 12x, first payment Dec 10 (R$ 100/month)
+            - Installment 2: R$ 600 in 6x, first payment Dec 15 (R$ 100/month)
+            - Both with due dates in December
+          </given>
+          <when>User views budget</when>
+          <then>
+            - Budget shows R$ 200 spent (R$ 100 + R$ 100)
+            - Each installment contributes ONLY current month's payment
+            - Total reflects actual December obligations
+          </then>
+        </scenario>
+
+        <scenario name="Installment Started Before Period">
+          <given>
+            - Statement period: December 6, 2024 - January 5, 2025
+            - Installment created: November 1, 2024 (R$ 600 in 6x, R$ 100/month)
+            - Payments: Nov 1, Dec 1, Jan 1, Feb 1, Mar 1, Apr 1
+          </given>
+          <when>User views December budget</when>
+          <then>
+            - Budget includes R$ 100 (December 1 payment only)
+            - November payment does NOT count (different period)
+            - January payment does NOT count yet (future period)
+          </then>
+        </scenario>
+
+        <scenario name="No Installment Payments Due">
+          <given>
+            - Statement period: December 6, 2024 - January 5, 2025
+            - Installment created: January 10, 2025 (first payment outside current period)
+          </given>
+          <when>User views December budget</when>
+          <then>
+            - Budget shows R$ 0 for installments
+            - No payments due in December period
+          </then>
+        </scenario>
+      </scenarios>
+
+      <database-query-pattern>
+        ```sql
+        -- Budget calculation for statement period (transactions + installment payments)
+        SELECT SUM(amount) as total_spent
+        FROM (
+          -- Regular transactions in period
+          SELECT t.amount
+          FROM transactions t
+          WHERE t.user_id = $user_id
+            AND t.payment_method_id = $payment_method_id
+            AND t.date >= $statement_start -- e.g., 2024-12-06
+            AND t.date <= $statement_end   -- e.g., 2025-01-05
+            AND t.type = 'expense'
+
+          UNION ALL
+
+          -- Installment payments due in period (pending only)
+          SELECT ip.amount
+          FROM installment_payments ip
+          JOIN installment_plans ipl ON ip.plan_id = ipl.id
+          WHERE ipl.user_id = $user_id
+            AND ipl.payment_method_id = $payment_method_id
+            AND ip.due_date >= $statement_start
+            AND ip.due_date <= $statement_end
+            AND ip.status = 'pending'
+        ) combined;
+        ```
+      </database-query-pattern>
+
+      <validation>
+        - Test installment payment due in current period counts
+        - Test installment payment due in past period does NOT count
+        - Test installment payment due in future period does NOT count
+        - Test multiple installments in same period sum correctly
+        - Test regular transactions + installment payments combine correctly
+        - Test budget calculation < 300ms (NFR-P3)
+      </validation>
+    </ac>
+
+    <ac id="8.2" title="Statement Period Integration">
+      <requirement>
+        Budget calculated for the correct statement period, installment payments respect period boundaries
+      </requirement>
+
+      <statement-period-calculation>
+        <epic-3-dependency>
+          Full statement period calculation defined in Epic 3 Story 3.1.
+          Story 2.8 uses placeholder statement period logic (calendar month or fixed closing date).
+          Epic 3 will enhance with user-defined closing dates.
+        </epic-3-dependency>
+
+        <placeholder-approach>
+          Use fixed closing date = 5th (common Brazilian credit card date).
+          This is realistic behavior that will be easy to refine in Epic 3.
+        </placeholder-approach>
+
+        <implementation>
+          ```typescript
+          // Example: Closing date = 5th of each month
+          // Statement period: Dec 6, 2024 - Jan 5, 2025
+          const closingDay = 5 // Hardcoded for MVP, user-defined in Epic 3
+
+          function getStatementPeriod(currentDate: Date) {
+            const day = currentDate.getDate()
+
+            if (day <= closingDay) {
+              // Before closing: current period ends on closing day
+              const periodEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), closingDay)
+              const periodStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, closingDay + 1)
+              return { periodStart, periodEnd }
+            } else {
+              // After closing: current period ends next month's closing day
+              const periodStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), closingDay + 1)
+              const periodEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, closingDay)
+              return { periodStart, periodEnd }
+            }
+          }
+          ```
+        </implementation>
+
+        <handoff-note>
+          File: fe/lib/utils/statement-period.ts
+          Add comment: "TODO Epic 3: Use user-defined closing date from payment_methods table"
+          Epic 3 Story 3.1 will add closing_day column and UI to customize.
+        </handoff-note>
+      </statement-period-calculation>
+
+      <validation>
+        - Test statement period calculation with fixed closing date (5th)
+        - Test installment payment on period boundary (Dec 5 vs Dec 6)
+        - Test budget query filters by period correctly
+        - Test Epic 3 Story 3.1 note added (refinement needed)
+      </validation>
+    </ac>
+
+    <ac id="8.3" title="Budget Breakdown by Category">
+      <requirement>
+        Installment payments categorized by plan's category, shown in budget breakdown with context
+      </requirement>
+
+      <budget-breakdown-display>
+        Example:
+        ```
+        Statement Period: Dec 6, 2024 - Jan 5, 2025
+        Payment Method: Nubank Crédito
+
+        Total Spent: R$ 450,00
+
+        By Category:
+        ────────────────────────────────────────
+        📱 Eletrônicos: R$ 200,00
+           • Celular Samsung (Parcela 1/12): R$ 100,00
+           • Notebook Dell (Parcela 3/8): R$ 100,00
+
+        🍕 Alimentação: R$ 150,00
+           • iFood delivery: R$ 80,00
+           • Mercado: R$ 70,00
+
+        🎮 Lazer: R$ 100,00
+           • Netflix: R$ 45,00
+           • Cinema: R$ 55,00
+        ────────────────────────────────────────
+        ```
+
+        Key Features:
+        1. Installment Context: Show payment number and total (e.g., "Parcela 3/12")
+        2. Plan Description: Show installment plan description, not just payment record
+        3. Category Grouping: Installment payments grouped with regular transactions in same category
+        4. Visual Distinction: Icon or label to identify installment vs regular transaction
+      </budget-breakdown-display>
+
+      <database-query>
+        ```sql
+        -- Budget breakdown by category (transactions + installment payments)
+        SELECT
+          COALESCE(c.name, 'Sem Categoria') as category_name,
+          c.emoji as category_emoji,
+          SUM(combined.amount) as category_total,
+          json_agg(json_build_object(
+            'date', combined.date,
+            'description', combined.description,
+            'amount', combined.amount,
+            'isInstallment', combined.is_installment,
+            'installmentInfo', combined.installment_info
+          )) as transactions
+        FROM (
+          -- Regular transactions
+          SELECT
+            t.category_id,
+            t.date::date as date,
+            t.description,
+            t.amount,
+            false as is_installment,
+            NULL as installment_info
+          FROM transactions t
+          WHERE t.user_id = $user_id
+            AND t.payment_method_id = $payment_method_id
+            AND t.date >= $statement_start
+            AND t.date <= $statement_end
+            AND t.type = 'expense'
+
+          UNION ALL
+
+          -- Installment payments
+          SELECT
+            ipl.category_id,
+            ip.due_date::date as date,
+            ipl.description,
+            ip.amount,
+            true as is_installment,
+            json_build_object(
+              'paymentNumber', ip.installment_number,
+              'totalInstallments', ipl.total_installments,
+              'planDescription', ipl.description
+            ) as installment_info
+          FROM installment_payments ip
+          JOIN installment_plans ipl ON ip.plan_id = ipl.id
+          WHERE ipl.user_id = $user_id
+            AND ipl.payment_method_id = $payment_method_id
+            AND ip.due_date >= $statement_start
+            AND ip.due_date <= $statement_end
+            AND ip.status = 'pending'
+        ) combined
+        LEFT JOIN categories c ON combined.category_id = c.id
+        GROUP BY c.name, c.emoji
+        ORDER BY category_total DESC;
+        ```
+      </database-query>
+
+      <validation>
+        - Test installment payments categorized by plan's category
+        - Test installment payments grouped with regular transactions in same category
+        - Test installment payment shows payment number (e.g., "3/12")
+        - Test installment payment shows plan description
+        - Test visual distinction (icon or badge) for installment payments
+        - Test uncategorized installments grouped under "Sem Categoria"
+      </validation>
+    </ac>
+
+    <ac id="8.4" title="Performance">
+      <requirement>
+        Budget calculation (regular transactions + installment payments) completes in < 300ms
+      </requirement>
+
+      <performance-target>
+        - Query Time: < 300ms for budget total including installment payments
+        - Measurement: Time from server action call to data returned
+        - Test Scenario: User with 20 regular transactions + 10 active installments (each with 1 payment in period)
+        - Rationale: Budget widget is high-traffic; Epic 1 established 200ms baseline for simple queries
+      </performance-target>
+
+      <optimization-strategies>
+        1. Indexed Queries:
+           - Already exists from Epic 1: idx_transactions_user_method_date
+           - Already exists: idx_installment_payments_due_date_status
+           - Already exists: idx_installment_plans_user_status
+
+        2. UNION ALL (Not UNION):
+           - Use UNION ALL for combining queries (no duplicate elimination overhead)
+           - Transactions and installment payments are disjoint sets (no duplicates possible)
+
+        3. Minimize Joins:
+           - Only join installment_plans for installment payments (required for user_id, payment_method_id, category)
+           - Avoid unnecessary joins in regular transaction query
+
+        4. Limit Result Set:
+           - Filter by status = 'pending' for installment payments (exclude paid, cancelled)
+           - Filter by type = 'expense' for transactions (exclude income)
+      </optimization-strategies>
+
+      <performance-logging>
+        ```typescript
+        export async function getBudgetForPeriod(...) {
+          const startTime = Date.now()
+
+          // Execute query
+          const result = await supabase.from(...).select(...)
+
+          const executionTime = Date.now() - startTime
+
+          // Log performance
+          if (executionTime > 300) {
+            console.warn(`Budget query slow: ${executionTime}ms`, {
+              userId,
+              paymentMethodId,
+              periodStart,
+              periodEnd,
+              resultCount: result.data?.length || 0
+            })
+
+            // Track in PostHog
+            posthog.capture('budget_query_slow', {
+              userId,
+              executionTime,
+              threshold: 300
+            })
+          }
+
+          return result
+        }
+        ```
+      </performance-logging>
+
+      <validation>
+        - Test budget query execution time with 20 transactions + 10 installments
+        - Verify execution time < 300ms for 95th percentile
+        - Test with varying data volumes (10, 50, 100 transactions)
+        - Document performance results
+        - Alert on slow queries (> 300ms)
+      </validation>
+    </ac>
+  </acceptance-criteria>
+
+  <architecture-context>
+    <epic-2-architecture>
+      <two-table-model>
+        - installment_plans: Parent table (plan metadata)
+        - installment_payments: Child table (individual monthly payments with due_date)
+        - Created in Epic 1 Story 1.1
+        - Indexes already exist for performance
+      </two-table-model>
+
+      <budget-calculation-approach>
+        - UNION ALL query combines regular transactions + installment payments
+        - Only pending installment payments count (exclude paid to avoid double counting)
+        - Payment filtering by due_date range (statement period boundaries)
+        - Category grouping for budget breakdown
+      </budget-calculation-approach>
+
+      <statement-period-placeholder>
+        - Use fixed closing date = 5 (common Brazilian credit card date)
+        - Easy to refine in Epic 3 with user-defined closing dates
+        - No breaking changes to Story 2.8 code
+      </statement-period-placeholder>
+    </epic-2-architecture>
+
+    <existing-infrastructure>
+      <database>
+        - Tables: installment_plans, installment_payments (Epic 1)
+        - Indexes: due_date, status, user_id, payment_method_id (Epic 1)
+        - RLS policies: User-level security enforced (Epic 1)
+      </database>
+
+      <frontend>
+        - Budget widget component exists (Epic 1 Story 1.4)
+        - Server actions pattern established (fe/lib/actions/)
+        - Analytics tracking pattern (fe/lib/analytics/events.ts)
+      </frontend>
+
+      <backend>
+        - Supabase client setup (fe/lib/supabase/server.ts)
+        - Performance logging pattern (Stories 2.3, 2.4, 2.5)
+        - Atomic transaction functions (Story 2.0)
+      </backend>
+    </existing-infrastructure>
+
+    <dependencies>
+      <completed-stories>
+        - Story 2.1 & 2.2: Installment creation (payment records exist with due dates)
+        - Story 2.3: Future commitments (query pattern reference)
+        - Story 2.0: Atomic transaction functions (create_installment_plan_atomic)
+        - Epic 1 Story 1.1: Database schema with installment tables
+        - Epic 1 Story 1.4: Budget dashboard exists
+      </completed-stories>
+
+      <epic-3-dependency>
+        - Story 2.8 uses placeholder statement period logic
+        - Epic 3 Story 3.1 will enhance with user-defined closing dates
+        - Migration path: Add closing_day column to payment_methods table
+        - Backward compatibility: Default closing_day = 5
+      </epic-3-dependency>
+    </dependencies>
+  </architecture-context>
+
+  <implementation-guidance>
+    <file-structure>
+      <new-files>
+        - fe/lib/actions/budget.ts (new file or enhance existing budgets.ts)
+        - fe/lib/utils/statement-period.ts (new file)
+        - fe/components/budget/budget-breakdown.tsx (new or enhance existing)
+        - fe/__tests__/actions/budget/budget-calculation.test.ts (new)
+        - fe/__tests__/utils/statement-period.test.ts (new)
+      </new-files>
+
+      <files-to-modify>
+        - fe/lib/actions/budgets.ts (enhance getBudgetWithSpending to include installments)
+        - fe/lib/analytics/events.ts (add BUDGET_VIEWED, BUDGET_QUERY_SLOW, BUDGET_BREAKDOWN_EXPANDED)
+        - fe/lib/localization/pt-br.ts (add budget breakdown keys)
+        - fe/lib/localization/en.ts (add budget breakdown keys)
+        - fe/lib/localization/types.ts (add budget types)
+      </files-to-modify>
+    </file-structure>
+
+    <server-actions>
+      <budget-calculation>
+        ```typescript
+        // fe/lib/actions/budget.ts (new or enhance budgets.ts)
+
+        export async function getBudgetForPeriod(
+          userId: string,
+          paymentMethodId: string,
+          periodStart: Date,
+          periodEnd: Date
+        ): Promise<{ totalSpent: number; breakdown: BudgetBreakdown }>
+
+        interface BudgetBreakdown {
+          regularTransactions: number
+          installmentPayments: number
+          transactionDetails: Array<{
+            date: string
+            description: string
+            amount: number
+            category: string | null
+            isInstallment: boolean
+            installmentInfo?: {
+              paymentNumber: number
+              totalInstallments: number
+              planDescription: string
+            }
+          }>
+        }
+        ```
+      </budget-calculation>
+
+      <statement-period>
+        ```typescript
+        // fe/lib/utils/statement-period.ts
+
+        export function getStatementPeriod(
+          currentDate: Date,
+          closingDay: number = 5
+        ): { periodStart: Date; periodEnd: Date }
+
+        // TODO Epic 3: Read closingDay from payment_methods table
+        // Currently hardcoded to 5 (common Brazilian credit card closing date)
+        ```
+      </statement-period>
+    </server-actions>
+
+    <localization-keys>
+      ```typescript
+      // fe/lib/localization/pt-br.ts
+      budget: {
+        statementPeriod: 'Período da fatura: {{start}} - {{end}}',
+        totalSpent: 'Total gasto: {{amount}}',
+        breakdown: 'Detalhamento por categoria',
+        categoryTotal: '{{category}}: {{amount}}',
+        installmentPayment: '{{description}} (Parcela {{current}}/{{total}})',
+        regularTransaction: '{{description}}',
+        uncategorized: 'Sem Categoria',
+        noExpenses: 'Nenhum gasto neste período',
+        performanceNote: 'Calculado em {{time}}ms',
+      }
+
+      // fe/lib/localization/en.ts
+      budget: {
+        statementPeriod: 'Statement period: {{start}} - {{end}}',
+        totalSpent: 'Total spent: {{amount}}',
+        breakdown: 'Breakdown by category',
+        categoryTotal: '{{category}}: {{amount}}',
+        installmentPayment: '{{description}} (Payment {{current}}/{{total}})',
+        regularTransaction: '{{description}}',
+        uncategorized: 'Uncategorized',
+        noExpenses: 'No expenses in this period',
+        performanceNote: 'Calculated in {{time}}ms',
+      }
+      ```
+    </localization-keys>
+
+    <analytics-events>
+      ```typescript
+      // fe/lib/analytics/events.ts
+
+      BUDGET_VIEWED: {
+        userId: string
+        paymentMethodId: string
+        periodStart: ISO8601
+        periodEnd: ISO8601
+        totalSpent: number
+        regularTransactions: number
+        installmentPayments: number
+        categoryCount: number
+        executionTime: number
+      }
+
+      BUDGET_QUERY_SLOW: {
+        userId: string
+        paymentMethodId: string
+        executionTime: number
+        threshold: 300
+        resultCount: number
+      }
+
+      BUDGET_BREAKDOWN_EXPANDED: {
+        userId: string
+        categoryName: string
+        categoryTotal: number
+        transactionCount: number
+        installmentCount: number
+      }
+      ```
+    </analytics-events>
+
+    <edge-cases>
+      <installment-payment-on-boundary>
+        Scenario: Payment due_date = Dec 6 (period start) or Jan 5 (period end)
+        Handling: Use inclusive boundaries (>= and <=)
+        Test: Create payment on boundary, verify counted
+      </installment-payment-on-boundary>
+
+      <multiple-installments-same-plan>
+        Scenario: User created installment with weekly payments (4 in Dec)
+        Handling: All 4 payments count (each is separate record)
+        Test: Create weekly installment, verify all payments counted
+      </multiple-installments-same-plan>
+
+      <installment-plan-deleted-mid-period>
+        Scenario: Payment due Dec 15, plan deleted Dec 10
+        Handling: Payment deleted (CASCADE), not counted in budget
+        Test: Create installment, delete plan, verify budget updates
+      </installment-plan-deleted-mid-period>
+
+      <statement-period-spans-year>
+        Scenario: Period = Dec 6, 2024 - Jan 5, 2025
+        Handling: Date range works across years (PostgreSQL handles this)
+        Test: Query with year boundary, verify correct results
+      </statement-period-spans-year>
+
+      <empty-budget>
+        Scenario: No transactions, no installments in period
+        Handling: Return R$ 0, show empty state
+        Test: Query empty period, verify graceful handling
+      </empty-budget>
+
+      <payment-status-change>
+        Scenario: Payment was pending, marked as paid mid-period
+        Handling: Once paid, linked to transaction (counted in regular transactions query)
+        Test: Mark payment as paid, verify not double-counted
+      </payment-status-change>
+    </edge-cases>
+  </implementation-guidance>
+
+  <testing-strategy>
+    <unit-tests>
+      <coverage-target>85%+</coverage-target>
+
+      <test-files>
+        - fe/__tests__/actions/budget/budget-calculation.test.ts
+        - fe/__tests__/utils/statement-period.test.ts
+      </test-files>
+
+      <test-scenarios>
+        Budget Server Action:
+        - Test: Budget includes regular transactions
+        - Test: Budget includes installment payments in period
+        - Test: Installment payments outside period excluded
+        - Test: Multiple installments in period sum correctly
+        - Test: Statement period calculation (closing day = 5)
+        - Test: Empty budget (no transactions, no installments)
+
+        Statement Period Calculation:
+        - Test: Period before closing day (Dec 3 → Nov 6 - Dec 5)
+        - Test: Period after closing day (Dec 10 → Dec 6 - Jan 5)
+        - Test: Period on closing day (Dec 5 → Nov 6 - Dec 5)
+        - Test: Month boundaries (Dec 31, Jan 1)
+        - Test: Leap years (Feb 29)
+      </test-scenarios>
+    </unit-tests>
+
+    <integration-tests>
+      <test-scenarios>
+        - Test: Create regular transaction, verify in budget
+        - Test: Create installment, verify monthly payment in budget
+        - Test: Installment payment on period boundary
+        - Test: Multiple installments + regular transactions
+        - Test: Budget breakdown by category
+        - Use real test database
+      </test-scenarios>
+    </integration-tests>
+
+    <performance-tests>
+      <scenarios>
+        - Test: 20 transactions + 10 installments (measure time)
+        - Test: 50 transactions + 20 installments
+        - Test: 100 transactions + 30 installments
+        - Verify: < 300ms for 95th percentile
+        - Document: Performance results
+      </scenarios>
+    </performance-tests>
+
+    <manual-tests>
+      <scenarios>
+        - Test budget widget shows correct totals
+        - Test budget breakdown shows categories
+        - Test installment payments display correctly
+        - Test both pt-BR and en locales
+        - Test statement period calculation
+        - Verify performance in browser DevTools (Network tab)
+      </scenarios>
+    </manual-tests>
+  </testing-strategy>
+
+  <existing-code-reference>
+    <budget-actions-current>
+      File: fe/lib/actions/budgets.ts (lines 35-87)
+
+      Current Implementation:
+      - getBudgetWithSpending(month, year): Returns budgets with spending
+      - Calculates spending from transactions table only
+      - Uses calendar month boundaries (startDate to endDate)
+      - No installment payment integration
+
+      Enhancement Needed:
+      - Add installment payments to spending calculation
+      - Use statement period instead of calendar month
+      - UNION ALL query for combined totals
+      - Add performance logging
+    </budget-actions-current>
+
+    <installment-actions-reference>
+      File: fe/lib/actions/installments.ts (lines 186-312)
+
+      Reference Implementation:
+      - getFutureCommitments(): Query pattern for installment_payments
+      - Performance logging pattern (lines 218-284)
+      - Analytics tracking pattern (lines 287-298)
+      - Error handling pattern (lines 305-310)
+
+      Reuse Patterns:
+      - Performance timing: const queryStartTime = performance.now()
+      - Alert threshold: if (queryExecutionTime > 200) console.warn(...)
+      - PostHog tracking: await trackServerEvent(user.id, AnalyticsEvent.*, {...})
+    </installment-actions-reference>
+
+    <future-commitments-query>
+      File: fe/lib/actions/installments.ts (lines 220-235)
+
+      Query Pattern for Installment Payments:
+      ```typescript
+      const { data, error } = await supabase
+        .from('installment_payments')
+        .select(`
+          due_date,
+          amount,
+          status,
+          plan:installment_plans!inner (
+            user_id,
+            status
+          )
+        `)
+        .eq('plan.user_id', user.id)
+        .eq('plan.status', 'active')
+        .eq('status', 'pending')
+        .gt('due_date', new Date().toISOString().split('T')[0])
+        .order('due_date', { ascending: true })
+      ```
+
+      Adapt for Budget Query:
+      - Change gt('due_date') to gte/lte for statement period
+      - Add payment_method_id filter
+      - Join for category_id if needed for breakdown
+    </future-commitments-query>
+
+    <dashboard-component-reference>
+      File: fe/components/dashboard/future-commitments-widget.tsx
+
+      UI Patterns:
+      - Server component with data fetching
+      - Error handling with empty state
+      - Loading state (Suspense boundary)
+      - Category grouping display
+      - Expandable sections
+
+      Reuse for Budget Breakdown:
+      - Similar component structure
+      - Category + emoji display pattern
+      - Installment payment formatting ("Parcela X/Y")
+      - Empty state handling
+    </dashboard-component-reference>
+  </existing-code-reference>
+
+  <epic-3-handoff>
+    <story-2-8-delivers>
+      ✅ Budget calculation includes installment payments
+      ✅ Only monthly payments count (not total purchase)
+      ✅ Statement period logic (placeholder: closing day = 5)
+      ✅ Budget breakdown by category with installment context
+      ✅ Performance < 300ms
+    </story-2-8-delivers>
+
+    <epic-3-will-enhance>
+      📅 User-defined closing dates (per payment method)
+      📅 Statement period stored in payment_methods table
+      📅 Statement closing reminders (Epic 3 Story 3.4)
+      📅 Pre-statement summaries (Epic 3 Story 3.5)
+    </epic-3-will-enhance>
+
+    <migration-path>
+      1. Epic 3 Story 3.1: Add closing_day column to payment_methods table
+      2. Default closing_day = 5 (backward compatibility)
+      3. Update getStatementPeriod() to read from database
+      4. Allow users to customize closing day (UI in Story 3.1)
+      5. Story 2.8 budget calculation automatically uses new closing dates
+    </migration-path>
+
+    <no-breaking-changes>
+      - Story 2.8 code will work with Epic 3 enhancements
+      - Only parameter change: closingDay from constant to database lookup
+      - All queries, UI components remain unchanged
+    </no-breaking-changes>
+  </epic-3-handoff>
+
+  <dev-notes>
+    <why-this-matters>
+      The Problem with Traditional Trackers:
+      - Show full installment amount (R$ 1,200) as spent in purchase month
+      - Budget calculations inflated, scaring users
+      - Don't reflect Brazilian mental model ("parcelas", not "total")
+      - Users manually calculate monthly obligations
+
+      The NexFinApp Solution:
+      - Only monthly payment (R$ 100) counts against current budget
+      - Budget reflects actual monthly spending obligations
+      - Users see accurate financial picture
+      - Aligns with how Brazilians think about installments
+    </why-this-matters>
+
+    <user-workflow>
+      1. User buys phone "em 12x" (R$ 1,200 in 12 installments)
+      2. Budget shows R$ 100 spent this month (not R$ 1,200)
+      3. User sees R$ 100 in budget breakdown with context: "Celular (Parcela 1/12)"
+      4. Next month, budget shows another R$ 100 (Parcela 2/12)
+      5. User tracks actual monthly obligations, not inflated totals
+    </user-workflow>
+
+    <architecture-decisions>
+      <decision-1>
+        Name: UNION ALL for Combining Queries
+        Why: Transactions and installment payments are disjoint sets (no duplicates)
+        Implementation: UNION ALL (no duplicate elimination overhead)
+        Alternative Considered: Separate queries, combine in application (rejected - slower)
+        Benefit: Single query, efficient, < 300ms
+        Trade-off: Slightly more complex SQL (acceptable for performance)
+      </decision-1>
+
+      <decision-2>
+        Name: Placeholder Statement Period (Fixed Closing Day)
+        Why: Epic 3 not started yet, need working budget calculation now
+        Implementation: Fixed closing day = 5 (common Brazilian credit card date)
+        Alternative Considered: Wait for Epic 3 (rejected - blocks progress)
+        Benefit: Story 2.8 delivers value now, easy to refine in Epic 3
+        Trade-off: Not user-customizable yet (acceptable for MVP)
+      </decision-2>
+
+      <decision-3>
+        Name: Only Pending Installment Payments Count
+        Why: Paid installments already counted as regular transactions
+        Implementation: Filter status = 'pending' in installment payments query
+        Alternative Considered: Include all payments (rejected - double counting)
+        Benefit: Accurate budget, no duplicates
+        Trade-off: Must track payment status correctly (already done in Stories 2.1-2.7)
+      </decision-3>
+
+      <decision-4>
+        Name: Show Installment Context in Budget Breakdown
+        Why: Users need to know "this R$ 100 is 3/12 of Celular purchase"
+        Implementation: Show payment number, total installments, plan description
+        Alternative Considered: Just show amount (rejected - no context)
+        Benefit: Transparency, users understand where money goes
+        Trade-off: Slightly more complex UI (acceptable for clarity)
+      </decision-4>
+
+      <decision-5>
+        Name: Performance Target < 300ms
+        Why: Budget widget is high-traffic, Epic 1 established 200ms baseline
+        Implementation: Indexed queries, UNION ALL, minimize joins
+        Alternative Considered: Accept slower queries (rejected - bad UX)
+        Benefit: Fast, responsive budget display
+        Trade-off: Need to monitor and optimize (ongoing)
+      </decision-5>
+    </architecture-decisions>
+
+    <data-flow>
+      Budget Calculation Flow:
+      1. User navigates to Dashboard or Budget page
+         ↓
+      2. Calculate current statement period:
+         - Call getStatementPeriod(today, closingDay=5)
+         - Returns: { periodStart: Dec 6, periodEnd: Jan 5 }
+         ↓
+      3. Call getBudgetForPeriod(userId, paymentMethodId, periodStart, periodEnd)
+         ↓
+      4. Execute budget query:
+         a. SELECT regular transactions WHERE date IN period
+         b. UNION ALL
+         c. SELECT installment payments WHERE due_date IN period AND status='pending'
+         d. SUM(amount) AS total_spent
+         ↓
+      5. Execute breakdown query (same UNION, GROUP BY category)
+         ↓
+      6. Return: { totalSpent: 450, breakdown: [...] }
+         ↓
+      7. Render budget widget:
+         - "Total Spent: R$ 450,00"
+         - "Statement Period: Dec 6 - Jan 5"
+         ↓
+      8. Render budget breakdown:
+         - Eletrônicos: R$ 200 (Celular 1/12, Notebook 3/8)
+         - Alimentação: R$ 150 (iFood, Mercado)
+         - Lazer: R$ 100 (Netflix, Cinema)
+         ↓
+      9. Track analytics: BUDGET_VIEWED (executionTime, totals)
+    </data-flow>
+
+    <risks>
+      <risk-1>
+        Name: Epic 3 Statement Period Changes
+        Likelihood: High (Epic 3 will change statement period logic)
+        Impact: Low (Story 2.8 designed for easy migration)
+        Mitigation: Clear handoff documentation, Epic 3 dependency noted
+        Acceptance: Story 2.8 delivers value now, refines later
+      </risk-1>
+
+      <risk-2>
+        Name: Performance Degradation with Many Installments
+        Likelihood: Low (indexed queries, tested with 30 installments)
+        Impact: Medium (slow budget, bad UX)
+        Mitigation: Performance monitoring, optimization if needed
+        Target: < 300ms for 95th percentile
+      </risk-2>
+
+      <risk-3>
+        Name: Double Counting Paid Installment Payments
+        Likelihood: Very Low (filter status = 'pending')
+        Impact: High (budget inaccurate, user confused)
+        Mitigation: Comprehensive testing, filter validation
+        Monitoring: Track budget anomalies (totals don't match transactions)
+      </risk-3>
+
+      <risk-4>
+        Name: Statement Period Calculation Edge Cases
+        Likelihood: Medium (month boundaries, leap years, short months)
+        Impact: Low (minor date calculation errors)
+        Mitigation: Comprehensive unit tests for getStatementPeriod()
+        Monitoring: User reports of incorrect period dates
+      </risk-4>
+
+      <risk-5>
+        Name: User Confusion About Statement Periods
+        Likelihood: Medium (users may not understand closing dates)
+        Impact: Low (educate via tooltips, help text)
+        Mitigation: Clear explanation: "Statement period: Dec 6 - Jan 5 (closing day: 5th)"
+        Epic 5: AI Helper can explain statement periods
+      </risk-5>
+    </risks>
+  </dev-notes>
+
+  <success-criteria>
+    <checklist>
+      ✅ Monthly Payment Counts (AC8.1):
+         - Budget includes installment payments in current period
+         - Only pending payments count (not total purchase amount)
+         - Payments outside period excluded
+         - Multiple installments sum correctly
+
+      ✅ Statement Period Integration (AC8.2):
+         - Statement period calculated (placeholder: closing day = 5)
+         - Budget query filters by period dates
+         - Installment payments respect period boundaries
+         - Epic 3 handoff documented
+
+      ✅ Budget Breakdown by Category (AC8.3):
+         - Installment payments categorized by plan's category
+         - Budget breakdown shows categories with totals
+         - Installment payments display with context: "Celular (Parcela 3/12)"
+         - Visual distinction (icon/badge) for installments
+
+      ✅ Performance (AC8.4):
+         - Budget calculation < 300ms (95th percentile)
+         - Performance tested with varying data volumes
+         - Performance logging implemented
+         - Alerts configured for slow queries
+
+      ✅ Integration:
+         - Budget widget uses new calculation logic
+         - Budget breakdown component created
+         - Installment payments integrate seamlessly
+         - Both pt-BR and English localization
+
+      ✅ Analytics & Logging:
+         - PostHog events: BUDGET_VIEWED, BUDGET_QUERY_SLOW, BUDGET_BREAKDOWN_EXPANDED
+         - Performance logging for all queries
+         - Error logging for failures
+
+      ✅ Testing:
+         - Unit tests pass (85%+ coverage)
+         - Integration tests pass
+         - Performance tests confirm < 300ms
+         - Manual tests successful
+
+      ✅ Documentation:
+         - Statement period logic documented
+         - Epic 3 handoff note created
+         - CLAUDE.md updated
+         - Budget calculation logic documented
+
+      ✅ Epic 2 Completion:
+         - All Epic 2 stories complete (2.0 through 2.8)
+         - Epic 2 retrospective run
+         - Ready for Epic 3
+    </checklist>
+  </success-criteria>
+</story-context>

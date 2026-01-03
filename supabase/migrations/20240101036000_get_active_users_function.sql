@@ -1,0 +1,1 @@
+../../fe/scripts/036_get_active_users_function.sql

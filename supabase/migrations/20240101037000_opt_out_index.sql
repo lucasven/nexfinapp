@@ -1,0 +1,1 @@
+../../fe/scripts/037_opt_out_index.sql

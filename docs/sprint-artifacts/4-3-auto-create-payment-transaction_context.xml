@@ -1,0 +1,537 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>4.3</storyId>
+    <title>Auto-Create Payment Transaction</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-03</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/4-3-auto-create-payment-transaction.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Credit Mode user</asA>
+    <iWant>the system to automatically create a payment transaction when my credit card statement closes</iWant>
+    <soThat>I can track my credit card payments in the correct month without manual data entry</soThat>
+    <tasks>
+      <task id="1" title="Statement Total Calculator Service">
+        <subtask id="1.1">Create statement total calculator (reuse Epic 3 logic)</subtask>
+        <subtask id="1.2">Test statement total calculation (expenses + installments)</subtask>
+        <subtask id="1.3">Add error handling and performance logging</subtask>
+      </task>
+      <task id="2" title="Auto-Payment Transaction Creator Service">
+        <subtask id="2.1">Create transaction creator service</subtask>
+        <subtask id="2.2">Add description formatting (localized)</subtask>
+        <subtask id="2.3">Add idempotency check (prevent duplicates)</subtask>
+        <subtask id="2.4">Add default bank account lookup</subtask>
+        <subtask id="2.5">Test transaction creation flow</subtask>
+      </task>
+      <task id="3" title="Auto-Payment Scheduler Job">
+        <subtask id="3.1">Create auto-payment job (daily cron)</subtask>
+        <subtask id="3.2">Add eligibility query (statements closed yesterday)</subtask>
+        <subtask id="3.3">Add error isolation (individual failures don't halt batch)</subtask>
+        <subtask id="3.4">Add metrics tracking (PostHog events)</subtask>
+        <subtask id="3.5">Test job execution flow</subtask>
+      </task>
+      <task id="4" title="Railway Cron Configuration">
+        <subtask id="4.1">Add cron job to railway.cron.yml</subtask>
+        <subtask id="4.2">Test cron schedule (1 AM Brazil time)</subtask>
+      </task>
+      <task id="5" title="System Category Integration">
+        <subtask id="5.1">Query system category (Story 4.5 dependency)</subtask>
+        <subtask id="5.2">Add category validation (ensure exists before job runs)</subtask>
+      </task>
+      <task id="6" title="Frontend Badge Display">
+        <subtask id="6.1">Add auto-generated badge to transaction list</subtask>
+        <subtask id="6.2">Add localization for badge text</subtask>
+        <subtask id="6.3">Test badge display (web)</subtask>
+      </task>
+      <task id="7" title="Analytics Event Definitions">
+        <subtask id="7.1">Add analytics events to WhatsApp bot</subtask>
+        <subtask id="7.2">Track events in scheduler job</subtask>
+      </task>
+      <task id="8" title="Localization">
+        <subtask id="8.1">Add WhatsApp bot localization keys</subtask>
+        <subtask id="8.2">Update localization type definitions</subtask>
+        <subtask id="8.3">Add date formatting (pt-BR/en)</subtask>
+      </task>
+      <task id="9" title="Testing">
+        <subtask id="9.1">Unit tests (calculation, creation, job logic)</subtask>
+        <subtask id="9.2">Integration tests (full flow, idempotency, error handling)</subtask>
+        <subtask id="9.3">E2E tests (manual - transaction appears, badge displayed)</subtask>
+        <subtask id="9.4">Performance tests (< 500ms calculation, < 30s job execution)</subtask>
+      </task>
+      <task id="10" title="Documentation">
+        <subtask id="10.1">Update CLAUDE.md with auto-payment system</subtask>
+        <subtask id="10.2">Add component documentation (JSDoc)</subtask>
+        <subtask id="10.3">Add deployment notes (Railway cron, Story 4.5 dependency)</subtask>
+      </task>
+      <task id="11" title="Deployment">
+        <subtask id="11.1">Pre-deployment checklist (Story 4.5 deployed, tests pass)</subtask>
+        <subtask id="11.2">Deploy to production (Railway cron active)</subtask>
+        <subtask id="11.3">Post-deployment validation (job runs, transactions created)</subtask>
+        <subtask id="11.4">Mark story complete</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC4.3.1" title="Daily Auto-Payment Transaction Creation Job">
+      <requirement>Daily cron job creates payment transactions for statements that closed yesterday</requirement>
+      <details>
+        - Job runs at 1 AM Brazil time (4 AM UTC) daily
+        - Registered in Railway cron: auto-payment-transactions.ts
+        - Eligibility: credit_mode=true, statement_closing_day=YESTERDAY, payment_due_day IS NOT NULL
+        - Job completes within 30 seconds for 100 statements
+        - Logs metrics: statements closed, transactions created, success rate
+        - Tracks PostHog event: auto_payment_job_completed
+        - Target: 100% success rate (NFR12)
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.2" title="Statement Total Calculation">
+      <requirement>Calculate statement total including regular expenses and installment payments</requirement>
+      <details>
+        - Uses calculate_statement_period() to determine period
+        - Queries regular expenses in period
+        - Queries installment payments in period
+        - Total = regular expenses + installment payments
+        - Handles edge cases: R$ 0.00 total, amounts > R$ 10,000
+        - Performance: < 500ms (NFR-Epic4-P2)
+        - Reuses Epic 3 calculation function (single source of truth)
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.3" title="Payment Transaction Creation">
+      <requirement>Create expense transaction with correct attributes and metadata</requirement>
+      <details>
+        - user_id: From payment_methods.user_id
+        - amount: Statement total
+        - description: Localized (pt-BR: "Pagamento Cartão [Name] - Fatura [Month/Year]")
+        - date: Payment due date (closing_date + payment_due_day)
+        - type: 'expense'
+        - category_id: System category "Pagamento Cartão de Crédito"
+        - payment_method_id: Default bank account or NULL
+        - metadata: {auto_generated, source, credit_card_id, statement_period, statement_total}
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.4" title="Idempotency and Duplicate Prevention">
+      <requirement>Prevent duplicate auto-payment creation for same statement</requirement>
+      <details>
+        - Check if transaction exists: metadata->>'credit_card_id' + statement_period_end
+        - If exists: Skip creation, log "already exists"
+        - If not exists: Create transaction
+        - Job runs twice: Only one transaction created
+        - User deletes auto-payment: Job does NOT recreate (respects user deletion)
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.5" title="Payment Method Assignment">
+      <requirement>Assign user's default bank account as payment method, or NULL if not set</requirement>
+      <details>
+        - Query default bank account: type='bank', is_default=true
+        - If found: Set transaction.payment_method_id
+        - If not found: Set transaction.payment_method_id = NULL
+        - User can assign payment method later (Story 4.4)
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.6" title="Analytics Event Tracking">
+      <requirement>Track PostHog events for monitoring and debugging</requirement>
+      <details>
+        - auto_payment_created: Per transaction (userId, amount, dueDate, etc.)
+        - auto_payment_job_completed: Job metrics (statements closed, created, failed, duration)
+        - auto_payment_creation_failed: Individual failures (userId, errorType, errorMessage)
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.7" title="Job Error Handling and Isolation">
+      <requirement>Individual failures don't halt entire batch, comprehensive error logging</requirement>
+      <details>
+        - Try-catch per closed statement
+        - On error: Log, track PostHog, continue to next user
+        - Error classification: calculation_error, database_error, unknown
+        - Structured logging with context (userId, paymentMethodId, error)
+        - Alert if failure rate > 5%
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.8" title="Transaction Appearance in UI">
+      <requirement>Auto-generated payment transaction appears correctly in transaction list</requirement>
+      <details>
+        - Shows "Auto-gerado" badge (pt-BR) / "Auto-generated" (en)
+        - Badge check: metadata.auto_generated === true
+        - Badge style: Subtle, neutral gray, small size
+        - Transaction grouped by payment due date (NOT closing date)
+        - Editable/deletable like any other transaction (Story 4.4)
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.9" title="Budget Impact">
+      <requirement>Auto-payment transaction impacts budget in payment month (not usage month)</requirement>
+      <details>
+        - Transaction type='expense', included in budget calculations
+        - Appears in payment month budget (NOT usage month)
+        - Example: Statement Dec 6 - Jan 5, payment due Jan 15 -> Appears in January budget
+        - Accrual accounting: "when I paid the bank" not "what I spent on credit"
+      </details>
+    </criterion>
+
+    <criterion id="AC4.3.10" title="Simple Mode Compatibility">
+      <requirement>Simple Mode users unaffected by auto-payment creation</requirement>
+      <details>
+        - Eligibility query filters credit_mode=true
+        - Simple Mode cards: NO auto-payments created
+        - Switch to Credit Mode: Auto-payments start (after setting closing day + due day)
+        - Switch to Simple Mode: Auto-payments stop, existing preserved
+      </details>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-4.md</path>
+        <title>Epic 4 Technical Specification: Payment Reminders & Auto-Accounting</title>
+        <section>Detailed Design - Auto-Payment Transaction Creator</section>
+        <snippet>Daily cron job creates payment transactions on statement closing. Reuses Epic 3 statement total calculation for consistency. Auto-assigns default bank account if set, else NULL. Idempotency check prevents duplicates via metadata matching.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-4.md</path>
+        <title>Epic 4 Technical Specification</title>
+        <section>Data Models and Contracts - Auto-Generated Payment Transaction</section>
+        <snippet>Transaction metadata includes auto_generated flag, source='payment_reminder', credit_card_id, statement_period dates, and statement_total for audit trail.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-4.md</path>
+        <title>Epic 4 Technical Specification</title>
+        <section>Workflows - Daily Auto-Payment Transaction Creation</section>
+        <snippet>Job runs at 1 AM daily, finds statements closed yesterday, calculates total, determines due date, creates transaction with system category, tracks PostHog events.</snippet>
+      </doc>
+      <doc>
+        <path>CLAUDE.md</path>
+        <title>Project Overview - Auto-Payment Creation System</title>
+        <section>Statement Period Badges</section>
+        <snippet>System uses calculate_statement_period() function for period calculation across Epic 3 (budget) and Epic 4 (auto-payments) for consistency.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>whatsapp-bot/src/services/reminders/statement-total-calculator.ts</path>
+        <kind>service</kind>
+        <symbol>calculateStatementTotal</symbol>
+        <lines>1-121</lines>
+        <reason>REUSE THIS PATTERN: Existing statement total calculator from Story 4.2. Queries transactions + installment_payments in period. Performance logging with 500ms warning. This is the EXACT logic needed for auto-payment amount calculation.</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/services/scheduler/credit-card-payment-reminders-job.ts</path>
+        <kind>scheduler</kind>
+        <symbol>runCreditCardPaymentRemindersJob</symbol>
+        <lines>1-283</lines>
+        <reason>FOLLOW THIS PATTERN: Existing payment reminder job from Story 4.2. Shows batch processing (10 concurrent), error isolation (try-catch per user), PostHog event tracking, performance monitoring, success rate calculation. Use same structure for auto-payment job.</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/services/scheduler/statement-reminders-job.ts</path>
+        <kind>scheduler</kind>
+        <symbol>runStatementRemindersJob</symbol>
+        <lines>undefined</lines>
+        <reason>REFERENCE: Existing statement reminder job from Story 3.4. Shows same job pattern as payment reminders. Use for consistency in error handling and metrics tracking.</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/services/statement/statement-summary-service.ts</path>
+        <kind>service</kind>
+        <symbol>calculateStatementSummary</symbol>
+        <lines>undefined</lines>
+        <reason>REFERENCE: Statement summary calculation from Story 3.5. Alternative pattern for querying transactions + installments. Shows GROUP BY aggregation for category breakdown.</reason>
+      </artifact>
+
+      <artifact>
+        <path>fe/lib/actions/transactions.ts</path>
+        <kind>server-action</kind>
+        <symbol>createTransaction, updateTransaction, deleteTransaction</symbol>
+        <lines>undefined</lines>
+        <reason>REFERENCE: Existing transaction CRUD operations. Shows RLS enforcement pattern, transaction creation structure, PostHog event tracking. Use for transaction creation consistency.</reason>
+      </artifact>
+
+      <artifact>
+        <path>fe/components/transaction-list.tsx</path>
+        <kind>component</kind>
+        <symbol>TransactionList</symbol>
+        <lines>undefined</lines>
+        <reason>MODIFY: Add auto-generated badge rendering. Check transaction.metadata?.auto_generated and display badge with localized text.</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/analytics/events.ts</path>
+        <kind>types</kind>
+        <symbol>WhatsAppAnalyticsEvent</symbol>
+        <lines>undefined</lines>
+        <reason>ADD TO: Define new events AUTO_PAYMENT_CREATED, AUTO_PAYMENT_JOB_COMPLETED, AUTO_PAYMENT_CREATION_FAILED</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>ptBR</symbol>
+        <lines>undefined</lines>
+        <reason>ADD TO: Add autoPayment section with descriptionFormat, jobStarted, jobCompleted, transactionCreated, transactionSkipped, transactionFailed keys</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>en</symbol>
+        <lines>undefined</lines>
+        <reason>ADD TO: Add autoPayment section with English translations</reason>
+      </artifact>
+
+      <artifact>
+        <path>whatsapp-bot/src/scheduler.ts</path>
+        <kind>scheduler</kind>
+        <symbol>initializeScheduler</symbol>
+        <lines>undefined</lines>
+        <reason>MODIFY: Register new auto-payment-transactions job with schedule '0 4 * * *' (1 AM Brazil time)</reason>
+      </artifact>
+
+      <artifact>
+        <path>fe/lib/localization/pt-br.ts</path>
+        <kind>localization</kind>
+        <symbol>ptBR</symbol>
+        <lines>undefined</lines>
+        <reason>ADD TO: Add transactions.autoGenerated: 'Auto-gerado' key for badge text</reason>
+      </artifact>
+
+      <artifact>
+        <path>fe/lib/localization/en.ts</path>
+        <kind>localization</kind>
+        <symbol>en</symbol>
+        <lines>undefined</lines>
+        <reason>ADD TO: Add transactions.autoGenerated: 'Auto-generated' key for badge text</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package name="@supabase/ssr" version="0.7.0" reason="RLS-enforced Supabase client for transaction queries"/>
+        <package name="@radix-ui/react-dialog" version="1.1.4" reason="UI component for transaction dialog (if badge needs tooltip)"/>
+        <package name="next-intl" version="^4.5.0" reason="Localization for badge text"/>
+        <package name="date-fns" version="4.1.0" reason="Date formatting for transaction dates"/>
+        <package name="posthog-js" version="^1.290.0" reason="Analytics tracking (frontend events if needed)"/>
+      </frontend>
+
+      <whatsapp-bot>
+        <package name="@supabase/supabase-js" version="^2.39.3" reason="Database client for transaction creation, payment method queries"/>
+        <package name="date-fns" version="^4.1.0" reason="Date calculation (statement period, due date) and formatting"/>
+        <package name="posthog-node" version="^5.11.2" reason="Analytics event tracking (auto_payment_created, job_completed)"/>
+        <package name="node-cron" version="^4.2.1" reason="Scheduler infrastructure (already used for other jobs)"/>
+      </whatsapp-bot>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint category="architecture">MUST run as Railway cron job at 1 AM Brazil time (4 AM UTC) daily - stateless job design for safe restarts</constraint>
+    <constraint category="architecture">MUST use Supabase service key to bypass RLS - manual user_id filtering required for security</constraint>
+    <constraint category="performance">Statement total calculation MUST complete < 500ms (NFR-Epic4-P2) - reuse Epic 3 optimized function</constraint>
+    <constraint category="performance">Job execution MUST complete < 30 seconds for 100 statements (derived from NFR6) - batch processing with 10 concurrent</constraint>
+    <constraint category="reliability">Auto-payment creation success rate MUST be 100% (NFR12) - idempotency and error isolation required</constraint>
+    <constraint category="reliability">Individual failures MUST NOT halt entire batch (NFR-Epic4-R1) - try-catch per statement with continuation</constraint>
+    <constraint category="data-integrity">MUST prevent duplicate auto-payments for same statement (NFR-Epic4-R2) - idempotency check via metadata matching</constraint>
+    <constraint category="data-integrity">MUST respect user deletion of auto-payment (NFR-Epic4-R2) - do NOT recreate if user deletes</constraint>
+    <constraint category="security">Transaction ownership MUST use payment_method.user_id NOT request parameter (NFR-Epic4-S5) - prevent cross-user injection</constraint>
+    <constraint category="localization">Transaction descriptions MUST be localized (pt-BR/en) - format: "Pagamento Cartão [Name] - Fatura [Month/Year]"</constraint>
+    <constraint category="localization">Date formatting MUST use locale-specific formats (pt-BR: "Jan/2025", en: "Jan/2025") - use date-fns with locale</constraint>
+    <constraint category="dependencies">MUST deploy Story 4.5 FIRST (system category) - job will fail if category doesn't exist</constraint>
+    <constraint category="dependencies">MUST have payment_due_day column from Story 4.1 - eligibility query filters payment_due_day IS NOT NULL</constraint>
+    <constraint category="dependencies">MUST reuse calculate_statement_period() from Epic 3 - single source of truth for period calculation</constraint>
+    <constraint category="testing">Unit test coverage MUST be >= 70% - calculation, creation, job logic</constraint>
+    <constraint category="testing">Integration tests MUST validate idempotency - job runs twice -> only one transaction</constraint>
+    <constraint category="testing">Performance tests MUST validate NFRs - calculation < 500ms, job < 30s for 100 statements</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>calculateStatementTotal</name>
+      <kind>function</kind>
+      <signature>
+async function calculateStatementTotal(
+  userId: string,
+  paymentMethodId: string,
+  periodStart: Date,
+  periodEnd: Date
+): Promise&lt;number&gt;
+      </signature>
+      <path>whatsapp-bot/src/services/statement/statement-total-calculator.ts</path>
+      <description>REUSE from Story 4.2 - calculates statement total (transactions + installments)</description>
+    </interface>
+
+    <interface>
+      <name>createAutoPaymentTransaction</name>
+      <kind>function</kind>
+      <signature>
+async function createAutoPaymentTransaction(
+  userId: string,
+  paymentMethodId: string,
+  statementTotal: number,
+  paymentDueDate: Date,
+  statementPeriodStart: Date,
+  statementPeriodEnd: Date,
+  userLocale: 'pt-BR' | 'en',
+  paymentMethodName: string
+): Promise&lt;{ success: boolean; transactionId?: string; error?: string }&gt;
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/transaction-creator.ts</path>
+      <description>NEW - creates auto-payment transaction with idempotency check, system category lookup, default bank account assignment</description>
+    </interface>
+
+    <interface>
+      <name>processAutoPaymentTransactions</name>
+      <kind>function</kind>
+      <signature>
+async function processAutoPaymentTransactions(): Promise&lt;void&gt;
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/auto-payment-transactions-job.ts</path>
+      <description>NEW - daily cron job that finds statements closed yesterday, creates auto-payment transactions, tracks metrics</description>
+    </interface>
+
+    <interface>
+      <name>formatAutoPaymentDescription</name>
+      <kind>function</kind>
+      <signature>
+function formatAutoPaymentDescription(
+  paymentMethodName: string,
+  statementPeriodEnd: Date,
+  locale: 'pt-BR' | 'en'
+): string
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/transaction-creator.ts</path>
+      <description>NEW - formats localized transaction description (pt-BR: "Pagamento Cartão Nubank - Fatura Jan/2025")</description>
+    </interface>
+
+    <interface>
+      <name>calculatePaymentDueDate</name>
+      <kind>function</kind>
+      <signature>
+function calculatePaymentDueDate(
+  closingDate: Date,
+  paymentDueDay: number
+): Date
+      </signature>
+      <path>whatsapp-bot/src/utils/payment-due-date.ts</path>
+      <description>NEW - calculates payment due date (closing_date + payment_due_day) with month boundary handling</description>
+    </interface>
+
+    <interface>
+      <name>Auto-Payment Eligibility Query</name>
+      <kind>SQL query</kind>
+      <signature>
+SELECT
+  pm.id AS payment_method_id,
+  pm.user_id,
+  pm.name AS payment_method_name,
+  pm.statement_closing_day,
+  pm.payment_due_day,
+  u.locale
+FROM payment_methods pm
+JOIN users u ON pm.user_id = u.id
+WHERE pm.credit_mode = true
+  AND pm.statement_closing_day = EXTRACT(DAY FROM CURRENT_DATE - 1)
+  AND pm.payment_due_day IS NOT NULL
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/auto-payment-transactions-job.ts</path>
+      <description>Query to find statements that closed YESTERDAY</description>
+    </interface>
+
+    <interface>
+      <name>Idempotency Check Query</name>
+      <kind>SQL query</kind>
+      <signature>
+SELECT id FROM transactions
+WHERE user_id = $1
+  AND metadata-&gt;&gt;'credit_card_id' = $2
+  AND metadata-&gt;&gt;'statement_period_end' = $3
+  AND metadata-&gt;&gt;'auto_generated' = 'true'
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/transaction-creator.ts</path>
+      <description>Check if auto-payment transaction already exists for this statement</description>
+    </interface>
+
+    <interface>
+      <name>System Category Query</name>
+      <kind>SQL query</kind>
+      <signature>
+SELECT id FROM categories
+WHERE is_system = true
+  AND name = 'Pagamento Cartão de Crédito'
+LIMIT 1
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/transaction-creator.ts</path>
+      <description>Get system category ID for payment transactions (Story 4.5 dependency)</description>
+    </interface>
+
+    <interface>
+      <name>Default Bank Account Query</name>
+      <kind>SQL query</kind>
+      <signature>
+SELECT id FROM payment_methods
+WHERE user_id = $1
+  AND type = 'bank'
+  AND is_default = true
+LIMIT 1
+      </signature>
+      <path>whatsapp-bot/src/services/scheduler/transaction-creator.ts</path>
+      <description>Find user's default bank account for payment method assignment</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Unit tests using Jest with 70% minimum coverage threshold. Test files colocated in __tests__ directories. Mock Supabase client and WhatsApp socket. Test pattern: Arrange-Act-Assert with descriptive test names. Integration tests use real database with test fixtures. Performance tests validate NFR targets (< 500ms calculation, < 30s job execution). Manual E2E tests verify transaction appears in UI with badge.</standards>
+
+    <locations>
+      <location>whatsapp-bot/src/__tests__/services/scheduler/auto-payment-transactions.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/services/scheduler/transaction-creator.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/integration/auto-payment.integration.test.ts</location>
+      <location>whatsapp-bot/src/__tests__/utils/payment-due-date.test.ts</location>
+      <location>fe/__tests__/components/transaction-list.test.tsx</location>
+    </locations>
+
+    <ideas>
+      <idea ac="AC4.3.1">Test eligibility query finds statements closed yesterday (closing_day = EXTRACT(DAY FROM CURRENT_DATE - 1))</idea>
+      <idea ac="AC4.3.1">Test job excludes Simple Mode cards (credit_mode = false)</idea>
+      <idea ac="AC4.3.1">Test job excludes cards without payment_due_day (payment_due_day IS NULL)</idea>
+      <idea ac="AC4.3.1">Test job completes within 30 seconds for 100 statements</idea>
+      <idea ac="AC4.3.2">Test statement total calculation: regular expenses only -> correct total</idea>
+      <idea ac="AC4.3.2">Test statement total calculation: installments only -> correct total</idea>
+      <idea ac="AC4.3.2">Test statement total calculation: mixed expenses + installments -> correct total</idea>
+      <idea ac="AC4.3.2">Test statement total calculation: empty period (R$ 0.00) -> R$ 0.00 total</idea>
+      <idea ac="AC4.3.2">Test statement total calculation completes < 500ms</idea>
+      <idea ac="AC4.3.3">Test transaction created with correct fields (amount, date, category, metadata)</idea>
+      <idea ac="AC4.3.3">Test description formatted correctly for pt-BR locale</idea>
+      <idea ac="AC4.3.3">Test description formatted correctly for English locale</idea>
+      <idea ac="AC4.3.3">Test metadata includes all required fields (auto_generated, credit_card_id, statement_period)</idea>
+      <idea ac="AC4.3.4">Test idempotency: existing transaction -> skip creation</idea>
+      <idea ac="AC4.3.4">Test idempotency: no existing transaction -> create transaction</idea>
+      <idea ac="AC4.3.4">Test idempotency: job runs twice -> only one transaction</idea>
+      <idea ac="AC4.3.5">Test default bank account assigned when available</idea>
+      <idea ac="AC4.3.5">Test NULL payment method when no default bank account</idea>
+      <idea ac="AC4.3.6">Test PostHog event tracked: auto_payment_created (per transaction)</idea>
+      <idea ac="AC4.3.6">Test PostHog event tracked: auto_payment_job_completed (job metrics)</idea>
+      <idea ac="AC4.3.6">Test PostHog event tracked: auto_payment_creation_failed (on error)</idea>
+      <idea ac="AC4.3.7">Test error isolation: one user fails -> job continues to next user</idea>
+      <idea ac="AC4.3.7">Test error classification: calculation_error, database_error, unknown</idea>
+      <idea ac="AC4.3.7">Test structured logging with context (userId, paymentMethodId, error)</idea>
+      <idea ac="AC4.3.8">Test badge displayed when metadata.auto_generated === true</idea>
+      <idea ac="AC4.3.8">Test badge NOT displayed for regular transactions</idea>
+      <idea ac="AC4.3.8">Test badge text localized (pt-BR: "Auto-gerado", en: "Auto-generated")</idea>
+      <idea ac="AC4.3.9">Test auto-payment included in payment month budget</idea>
+      <idea ac="AC4.3.9">Test auto-payment NOT included in usage month budget</idea>
+      <idea ac="AC4.3.10">Test Simple Mode user -> NO auto-payments created</idea>
+      <idea ac="AC4.3.10">Test switch to Credit Mode -> auto-payments start</idea>
+    </ideas>
+  </tests>
+</story-context>

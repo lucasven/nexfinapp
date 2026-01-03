@@ -430,7 +430,222 @@ To pause again, send: *stop reminders*`,
   engagementDestinationSwitchedToGroup: "Done! I'll now send messages in the group.",
   engagementDestinationSwitchedToIndividual: "Done! I'll now send messages privately.",
   engagementDestinationSwitchFailed: "Couldn't change preference. Try again?",
-  engagementDestinationNeedGroupFirst: 'To receive messages in a group, send a message in the group first.'
+  engagementDestinationNeedGroupFirst: 'To receive messages in a group, send a message in the group first.',
+
+  // Credit Mode Selection (Story 1.3)
+  credit_mode: {
+    selection_prompt: `How would you like to track this card?
+
+1️⃣ Credit Mode
+- Track installments (3x, 12x, etc)
+- Personal monthly budget
+- Statement closing reminders
+- Ideal for installment purchases
+
+2️⃣ Simple Mode
+- Treat as debit
+- No credit card features
+- Ideal for paying in full
+
+Reply 1 or 2`,
+    confirmation_credit: '✅ Credit Mode enabled! You can now add installments and track your statement.',
+    confirmation_simple: '✅ Simple Mode enabled! This card will be treated like debit.',
+    invalid_input: 'Please reply 1 for Credit Mode or 2 for Simple Mode.',
+
+    // Mode Switching (Story 1.5)
+    switch_warning: (count: number) => `⚠️ Warning: Mode Change
+
+You have ${count} active installment(s). What do you want to do?
+
+1️⃣ Keep installments active
+   - Future installments continue appearing
+   - You can switch back to Credit Mode later
+   - Installments will not be deleted
+
+2️⃣ Pay off all now
+   - Marks all as "paid off early"
+   - Removes future installments
+   - History of paid installments is preserved
+
+3️⃣ Cancel change
+   - Stay in Credit Mode
+   - Nothing is changed
+
+Reply 1, 2, or 3`,
+    mode_switched_keep: 'Mode changed. Active installments will continue.',
+    mode_switched_payoff: (count: number) => `Mode changed. ${count} installments marked as paid off.`,
+    mode_switched_success: (cardName: string, mode: 'credit' | 'simple') => {
+      const modeName = mode === 'credit' ? 'Credit Mode' : 'Simple Mode'
+      return `✅ Card ${cardName} is now in ${modeName}!
+
+${mode === 'credit' ? `Now you can:
+• Create installments
+• Track spending by statement
+• Receive statement closing reminders` : `This card will be treated like debit.`}`
+    },
+    mode_switch_cancelled: 'Mode change cancelled.',
+    invalid_switch_option: 'Please reply 1, 2, or 3.'
+  },
+
+  // Installments (Epic 2 Story 2.1)
+  installment: {
+    created_title: (description: string) => `✅ Installment created: ${description}`,
+    created_total: (total: number, installments: number, monthly: number) =>
+      `💰 Total: $${total.toFixed(2)} in ${installments}x of $${monthly.toFixed(2)}`,
+    created_first_payment: (date: string) => `📅 First payment: ${date}`,
+    created_last_payment: (date: string) => `📅 Last payment: ${date}`,
+    created_help: 'Use /installments to view all your active installments.',
+    blocked_simple_mode: 'To use installments, you need to activate Credit Mode. Access the web app to activate.',
+    select_card: (cards: string[]) => `Which card did you use?\n\n${cards.map((c, i) => `${i + 1}️⃣ ${c}`).join('\n')}\n\nReply with the card number.`,
+    clarify_amount: 'What was the total purchase amount?',
+    clarify_installments: 'How many installments?',
+    error_validation: 'Validation error. Please check the data and try again.',
+    error_network: 'Connection error. Check your internet and try again.'
+  },
+
+  // Future Commitments (Epic 2 Story 2.3)
+  futureCommitments: {
+    title: 'Future Commitments',
+    total_next_months: (months: number, total: number) => `Total next ${months} months: $${total.toFixed(2)}`,
+    no_active: 'You don\'t have any active installments.',
+    create_hint: 'To create an installment, send:\n"spent 600 in 3x on phone"',
+    month_summary: (month: string, year: string, amount: number, count: number) =>
+      `📅 ${month}/${year}: $${amount.toFixed(2)} (${count} ${count === 1 ? 'payment' : 'payments'})`,
+    installment_item: (description: string, current: number, total: number, amount: number) =>
+      `  • ${description}: ${current}/${total} - $${amount.toFixed(2)}`,
+    empty_state: '📊 Future Commitments\n\nYou don\'t have any active installments.\n\nTo create an installment, send:\n"spent 600 in 3x on phone"',
+    loading: 'Loading commitments...',
+    error: 'Error loading commitments.',
+  },
+
+  // Installment Payoff (Epic 2 Story 2.5)
+  installmentPayoff: {
+    list_active: '📋 Your active installments:',
+    installment_summary: (emoji: string, description: string, paymentMethod: string, amount: number, count: number, paid: number, total: number, remaining: number) =>
+      `${emoji} ${description}\n${paymentMethod}\n$${amount.toFixed(2)} in ${count}x\n${paid}/${total} paid • Remaining: $${remaining.toFixed(2)}`,
+    select_prompt: (numbers: string) => `Which installment do you want to pay off? Reply with the number (${numbers}) or description.`,
+    confirmation_title: '⚠️ Confirm pay off:',
+    confirmation_details: (emoji: string, description: string, paymentMethod: string, total: number, count: number, paid: number, paidAmount: number, pending: number, remaining: number) =>
+      `${emoji} ${description}\n${paymentMethod}\n\n💰 Total: $${total.toFixed(2)} in ${count}x\n✅ Already paid: $${paidAmount.toFixed(2)} (${paid} ${paid === 1 ? 'payment' : 'payments'})\n📊 Remaining: $${remaining.toFixed(2)} (${pending} ${pending === 1 ? 'payment' : 'payments'})\n\n✅ Installment marked as paid off\n✅ ${pending} ${pending === 1 ? 'future payment cancelled' : 'future payments cancelled'}\n✅ Paid payments remain in history\n✅ Future commitments updated`,
+    confirm_prompt: 'Confirm pay off? (yes/no)',
+    success: (emoji: string, description: string, count: number, amount: number) =>
+      `✅ Installment paid off!\n\n${emoji} ${description}\n${count} ${count === 1 ? 'future payment removed' : 'future payments removed'}\nAmount removed: $${amount.toFixed(2)}\n\nYour future commitments have been updated.`,
+    cancelled: 'Pay off cancelled. The installment remains active.',
+    no_active: 'You don\'t have any active installments.',
+    invalid_selection: (numbers: string) => `I didn\'t understand. Please reply with the number (${numbers}) or installment description.`,
+    error: 'Error paying off installment. Please try again later.',
+  },
+
+  // Installment Delete (Epic 2 Story 2.7)
+  installmentDelete: {
+    list_prompt: 'Which installment do you want to delete?',
+    list_item: (number: string, description: string, total: number, installments: number) =>
+      `${number} ${description} - $${total.toFixed(2)} in ${installments}x`,
+    list_status: (paid: number, pending: number) => `   • ${paid} paid, ${pending} pending`,
+    list_footer: 'Reply with the number (e.g., 1) or "cancel"',
+    no_active: 'You don\'t have any active installments.',
+    confirmation_title: '⚠️ Confirm Deletion',
+    confirmation_intro: 'You are about to permanently delete:',
+    confirmation_details: (emoji: string, description: string, total: number, count: number) =>
+      `${emoji} ${description}\n💰 $${total.toFixed(2)} in ${count}x`,
+    confirmation_status: 'Status:',
+    confirmation_paid: (paid: number, paidAmount: number) =>
+      `• ${paid} ${paid === 1 ? 'payment paid' : 'payments paid'} ($${paidAmount.toFixed(2)})`,
+    confirmation_pending: (pending: number, pendingAmount: number) =>
+      `• ${pending} ${pending === 1 ? 'pending payment' : 'pending payments'} ($${pendingAmount.toFixed(2)})`,
+    confirmation_what_happens: '⚠️ What will happen:',
+    confirmation_plan_removed: '• Plan will be permanently removed',
+    confirmation_pending_deleted: (count: number) =>
+      `• ${count} ${count === 1 ? 'pending payment will be deleted' : 'pending payments will be deleted'}`,
+    confirmation_paid_preserved: (count: number) =>
+      `• ${count} ${count === 1 ? 'paid transaction preserved' : 'paid transactions preserved'} (unlinked)`,
+    confirmation_commitments_updated: (amount: number) =>
+      `• $${amount.toFixed(2)} removed from future commitments`,
+    confirmation_irreversible: '• This action cannot be undone',
+    confirm_prompt: 'Confirm deletion? Reply: "confirm" or "cancel"',
+    success_title: '✅ Installment Deleted',
+    success_description: (description: string) => `${description} permanently removed.`,
+    success_impact: '📊 Impact:',
+    success_pending_deleted: (count: number) =>
+      `• ${count} ${count === 1 ? 'pending payment deleted' : 'pending payments deleted'}`,
+    success_paid_preserved: (count: number) =>
+      `• ${count} ${count === 1 ? 'paid transaction preserved' : 'paid transactions preserved'}`,
+    success_commitments_updated: (amount: number) =>
+      `• $${amount.toFixed(2)} removed from future commitments`,
+    success_footer: 'Your future commitments have been updated.',
+    cancelled: '❌ Deletion cancelled.',
+    timeout: '⏱️ Time expired. Deletion cancelled for safety.',
+    invalid_selection: (numbers: string) =>
+      `Invalid number. Please choose between ${numbers} or "cancel".`,
+    error: '❌ Error deleting installment. Please try again later.',
+    error_not_found: '❌ Installment not found.',
+    error_unauthorized: '❌ You don\'t have permission to delete this installment.',
+  },
+
+  // Statement Reminder (Epic 3 Story 3.4)
+  statementReminder: {
+    greeting: 'Hello! 👋',
+    closingIn: (paymentMethod: string, days: number, date: string) =>
+      `Your *${paymentMethod}* statement closes in ${days} days (${date}).`,
+    period: (start: string, end: string) => `📅 Current period: ${start} - ${end}`,
+    total: (amount: string) => `💳 Total so far: ${amount}`,
+    budget: (budget: string, percentage: number) => `📊 Budget: ${budget} (${percentage}% used)`,
+    remaining: (amount: string) => `You have ${amount} remaining for your monthly budget.`,
+    exceeded: (amount: string) => `You are ${amount} over budget for this month.`,
+    cta: 'For details, type "statement summary" or access the app.',
+  },
+
+  // Statement Summary (Epic 3 Story 3.5)
+  statementSummary: {
+    header: (paymentMethod: string) => `💳 *Statement Summary - ${paymentMethod}*`,
+    period: (start: string, end: string) => `📅 Period: ${start} - ${end}`,
+    total: (amount: string) => `💰 Total: ${amount}`,
+    budget: (budget: string, percentage: number) => `📊 Budget: ${budget} (${percentage}% used)`,
+    exceeded: (amount: string) => `⚠️ You are ${amount} over budget.`,
+    remaining: (amount: string) => `✅ You have ${amount} remaining in your budget.`,
+    categoryHeader: '*Spending by category:*',
+    categoryLine: (icon: string, name: string, amount: string, percentage: number) =>
+      `${icon} ${name}: ${amount} (${percentage}%)`,
+    transactionCount: (count: number) => `  - ${count} transactions`,
+    includesInstallments: 'Includes installments:',
+    installmentFormat: (description: string, current: number, total: number, amount: string) =>
+      `${description} installment ${current}/${total} (${amount})`,
+    installmentBullet: (description: string, current: number, total: number, amount: string) =>
+      `  • ${description} ${current}/${total} (${amount})`,
+    cta: '💡 *Tip:* Access the app for more details and charts.',
+    noTransactions: 'You have no expenses in this period. When you add transactions, they will appear here.',
+    cardSelection: (count: number, list: string) => `You have ${count} cards. Which one would you like to see?\n${list}`,
+    noCards: 'You have no credit cards in Credit Mode. Set up a card first.',
+    noClosingDate: 'Your card does not have a statement closing date set. Configure the closing date in settings.',
+    error: 'Could not fetch summary now. Please try again in a few moments.',
+  },
+
+  // Story 3.6: Statement Period Badge Labels
+  statementPeriod: {
+    currentPeriod: 'Current',
+    nextPeriod: 'Next',
+    pastPeriod: 'Past',
+    periodContext: '{period} statement ({start} - {end})',
+  },
+
+  // Story 4.2: Payment Due Reminder
+  paymentReminder: {
+    title: '💳 Reminder: Credit card payment',
+    dueIn: (days: number, date: string) => `Due in ${days} days (${date})`,
+    amount: (amount: string) => `💰 Amount: ${amount}`,
+    cardName: (name: string) => `${name} card`,
+    period: (start: string, end: string) => `Period: ${start} - ${end}`,
+    footer: 'Don\'t forget to make your payment! 😊',
+  },
+
+  autoPayment: {
+    descriptionFormat: (cardName: string, monthYear: string) => `${cardName} Payment - Statement ${monthYear}`,
+    jobStarted: 'Starting auto-payment transaction creation',
+    jobCompleted: 'Auto-payment transaction creation completed',
+    transactionCreated: (cardName: string) => `Payment transaction created for ${cardName}`,
+    transactionSkipped: (cardName: string) => `Payment transaction already exists for ${cardName}`,
+    transactionFailed: (cardName: string) => `Failed to create payment transaction for ${cardName}`,
+  }
 }
 
 export const formatCurrency = (value: number): string => {
