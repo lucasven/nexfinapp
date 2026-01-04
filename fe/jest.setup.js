@@ -24,9 +24,10 @@ jest.mock('next/navigation', () => ({
 }))
 
 // Mock next-intl
+// Note: useLocale returns routing locale ('pt-br'), not Intl locale ('pt-BR')
 jest.mock('next-intl', () => ({
   useTranslations: () => (key) => key,
-  useLocale: () => 'pt-BR',
+  useLocale: () => 'pt-br',
 }))
 
 // Mock PostHog

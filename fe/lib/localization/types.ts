@@ -159,6 +159,8 @@ export interface Messages {
       cash: string
       pix: string
       other: string
+      credit: string
+      debit: string
     }
     helpTitle: string
     helpDescription: string

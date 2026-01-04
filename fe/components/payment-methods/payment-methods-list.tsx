@@ -31,6 +31,8 @@ const TYPE_ICONS = {
   cash: '💵',
   pix: '📱',
   other: '🏦',
+  credit: '💳',
+  debit: '💳',
 } as const
 
 export function PaymentMethodsList({ paymentMethods }: PaymentMethodsListProps) {

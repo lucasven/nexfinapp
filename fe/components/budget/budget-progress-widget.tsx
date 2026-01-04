@@ -24,6 +24,7 @@ import { BudgetProgressBar } from './budget-progress-bar'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { isPortuguese, toIntlLocale, LOCALE } from '@/lib/localization/config'
 
 interface BudgetProgressWidgetProps {
   budgetProgress: BudgetProgress
@@ -32,9 +33,10 @@ interface BudgetProgressWidgetProps {
 
 /**
  * Format currency amount
+ * @param locale - Routing locale ('pt-br' or 'en'), will be converted to Intl format
  */
-function formatCurrency(amount: number, locale: string = 'pt-BR'): string {
-  return new Intl.NumberFormat(locale, {
+function formatCurrency(amount: number, locale: string = LOCALE.PT_BR): string {
+  return new Intl.NumberFormat(toIntlLocale(locale), {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
@@ -44,9 +46,10 @@ function formatCurrency(amount: number, locale: string = 'pt-BR'): string {
 
 /**
  * Format date range for statement period
+ * @param locale - Routing locale ('pt-br' or 'en')
  */
-function formatPeriod(start: Date, end: Date, locale: string = 'pt-BR'): string {
-  const dateLocale = locale === 'pt-BR' ? ptBR : enUS
+function formatPeriod(start: Date, end: Date, locale: string = LOCALE.PT_BR): string {
+  const dateLocale = isPortuguese(locale) ? ptBR : enUS
   const startStr = format(start, 'd MMM', { locale: dateLocale })
   const endStr = format(end, 'd MMM', { locale: dateLocale })
   return `${startStr} - ${endStr}`
@@ -70,7 +73,7 @@ function getStatusBadgeStyle(status: BudgetProgress['status']): string {
 
 export function BudgetProgressWidget({
   budgetProgress,
-  locale = 'pt-BR'
+  locale = LOCALE.PT_BR
 }: BudgetProgressWidgetProps) {
   const t = useTranslations('budgetProgress')
 
@@ -188,7 +191,7 @@ export function BudgetProgressWidget({
 export function BudgetEmptyState({
   paymentMethodName,
   paymentMethodId,
-  locale = 'pt-BR'
+  locale = LOCALE.PT_BR
 }: {
   paymentMethodName: string
   paymentMethodId: string
@@ -228,7 +231,7 @@ export function BudgetEmptyState({
 export function ClosingDateEmptyState({
   paymentMethodName,
   paymentMethodId,
-  locale = 'pt-BR'
+  locale = LOCALE.PT_BR
 }: {
   paymentMethodName: string
   paymentMethodId: string

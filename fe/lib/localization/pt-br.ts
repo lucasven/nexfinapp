@@ -114,6 +114,8 @@ export const messages: Messages = {
       cash: 'Dinheiro',
       pix: 'PIX',
       other: 'Outro',
+      credit: 'Cartão de Crédito',
+      debit: 'Cartão de Débito',
     },
     helpTitle: 'Sobre Métodos de Pagamento',
     helpDescription: 'Rastreie suas contas bancárias, carteiras digitais e outros métodos de pagamento. Cartões de crédito devem ser gerenciados na seção de Cartões de Crédito.',

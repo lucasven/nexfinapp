@@ -71,35 +71,57 @@ async function getEligibleStatements(): Promise<EligibleStatement[]> {
 
   logger.debug('Querying eligible statements', { closingDay })
 
-  const { data, error } = await supabase
+  // Query for eligible payment methods first
+  const { data: paymentMethods, error: pmError } = await supabase
     .from('payment_methods')
     .select(`
       id,
       user_id,
       name,
       statement_closing_day,
-      payment_due_day,
-      users!inner (
-        locale
-      )
+      payment_due_day
     `)
     .eq('credit_mode', true)
     .eq('statement_closing_day', closingDay)
     .not('payment_due_day', 'is', null)
 
-  if (error) {
-    logger.error('Error querying eligible statements', {}, error)
+  if (pmError) {
+    logger.error('Error querying eligible statements', {}, pmError)
     throw new Error('Failed to query eligible statements')
   }
 
+  if (!paymentMethods || paymentMethods.length === 0) {
+    return []
+  }
+
+  // Get unique user IDs
+  const userIds = [...new Set(paymentMethods.map(pm => pm.user_id))]
+
+  // Query user_profiles for locale
+  const { data: profiles, error: profileError } = await supabase
+    .from('user_profiles')
+    .select('user_id, locale')
+    .in('user_id', userIds)
+
+  if (profileError) {
+    logger.error('Error querying user profiles', {}, profileError)
+    throw new Error('Failed to query user profiles')
+  }
+
+  // Build locale lookup map
+  const localeMap = new Map<string, string>()
+  for (const profile of profiles || []) {
+    localeMap.set(profile.user_id, profile.locale || 'pt-BR')
+  }
+
   // Transform data to expected format
-  return (data || []).map((pm: any) => ({
+  return paymentMethods.map((pm) => ({
     payment_method_id: pm.id,
     user_id: pm.user_id,
     payment_method_name: pm.name || 'Cartão de Crédito',
     statement_closing_day: pm.statement_closing_day,
     payment_due_day: pm.payment_due_day,
-    user_locale: pm.users.locale || 'pt-BR',
+    user_locale: (localeMap.get(pm.user_id) || 'pt-BR') as 'pt-BR' | 'en',
   }))
 }
 

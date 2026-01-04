@@ -85,10 +85,9 @@ export async function getEligiblePaymentReminders(): Promise<EligiblePaymentRemi
       targetDate: targetDateStr,
     })
 
-    // Query for eligible users
+    // Query for eligible payment methods first
     // Note: We filter for credit_mode=true, payment_due_day IS NOT NULL
-    // and calculate the actual due date for each payment method
-    const { data, error } = await supabase
+    const { data: paymentMethods, error: pmError } = await supabase
       .from('payment_methods')
       .select(`
         id,
@@ -96,71 +95,98 @@ export async function getEligiblePaymentReminders(): Promise<EligiblePaymentRemi
         statement_closing_day,
         payment_due_day,
         credit_mode,
-        user_id,
-        users!inner (
-          id,
-          whatsapp_jid,
-          whatsapp_lid,
-          whatsapp_number
-        ),
-        user_profiles!inner (
-          locale,
-          statement_reminders_enabled,
-          payment_reminders_enabled
-        )
+        user_id
       `)
       .eq('credit_mode', true)
       .not('statement_closing_day', 'is', null)
       .not('payment_due_day', 'is', null)
 
-    if (error) {
-      logger.error('Error querying eligible users for payment reminders', {}, error)
-      throw error
+    if (pmError) {
+      logger.error('Error querying eligible users for payment reminders', {}, pmError)
+      throw pmError
     }
 
-    if (!data || data.length === 0) {
+    if (!paymentMethods || paymentMethods.length === 0) {
       logger.info('No payment methods with payment_due_day set')
       return []
+    }
+
+    // Get unique user IDs
+    const userIds = [...new Set(paymentMethods.map(pm => pm.user_id))]
+
+    // Query authorized_whatsapp_numbers for WhatsApp identifiers
+    const { data: whatsappData, error: waError } = await supabase
+      .from('authorized_whatsapp_numbers')
+      .select('user_id, whatsapp_jid, whatsapp_lid, whatsapp_number, is_primary')
+      .in('user_id', userIds)
+      .order('is_primary', { ascending: false })
+
+    if (waError) {
+      logger.error('Error querying WhatsApp numbers', {}, waError)
+      throw waError
+    }
+
+    // Query user_profiles for locale and preferences
+    const { data: profiles, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('user_id, locale, payment_reminders_enabled')
+      .in('user_id', userIds)
+
+    if (profileError) {
+      logger.error('Error querying user profiles', {}, profileError)
+      throw profileError
+    }
+
+    // Build lookup maps for user data
+    // For WhatsApp, prefer primary number, then first available
+    const whatsappMap = new Map<string, { jid: string | null; lid: string | null; number: string | null }>()
+    for (const wa of whatsappData || []) {
+      // Only set if not already set (first entry per user is primary or earliest)
+      if (!whatsappMap.has(wa.user_id)) {
+        whatsappMap.set(wa.user_id, {
+          jid: wa.whatsapp_jid,
+          lid: wa.whatsapp_lid,
+          number: wa.whatsapp_number
+        })
+      }
+    }
+
+    const profileMap = new Map<string, { locale: string; paymentRemindersEnabled: boolean }>()
+    for (const profile of profiles || []) {
+      profileMap.set(profile.user_id, {
+        locale: profile.locale || 'pt-BR',
+        paymentRemindersEnabled: profile.payment_reminders_enabled !== false
+      })
     }
 
     // Transform and filter the results
     const eligibleUsers: EligiblePaymentReminder[] = []
 
-    for (const row of data) {
+    for (const row of paymentMethods) {
       try {
-        // Check if user exists
-        const user = Array.isArray(row.users) ? row.users[0] : row.users
-        if (!user) continue
+        const userId = row.user_id
 
         // Check if user has WhatsApp authorization
-        const hasWhatsApp =
-          user.whatsapp_jid || user.whatsapp_lid || user.whatsapp_number
-
-        if (!hasWhatsApp) {
+        const waInfo = whatsappMap.get(userId)
+        if (!waInfo || (!waInfo.jid && !waInfo.lid && !waInfo.number)) {
           logger.debug('User has no WhatsApp identifier, skipping', {
-            userId: user.id,
+            userId,
           })
           continue
         }
 
         // Check user profile exists
-        const profile = Array.isArray(row.user_profiles)
-          ? row.user_profiles[0]
-          : row.user_profiles
-
+        const profile = profileMap.get(userId)
         if (!profile) {
-          logger.debug('User has no profile, skipping', { userId: user.id })
+          logger.debug('User has no profile, skipping', { userId })
           continue
         }
 
         // Check opt-out preference for payment reminders
         // Default to enabled if not explicitly set to false
-        const paymentRemindersEnabled =
-          profile.payment_reminders_enabled !== false
-
-        if (!paymentRemindersEnabled) {
+        if (!profile.paymentRemindersEnabled) {
           logger.debug('User has opted out of payment reminders, skipping', {
-            userId: user.id,
+            userId,
           })
           continue
         }
@@ -203,12 +229,12 @@ export async function getEligiblePaymentReminders(): Promise<EligiblePaymentRemi
 
         // User is eligible for payment reminder
         eligibleUsers.push({
-          user_id: user.id,
+          user_id: userId,
           payment_method_id: row.id,
           payment_method_name: row.name,
-          whatsapp_jid: user.whatsapp_jid,
-          whatsapp_lid: user.whatsapp_lid,
-          whatsapp_number: user.whatsapp_number,
+          whatsapp_jid: waInfo.jid,
+          whatsapp_lid: waInfo.lid,
+          whatsapp_number: waInfo.number,
           user_locale: (profile.locale as 'pt-BR' | 'en') || 'pt-BR',
           statement_closing_day: row.statement_closing_day,
           payment_due_day: row.payment_due_day,

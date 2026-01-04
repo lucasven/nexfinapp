@@ -114,6 +114,8 @@ export const messages: Messages = {
       cash: 'Cash',
       pix: 'PIX',
       other: 'Other',
+      credit: 'Credit Card',
+      debit: 'Debit Card',
     },
     helpTitle: 'About Payment Methods',
     helpDescription: 'Track your bank accounts, digital wallets, and other payment methods. Credit cards should be managed in the Credit Cards section.',

@@ -20,6 +20,7 @@
  */
 
 import { getStatementPeriod } from './statement-period'
+import { isPortuguese, toIntlLocale, LOCALE } from '@/lib/localization/config'
 
 /**
  * Payment due date information
@@ -83,18 +84,19 @@ export function calculatePaymentDueDate(
  * Format payment due date as human-readable string
  *
  * @param dueDate The payment due date to format
- * @param locale The locale to use for formatting (default: 'pt-BR')
+ * @param locale The routing locale ('pt-br' or 'en'), will be converted internally
  * @returns Formatted string like "15 de janeiro de 2025" or "Jan 15, 2025"
  */
 export function formatPaymentDueDate(
   dueDate: Date,
-  locale: string = 'pt-BR'
+  locale: string = LOCALE.PT_BR
 ): string {
+  const intlLocale = toIntlLocale(locale)
   const day = dueDate.getDate()
-  const month = dueDate.toLocaleDateString(locale, { month: 'long' })
+  const month = dueDate.toLocaleDateString(intlLocale, { month: 'long' })
   const year = dueDate.getFullYear()
 
-  if (locale === 'pt-BR') {
+  if (isPortuguese(locale)) {
     return `${day} de ${month} de ${year}`
   } else {
     return `${month} ${day}, ${year}`
@@ -135,11 +137,11 @@ export function getOrdinalSuffix(day: number): string {
  * Format payment due day with ordinal suffix for preview messages
  *
  * @param day The day of the month (1-31)
- * @param locale The locale (default: 'pt-BR')
+ * @param locale The routing locale ('pt-br' or 'en')
  * @returns Formatted string like "15" (pt-BR) or "15th" (en)
  */
-export function formatDueDay(day: number, locale: string = 'pt-BR'): string {
-  if (locale === 'pt-BR') {
+export function formatDueDay(day: number, locale: string = LOCALE.PT_BR): string {
+  if (isPortuguese(locale)) {
     return `${day}`
   } else {
     return `${day}${getOrdinalSuffix(day)}`

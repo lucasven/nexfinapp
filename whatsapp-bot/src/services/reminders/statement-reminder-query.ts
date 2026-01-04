@@ -51,10 +51,10 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
       targetDay,
     })
 
-    // Query for eligible users
+    // Query for eligible payment methods first
     // Note: We check if the closing day matches 3 days from now
     // The month boundary handling is done automatically by date arithmetic
-    const { data, error } = await supabase
+    const { data: paymentMethods, error: pmError } = await supabase
       .from('payment_methods')
       .select(`
         id,
@@ -62,76 +62,105 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
         statement_closing_day,
         monthly_budget,
         credit_mode,
-        user_id,
-        users!inner (
-          id,
-          whatsapp_jid,
-          whatsapp_lid,
-          whatsapp_number
-        ),
-        user_profiles!inner (
-          locale,
-          statement_reminders_enabled
-        )
+        user_id
       `)
       .eq('credit_mode', true)
       .not('statement_closing_day', 'is', null)
       .eq('statement_closing_day', targetDay)
 
-    if (error) {
-      logger.error('Error querying eligible users', {}, error)
-      throw error
+    if (pmError) {
+      logger.error('Error querying eligible users', {}, pmError)
+      throw pmError
     }
 
-    if (!data || data.length === 0) {
+    if (!paymentMethods || paymentMethods.length === 0) {
       logger.info('No eligible users for statement reminders today')
       return []
+    }
+
+    // Get unique user IDs
+    const userIds = [...new Set(paymentMethods.map(pm => pm.user_id))]
+
+    // Query authorized_whatsapp_numbers for WhatsApp identifiers
+    const { data: whatsappData, error: waError } = await supabase
+      .from('authorized_whatsapp_numbers')
+      .select('user_id, whatsapp_jid, whatsapp_lid, whatsapp_number, is_primary')
+      .in('user_id', userIds)
+      .order('is_primary', { ascending: false })
+
+    if (waError) {
+      logger.error('Error querying WhatsApp numbers', {}, waError)
+      throw waError
+    }
+
+    // Query user_profiles for locale and preferences
+    const { data: profiles, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('user_id, locale, statement_reminders_enabled')
+      .in('user_id', userIds)
+
+    if (profileError) {
+      logger.error('Error querying user profiles', {}, profileError)
+      throw profileError
+    }
+
+    // Build lookup maps for user data
+    // For WhatsApp, prefer primary number, then first available
+    const whatsappMap = new Map<string, { jid: string | null; lid: string | null; number: string | null }>()
+    for (const wa of whatsappData || []) {
+      // Only set if not already set (first entry per user is primary or earliest)
+      if (!whatsappMap.has(wa.user_id)) {
+        whatsappMap.set(wa.user_id, {
+          jid: wa.whatsapp_jid,
+          lid: wa.whatsapp_lid,
+          number: wa.whatsapp_number
+        })
+      }
+    }
+
+    const profileMap = new Map<string, { locale: string; remindersEnabled: boolean }>()
+    for (const profile of profiles || []) {
+      profileMap.set(profile.user_id, {
+        locale: profile.locale || 'pt-BR',
+        remindersEnabled: profile.statement_reminders_enabled !== false
+      })
     }
 
     // Transform and filter the results
     const eligibleUsers: EligibleUser[] = []
 
-    for (const row of data) {
+    for (const row of paymentMethods) {
+      const userId = row.user_id
+
       // Check if user has WhatsApp authorization
-      const user = Array.isArray(row.users) ? row.users[0] : row.users
-      if (!user) continue
-
-      const hasWhatsApp =
-        user.whatsapp_jid || user.whatsapp_lid || user.whatsapp_number
-
-      if (!hasWhatsApp) {
+      const waInfo = whatsappMap.get(userId)
+      if (!waInfo || (!waInfo.jid && !waInfo.lid && !waInfo.number)) {
         logger.debug('User has no WhatsApp identifier, skipping', {
-          userId: user.id,
+          userId,
         })
         continue
       }
 
       // Check opt-out preference (default to enabled if not set)
-      const profile = Array.isArray(row.user_profiles)
-        ? row.user_profiles[0]
-        : row.user_profiles
-
+      const profile = profileMap.get(userId)
       if (!profile) {
-        logger.debug('User has no profile, skipping', { userId: user.id })
+        logger.debug('User has no profile, skipping', { userId })
         continue
       }
 
-      const remindersEnabled =
-        profile.statement_reminders_enabled !== false // Default to true
-
-      if (!remindersEnabled) {
+      if (!profile.remindersEnabled) {
         logger.debug('User has opted out of reminders, skipping', {
-          userId: user.id,
+          userId,
         })
         continue
       }
 
       // User is eligible
       eligibleUsers.push({
-        user_id: user.id,
-        whatsapp_jid: user.whatsapp_jid,
-        whatsapp_lid: user.whatsapp_lid,
-        whatsapp_number: user.whatsapp_number,
+        user_id: userId,
+        whatsapp_jid: waInfo.jid,
+        whatsapp_lid: waInfo.lid,
+        whatsapp_number: waInfo.number,
         locale: profile.locale || 'pt-BR',
         payment_method_id: row.id,
         payment_method_name: row.name,

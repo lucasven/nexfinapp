@@ -76,7 +76,7 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
     .filter(def => !existingNames.has(def.name.toLowerCase()) && !existingNames.has(def.nameEn.toLowerCase()))
     .map(def => ({
       id: `suggestion:${def.type}:${def.name}`, // Special ID format to identify suggestions
-      name: locale === 'pt-BR' ? def.name : def.nameEn,
+      name: locale === 'pt-br' ? def.name : def.nameEn,
       type: def.type,
       icon: def.icon,
       isSuggestion: true as const,
@@ -160,7 +160,7 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
         // Parse suggestion format: "suggestion:type:name"
         const parts = formData.payment_method_id.split(':')
         const type = parts[1] as 'credit' | 'debit' | 'cash' | 'pix' | 'other'
-        const name = locale === 'pt-BR'
+        const name = locale === 'pt-br'
           ? DEFAULT_PAYMENT_METHODS.find(d => d.type === type)?.name
           : DEFAULT_PAYMENT_METHODS.find(d => d.type === type)?.nameEn
 

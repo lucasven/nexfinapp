@@ -23,6 +23,8 @@
  * - Leap years
  */
 
+import { isPortuguese, toIntlLocale, LOCALE } from '@/lib/localization/config'
+
 export interface StatementPeriod {
   periodStart: Date
   periodEnd: Date
@@ -81,34 +83,35 @@ export function getStatementPeriod(
  * Format statement period as human-readable string
  *
  * @param period The statement period to format
- * @param locale The locale to use for formatting (default: 'pt-BR')
+ * @param locale The routing locale ('pt-br' or 'en'), will be converted internally
  * @returns Formatted string like "6 de dezembro - 5 de janeiro de 2025"
  */
 export function formatStatementPeriod(
   period: StatementPeriod,
-  locale: string = 'pt-BR'
+  locale: string = LOCALE.PT_BR
 ): string {
   const { periodStart, periodEnd } = period
+  const intlLocale = toIntlLocale(locale)
 
   const startDay = periodStart.getDate()
   const endDay = periodEnd.getDate()
 
-  const startMonth = periodStart.toLocaleDateString(locale, { month: 'long' })
-  const endMonth = periodEnd.toLocaleDateString(locale, { month: 'long' })
+  const startMonth = periodStart.toLocaleDateString(intlLocale, { month: 'long' })
+  const endMonth = periodEnd.toLocaleDateString(intlLocale, { month: 'long' })
 
   const startYear = periodStart.getFullYear()
   const endYear = periodEnd.getFullYear()
 
   // If same year
   if (startYear === endYear) {
-    if (locale === 'pt-BR') {
+    if (isPortuguese(locale)) {
       return `${startDay} de ${startMonth} - ${endDay} de ${endMonth} de ${endYear}`
     } else {
       return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${endYear}`
     }
   } else {
     // Different years
-    if (locale === 'pt-BR') {
+    if (isPortuguese(locale)) {
       return `${startDay} de ${startMonth} de ${startYear} - ${endDay} de ${endMonth} de ${endYear}`
     } else {
       return `${startMonth} ${startDay}, ${startYear} - ${endMonth} ${endDay}, ${endYear}`
