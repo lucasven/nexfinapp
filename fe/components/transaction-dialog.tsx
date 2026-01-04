@@ -27,6 +27,7 @@ import { PlusIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useTranslations, useLocale } from 'next-intl'
 import { translateCategoryName } from '@/lib/localization/category-translations'
+import { translatePaymentMethodName } from '@/lib/localization/payment-method-translations'
 import { trackEvent } from '@/lib/analytics/tracker'
 import { AnalyticsEvent } from '@/lib/analytics/events'
 import { advanceOnboardingStep } from "@/lib/actions/onboarding"
@@ -381,7 +382,7 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
                   {/* Existing payment methods */}
                   {paymentMethods.map((pm) => (
                     <SelectItem key={pm.id} value={pm.id}>
-                      {pm.name}
+                      {translatePaymentMethodName(pm.name, locale)}
                       {pm.type === 'credit' && pm.credit_mode !== null && (
                         <span className="text-xs text-muted-foreground ml-1">
                           ({pm.credit_mode ? t('paymentMethodTypes.creditMode') : t('paymentMethodTypes.simpleMode')})

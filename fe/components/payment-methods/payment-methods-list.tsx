@@ -14,8 +14,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { PlusIcon, WalletIcon, EditIcon, TrashIcon } from "lucide-react"
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { PaymentMethod } from '@/lib/types'
+import { translatePaymentMethodName } from '@/lib/localization/payment-method-translations'
 import { useState } from 'react'
 import { deletePaymentMethod } from '@/lib/actions/payment-methods'
 import { toast } from 'sonner'
@@ -37,6 +38,7 @@ const TYPE_ICONS = {
 
 export function PaymentMethodsList({ paymentMethods }: PaymentMethodsListProps) {
   const t = useTranslations()
+  const locale = useLocale()
   const router = useRouter()
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -156,7 +158,7 @@ export function PaymentMethodsList({ paymentMethods }: PaymentMethodsListProps) 
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-semibold">{method.name}</h3>
+                      <h3 className="text-lg font-semibold">{translatePaymentMethodName(method.name, locale)}</h3>
                       <Badge variant="secondary">
                         {getTypeLabel(method.type)}
                       </Badge>
