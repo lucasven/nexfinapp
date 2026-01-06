@@ -88,7 +88,7 @@ export default function OnboardingPage() {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            {t('onboarding.welcome', { defaultValue: 'Welcome to Expense Tracker!' })}
+            {t('onboarding.welcome.heading', { defaultValue: 'Welcome to Expense Tracker!' })}
           </h1>
           <p className="text-muted-foreground text-lg">
             {t('onboarding.subtitle', { defaultValue: 'Let\'s get you set up in just a few steps' })}

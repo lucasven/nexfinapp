@@ -155,6 +155,47 @@ export async function checkAuthorizationWithIdentifiers(
 }
 
 /**
+ * Check if a JID is authorized by parsing it into UserIdentifiers
+ *
+ * This is useful for contexts where we only have a JID string (e.g., group invites)
+ * and don't have access to the full WAMessage object.
+ *
+ * Supports:
+ * - Regular JIDs: 5511999999999@s.whatsapp.net
+ * - LID JIDs: 153283238822052@lid (Business accounts)
+ * - JIDs with device suffix: 5511999999999:123@s.whatsapp.net
+ */
+export async function checkAuthorizationFromJid(
+  jid: string
+): Promise<AuthorizationResult> {
+  const [localPart, domain] = jid.split('@')
+
+  // Extract phone number (strip device suffix if present)
+  const phoneNumber = domain === 's.whatsapp.net'
+    ? localPart.split(':')[0]
+    : null
+
+  const identifiers: UserIdentifiers = {
+    jid: jid,
+    lid: domain === 'lid' ? jid : null,
+    phoneNumber: phoneNumber,
+    accountType: domain === 'lid' ? 'business' : 'regular',
+    pushName: null,
+    isGroup: false,
+    groupJid: null
+  }
+
+  console.log('[Authorization] checkAuthorizationFromJid:', {
+    jid,
+    parsedDomain: domain,
+    isLid: domain === 'lid',
+    extractedPhone: phoneNumber
+  })
+
+  return checkAuthorizationWithIdentifiers(identifiers)
+}
+
+/**
  * Check if a WhatsApp number is authorized and get its permissions
  * @deprecated Use checkAuthorizationWithIdentifiers instead for better Business account support
  */

@@ -10,7 +10,14 @@
     "lint:fix": "eslint . --fix",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:reset-onboarding": "psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \"UPDATE user_profiles SET onboarding_completed = false, onboarding_step = NULL, whatsapp_setup_completed = false, first_category_added = false, first_expense_added = false WHERE user_id = '00000000-0000-0000-0000-000000000002'\"",
+    "test:e2e:onboarding": "npm run test:e2e:reset-onboarding && playwright test onboarding-flow.spec.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -75,6 +82,7 @@
     "@eslint/js": "^9.39.1",
     "@jest/globals": "^30.2.0",
     "@next/eslint-plugin-next": "^16.0.5",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",

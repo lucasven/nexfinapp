@@ -92,11 +92,17 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
   // Story 2.0 Part 1: Get selected payment method for conditional rendering (AC1.6)
   const selectedPaymentMethod = paymentMethods.find(pm => pm.id === formData.payment_method_id)
 
+  // Check if selected payment method is a credit card suggestion (to be created)
+  // Format: "suggestion:type:name" - e.g., "suggestion:credit:Cartão de Crédito"
+  const isCreditCardSuggestion = formData.payment_method_id.startsWith('suggestion:credit:')
+
   // Story 2.0 Part 1: Conditional installment fields (AC1.6)
-  // Show installment fields ONLY for Credit Mode credit cards
+  // Show installment fields for:
+  // 1. Existing Credit Mode credit cards
+  // 2. Credit card suggestions (will be created with Credit Mode by default)
   const showInstallmentFields =
-    selectedPaymentMethod?.type === 'credit' &&
-    selectedPaymentMethod?.credit_mode === true
+    (selectedPaymentMethod?.type === 'credit' && selectedPaymentMethod?.credit_mode === true) ||
+    isCreditCardSuggestion
 
   // Story 2.2: Real-time monthly payment calculation
   const monthlyPayment = useMemo(() => {
@@ -182,6 +188,17 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
         actualPaymentMethodId = result.paymentMethod.id
         // Update form data with the real ID for subsequent operations
         setFormData(prev => ({ ...prev, payment_method_id: actualPaymentMethodId }))
+
+        // If creating installment with a new credit card, set Credit Mode automatically
+        // This is required because installments only work with Credit Mode enabled
+        if (isInstallment && type === 'credit') {
+          const { setCreditMode } = await import('@/lib/actions/payment-methods')
+          const modeResult = await setCreditMode(actualPaymentMethodId, true)
+          if (!modeResult.success) {
+            console.warn('[TransactionDialog] Failed to set credit mode:', modeResult.error)
+            // Continue anyway - the card was created, just without Credit Mode
+          }
+        }
       }
 
       // Story 2.2: Check if this is an installment creation

@@ -17,7 +17,7 @@ import * as path from 'path'
 import http from 'http'
 import { handleMessage } from './handlers/core/message-handler.js'
 import { authorizeGroup } from './services/groups/group-manager.js'
-import { checkAuthorization, checkAuthorizationWithIdentifiers } from './middleware/authorization.js'
+import { checkAuthorization, checkAuthorizationWithIdentifiers, checkAuthorizationFromJid } from './middleware/authorization.js'
 import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
@@ -184,22 +184,27 @@ async function connectToWhatsApp() {
               return
             }
             
-            // Extract phone number from adder JID
-            const adderNumber = adderJid.split('@')[0].split(':')[0].replace(/\D/g, '')
-            console.log('[group-participants.update] Bot added by:', adderNumber)
-            
+            console.log('[group-participants.update] Bot added by JID:', adderJid)
+
             // Check if the person who added the bot is authorized
-            const authResult = await checkAuthorization(adderNumber)
-            
+            // Use checkAuthorizationFromJid to properly handle LIDs (Business accounts)
+            const authResult = await checkAuthorizationFromJid(adderJid)
+
+            // Extract identifier for group authorization (phone if available, otherwise JID)
+            const [localPart, domain] = adderJid.split('@')
+            const adderIdentifier = domain === 's.whatsapp.net'
+              ? localPart.split(':')[0]  // Phone number
+              : adderJid  // Use full JID for LID accounts
+
             if (authResult.authorized && authResult.userId) {
               console.log('[group-participants.update] Adder is authorized, auto-authorizing group')
-              
+
               // Auto-authorize the group
               const result = await authorizeGroup(
                 groupJid,
                 groupName,
                 authResult.userId,
-                adderNumber,
+                adderIdentifier,
                 true // auto_authorized = true
               )
               
@@ -254,12 +259,16 @@ async function handleGroupInvite(
       groupName,
       from
     })
-    
-    // Get sender number
-    const senderNumber = from.split('@')[0].replace(/\D/g, '')
-    
-    // Check if sender is authorized
-    const authResult = await checkAuthorization(senderNumber)
+
+    // Check if sender is authorized using multi-identifier lookup
+    // This properly handles LIDs (Business accounts) that don't expose phone numbers
+    const authResult = await checkAuthorizationFromJid(from)
+
+    // Extract identifier for group authorization (phone if available, otherwise JID)
+    const [localPart, domain] = from.split('@')
+    const senderIdentifier = domain === 's.whatsapp.net'
+      ? localPart.split(':')[0]  // Phone number
+      : from  // Use full JID for LID accounts
     
     if (authResult.authorized && authResult.userId) {
       console.log('[GROUP INVITE] Sender is authorized, accepting invite')
@@ -292,7 +301,7 @@ async function handleGroupInvite(
           groupJidFinal,
           finalGroupName || 'Unknown Group',
           authResult.userId,
-          senderNumber,
+          senderIdentifier,
           true // auto_authorized = true
         )
         
