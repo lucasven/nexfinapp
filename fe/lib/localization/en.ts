@@ -285,6 +285,20 @@ export const messages: Messages = {
     uncategorized: 'Uncategorized',
     noExpenses: 'No expenses in this period',
     performanceNote: 'Calculated in {time}ms',
+    // Default/Fixed budgets
+    budgetType: 'Budget Type',
+    fixedDefault: 'Fixed (Every Month)',
+    monthlyOverride: 'This Month Only',
+    defaultBadge: 'Default',
+    overrideBadge: 'Override',
+    defaultBudgetsTitle: 'Fixed Budgets',
+    defaultBudgetsDescription: 'Budgets that automatically apply to all months',
+    noDefaultBudgets: 'No fixed budgets set. Fixed budgets are automatically applied every month.',
+    addDefaultBudget: 'Add Fixed Budget',
+    editDefaultBudget: 'Edit Fixed Budget',
+    defaultBudgetInfo: 'This budget will automatically apply to all future months.',
+    overrideBudgetInfo: 'This budget overrides the fixed value only for this month.',
+    monthlyBudgetsDescription: 'Budgets specific to this month',
   },
 
   // Story 3.3: Budget Progress Dashboard

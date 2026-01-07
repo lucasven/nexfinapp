@@ -4,7 +4,11 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
+import type { Budget, BudgetWithSpending } from "@/lib/types"
 
+/**
+ * Get monthly budgets for a specific month/year (excludes defaults)
+ */
 export async function getBudgets(month?: number, year?: number) {
   const supabase = await getSupabaseServerClient()
 
@@ -26,13 +30,43 @@ export async function getBudgets(month?: number, year?: number) {
     .eq("user_id", user.id)
     .eq("month", targetMonth)
     .eq("year", targetYear)
+    .eq("is_default", false)
     .order("created_at", { ascending: false })
 
   if (error) throw error
   return data
 }
 
-export async function getBudgetWithSpending(month?: number, year?: number) {
+/**
+ * Get all default budgets for the user
+ */
+export async function getDefaultBudgets(): Promise<Budget[]> {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const { data, error } = await supabase
+    .from("budgets")
+    .select(`
+      *,
+      category:categories(*)
+    `)
+    .eq("user_id", user.id)
+    .eq("is_default", true)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+/**
+ * Get effective budgets with spending for a specific month/year
+ * Resolves budget precedence: monthly override > default budget
+ */
+export async function getBudgetWithSpending(month?: number, year?: number): Promise<BudgetWithSpending[]> {
   const supabase = await getSupabaseServerClient()
 
   const {
@@ -44,25 +78,40 @@ export async function getBudgetWithSpending(month?: number, year?: number) {
   const targetMonth = month ?? currentDate.getMonth() + 1
   const targetYear = year ?? currentDate.getFullYear()
 
-  // Get budgets
-  const { data: budgets } = await supabase
+  // Get ALL budgets (both defaults and monthly)
+  const { data: allBudgets } = await supabase
     .from("budgets")
     .select(`
       *,
       category:categories(*)
     `)
     .eq("user_id", user.id)
-    .eq("month", targetMonth)
-    .eq("year", targetYear)
 
-  if (!budgets) return []
+  if (!allBudgets) return []
 
-  // Get spending for each budget category
+  // Resolve effective budgets: group by category, override > default
+  const categoryBudgets = new Map<string, { budget: Budget; source_type: 'default' | 'override' }>()
+
+  for (const budget of allBudgets) {
+    const categoryId = budget.category_id
+
+    if (budget.is_default) {
+      // Default budget - only use if no override exists for this category
+      if (!categoryBudgets.has(categoryId)) {
+        categoryBudgets.set(categoryId, { budget, source_type: 'default' })
+      }
+    } else if (budget.month === targetMonth && budget.year === targetYear) {
+      // Monthly override for target period - takes precedence
+      categoryBudgets.set(categoryId, { budget, source_type: 'override' })
+    }
+  }
+
+  // Get spending for each effective budget
   const startDate = new Date(targetYear, targetMonth - 1, 1).toISOString().split("T")[0]
   const endDate = new Date(targetYear, targetMonth, 0).toISOString().split("T")[0]
 
   const budgetsWithSpending = await Promise.all(
-    budgets.map(async (budget) => {
+    Array.from(categoryBudgets.values()).map(async ({ budget, source_type }) => {
       const { data: transactions } = await supabase
         .from("transactions")
         .select("amount")
@@ -79,13 +128,17 @@ export async function getBudgetWithSpending(month?: number, year?: number) {
         spent,
         remaining: Number(budget.amount) - spent,
         percentage: (spent / Number(budget.amount)) * 100,
-      }
+        source_type,
+      } as BudgetWithSpending
     }),
   )
 
   return budgetsWithSpending
 }
 
+/**
+ * Create a monthly budget (override) for a specific month/year
+ */
 export async function createBudget(formData: {
   category_id: string
   amount: number
@@ -104,6 +157,7 @@ export async function createBudget(formData: {
     .insert({
       ...formData,
       user_id: user.id,
+      is_default: false,
     })
     .select()
     .single()
@@ -116,6 +170,52 @@ export async function createBudget(formData: {
     [AnalyticsProperty.BUDGET_MONTH]: formData.month,
     [AnalyticsProperty.BUDGET_YEAR]: formData.year,
     [AnalyticsProperty.CATEGORY_ID]: formData.category_id,
+    is_default: false,
+  })
+
+  revalidatePath("/budgets")
+  return data
+}
+
+/**
+ * Alias for createBudget - for backward compatibility
+ */
+export const createMonthlyBudget = createBudget
+
+/**
+ * Create a default/fixed budget that applies to all months
+ */
+export async function createDefaultBudget(formData: {
+  category_id: string
+  amount: number
+}) {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const { data, error } = await supabase
+    .from("budgets")
+    .insert({
+      category_id: formData.category_id,
+      amount: formData.amount,
+      user_id: user.id,
+      is_default: true,
+      month: null,
+      year: null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+
+  // Track default budget creation event
+  await trackServerEvent(user.id, AnalyticsEvent.BUDGET_CREATED, {
+    [AnalyticsProperty.BUDGET_AMOUNT]: formData.amount,
+    [AnalyticsProperty.CATEGORY_ID]: formData.category_id,
+    is_default: true,
   })
 
   revalidatePath("/budgets")

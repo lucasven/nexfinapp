@@ -225,6 +225,11 @@ Let's begin? 🚀`,
   // NEW: Budget Management
   budgetDeleted: (category: string) => `✅ Budget for "${category}" removed!`,
   budgetNotFound: (category: string) => `❌ No budget found for "${category}".`,
+  // Default/Fixed budgets
+  defaultBudgetSet: (category: string, amount: number) =>
+    `✅ Fixed budget set!\n📁 Category: ${category}\n💰 Amount: $${amount.toFixed(2)}\n🔄 This value will be automatically applied every month.`,
+  defaultBudgetDeleted: (category: string) => `✅ Fixed budget for "${category}" removed!`,
+  defaultBudgetNotFound: (category: string) => `❌ No fixed budget found for "${category}".`,
 
   // NEW: Analysis & Search
   analysisResult: '📊 Analysis:\n\n',

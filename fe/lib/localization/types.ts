@@ -264,6 +264,20 @@ export interface Messages {
     uncategorized: string
     noExpenses: string
     performanceNote: string
+    // Default/Fixed budgets
+    budgetType: string
+    fixedDefault: string
+    monthlyOverride: string
+    defaultBadge: string
+    overrideBadge: string
+    defaultBudgetsTitle: string
+    defaultBudgetsDescription: string
+    noDefaultBudgets: string
+    addDefaultBudget: string
+    editDefaultBudget: string
+    defaultBudgetInfo: string
+    overrideBudgetInfo: string
+    monthlyBudgetsDescription: string
   }
 
   // Category
