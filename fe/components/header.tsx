@@ -20,6 +20,7 @@ import {
   SettingsIcon,
   MenuIcon,
   XIcon,
+  PiggyBankIcon,
 } from "lucide-react"
 import { useTranslations } from 'next-intl'
 import { UserMenu } from "./user-menu"
@@ -72,6 +73,12 @@ export function Header({
                   <Link href="/" className="cursor-pointer">
                     <HomeIcon className="h-4 w-4 mr-2" />
                     {t('nav.dashboard')}
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/budgets" className="cursor-pointer">
+                    <PiggyBankIcon className="h-4 w-4 mr-2" />
+                    {t('nav.budgets')}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
@@ -187,6 +194,12 @@ export function Header({
                 <Link href="/" onClick={() => setMobileMenuOpen(false)}>
                   <HomeIcon className="h-4 w-4 mr-2" />
                   {t('nav.dashboard')}
+                </Link>
+              </Button>
+              <Button variant="ghost" asChild className="w-full justify-start pl-9">
+                <Link href="/budgets" onClick={() => setMobileMenuOpen(false)}>
+                  <PiggyBankIcon className="h-4 w-4 mr-2" />
+                  {t('nav.budgets')}
                 </Link>
               </Button>
               <Button variant="ghost" asChild className="w-full justify-start pl-9">
