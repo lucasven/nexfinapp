@@ -31,6 +31,7 @@ export interface ParsedIntent {
           // Credit Mode Management
           'switch_credit_mode'
   confidence: number
+  originalMessage?: string  // Original user message for keyword detection
   entities: {
     amount?: number
     category?: string
@@ -69,6 +70,8 @@ export interface ParsedIntent {
     // Credit Mode Management
     targetMode?: 'credit' | 'simple'
     paymentMethodName?: string
+    // Budget Management
+    is_default?: boolean  // true for fixed/default budgets
   }
 }
 
