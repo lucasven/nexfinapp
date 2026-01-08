@@ -2,8 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import type { Budget, Category } from "@/lib/types"
-import { AlertCircleIcon, CheckCircleIcon, EditIcon, TrashIcon } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import type { Budget, BudgetWithSpending, Category } from "@/lib/types"
+import { AlertCircleIcon, CheckCircleIcon, EditIcon, TrashIcon, RepeatIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { BudgetDialog } from "./budget-dialog"
 import { deleteBudget } from "@/lib/actions/budgets"
@@ -12,10 +13,7 @@ import { formatCurrency } from '@/lib/localization/format'
 import { translateCategoryName } from '@/lib/localization/category-translations'
 
 interface BudgetCardProps {
-  budget: Budget & {
-    spent: number
-    remaining: number
-    percentage: number
+  budget: BudgetWithSpending & {
     category?: Category
   }
   categories: Category[]
@@ -35,6 +33,13 @@ export function BudgetCard({ budget, categories, currentMonth, currentYear }: Bu
         <CardTitle className="text-base font-medium">
           <span className="inline-flex items-center gap-2">
             {budget.category?.icon} {budget.category?.name && translateCategoryName(budget.category.name, locale as 'pt-br' | 'en')}
+            {/* Show badge when using default budget */}
+            {budget.source_type === 'default' && (
+              <Badge variant="outline" className="text-xs font-normal gap-1">
+                <RepeatIcon className="h-3 w-3" />
+                {t('budget.defaultBadge')}
+              </Badge>
+            )}
           </span>
         </CardTitle>
         <div className="flex gap-1">

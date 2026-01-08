@@ -1,9 +1,10 @@
 import { BudgetCard } from "@/components/budget-card"
 import { BudgetDialog } from "@/components/budget-dialog"
+import { DefaultBudgetsSection } from "@/components/default-budgets-section"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { UserMenu } from "@/components/user-menu"
-import { getBudgetWithSpending } from "@/lib/actions/budgets"
+import { getBudgetWithSpending, getDefaultBudgets } from "@/lib/actions/budgets"
 import { getCategories } from "@/lib/actions/categories"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { ArrowLeftIcon } from "lucide-react"
@@ -23,7 +24,11 @@ export default async function BudgetsPage() {
   const currentMonth = currentDate.getMonth() + 1
   const currentYear = currentDate.getFullYear()
 
-  const [budgets, categories] = await Promise.all([getBudgetWithSpending(currentMonth, currentYear), getCategories()])
+  const [budgets, defaultBudgets, categories] = await Promise.all([
+    getBudgetWithSpending(currentMonth, currentYear),
+    getDefaultBudgets(),
+    getCategories(),
+  ])
 
   const monthName = `${getMonthName(currentMonth, locale as 'pt-br' | 'en')} ${currentYear}`
 
@@ -42,6 +47,15 @@ export default async function BudgetsPage() {
           </div>
           <BudgetDialog categories={categories} currentMonth={currentMonth} currentYear={currentYear} />
           <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
+        </div>
+
+        {/* Default Budgets Section - always visible */}
+        <DefaultBudgetsSection defaultBudgets={defaultBudgets} categories={categories} />
+
+        {/* Monthly Budgets Section */}
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold">{monthName}</h2>
+          <p className="text-muted-foreground text-sm">{t('budget.monthlyBudgetsDescription')}</p>
         </div>
 
         {budgets.length === 0 ? (

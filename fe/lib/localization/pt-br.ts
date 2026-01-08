@@ -285,6 +285,20 @@ export const messages: Messages = {
     uncategorized: 'Sem Categoria',
     noExpenses: 'Nenhum gasto neste período',
     performanceNote: 'Calculado em {time}ms',
+    // Default/Fixed budgets
+    budgetType: 'Tipo de Orçamento',
+    fixedDefault: 'Fixo (Todo Mês)',
+    monthlyOverride: 'Específico do Mês',
+    defaultBadge: 'Padrão',
+    overrideBadge: 'Específico',
+    defaultBudgetsTitle: 'Orçamentos Fixos',
+    defaultBudgetsDescription: 'Orçamentos que se aplicam automaticamente a todos os meses',
+    noDefaultBudgets: 'Nenhum orçamento fixo definido. Orçamentos fixos são aplicados automaticamente todo mês.',
+    addDefaultBudget: 'Adicionar Orçamento Fixo',
+    editDefaultBudget: 'Editar Orçamento Fixo',
+    defaultBudgetInfo: 'Este orçamento será aplicado automaticamente a todos os meses futuros.',
+    overrideBudgetInfo: 'Este orçamento substitui o valor fixo apenas para este mês.',
+    monthlyBudgetsDescription: 'Orçamentos específicos para este mês',
   },
 
   // Story 3.3: Budget Progress Dashboard

@@ -16,9 +16,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createBudget, updateBudget } from "@/lib/actions/budgets"
+import { createBudget, createDefaultBudget, updateBudget } from "@/lib/actions/budgets"
 import type { Budget, Category } from "@/lib/types"
-import { PlusIcon } from "lucide-react"
+import { PlusIcon, CalendarIcon, RepeatIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from 'next-intl'
 
@@ -28,16 +28,18 @@ interface BudgetDialogProps {
   trigger?: React.ReactNode
   currentMonth: number
   currentYear: number
+  defaultMode?: boolean  // When true, dialog opens in default budget mode
 }
 
-export function BudgetDialog({ categories, budget, trigger, currentMonth, currentYear }: BudgetDialogProps) {
+export function BudgetDialog({ categories, budget, trigger, currentMonth, currentYear, defaultMode = false }: BudgetDialogProps) {
   const t = useTranslations()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isDefault, setIsDefault] = useState(budget?.is_default ?? defaultMode)
   const [formData, setFormData] = useState({
     category_id: budget?.category_id || "",
-    amount: budget?.amount.toString() || "",
+    amount: budget?.amount?.toString() || "",
     month: budget?.month || currentMonth,
     year: budget?.year || currentYear,
   })
@@ -47,15 +49,29 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
     setLoading(true)
 
     try {
-      const data = {
-        ...formData,
-        amount: Number.parseFloat(formData.amount),
-      }
+      const amount = Number.parseFloat(formData.amount)
 
       if (budget) {
-        await updateBudget(budget.id, data)
+        // Update existing budget
+        const updateData = isDefault
+          ? { category_id: formData.category_id, amount }
+          : { ...formData, amount }
+        await updateBudget(budget.id, updateData)
       } else {
-        await createBudget(data)
+        // Create new budget
+        if (isDefault) {
+          await createDefaultBudget({
+            category_id: formData.category_id,
+            amount,
+          })
+        } else {
+          await createBudget({
+            category_id: formData.category_id,
+            amount,
+            month: formData.month,
+            year: formData.year,
+          })
+        }
       }
 
       setOpen(false)
@@ -89,6 +105,38 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* Budget Type Toggle - only show when creating new budget */}
+            {!budget && (
+              <div className="grid gap-2">
+                <Label>{t('budget.budgetType')}</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={isDefault ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setIsDefault(true)}
+                  >
+                    <RepeatIcon className="h-4 w-4 mr-2" />
+                    {t('budget.fixedDefault')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={!isDefault ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setIsDefault(false)}
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {t('budget.monthlyOverride')}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isDefault ? t('budget.defaultBudgetInfo') : t('budget.overrideBudgetInfo')}
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-2">
               <Label htmlFor="category">{t('transaction.category')}</Label>
               <Select
@@ -122,45 +170,48 @@ export function BudgetDialog({ categories, budget, trigger, currentMonth, curren
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="month">{t('budget.month')}</Label>
-                <Select
-                  value={formData.month.toString()}
-                  onValueChange={(value) => setFormData({ ...formData, month: Number.parseInt(value) })}
-                >
-                  <SelectTrigger id="month">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                      <SelectItem key={month} value={month.toString()}>
-                        {new Date(2000, month - 1).toLocaleString(t('common.locale') as string, { month: "long" })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Month/Year selectors - only show for monthly (non-default) budgets */}
+            {!isDefault && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="month">{t('budget.month')}</Label>
+                  <Select
+                    value={formData.month.toString()}
+                    onValueChange={(value) => setFormData({ ...formData, month: Number.parseInt(value) })}
+                  >
+                    <SelectTrigger id="month">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                        <SelectItem key={month} value={month.toString()}>
+                          {new Date(2000, month - 1).toLocaleString(t('common.locale') as string, { month: "long" })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="year">{t('budget.year')}</Label>
-                <Select
-                  value={formData.year.toString()}
-                  onValueChange={(value) => setFormData({ ...formData, year: Number.parseInt(value) })}
-                >
-                  <SelectTrigger id="year">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 5 }, (_, i) => currentYear - 1 + i).map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="grid gap-2">
+                  <Label htmlFor="year">{t('budget.year')}</Label>
+                  <Select
+                    value={formData.year.toString()}
+                    onValueChange={(value) => setFormData({ ...formData, year: Number.parseInt(value) })}
+                  >
+                    <SelectTrigger id="year">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => currentYear - 1 + i).map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <DialogFooter>

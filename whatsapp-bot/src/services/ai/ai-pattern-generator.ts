@@ -86,7 +86,7 @@ const BUDGET_TOOL = {
   type: 'function' as const,
   function: {
     name: 'manage_budget',
-    description: 'Set or view budget information',
+    description: 'Set or view budget information. Can set a fixed default budget for a category (applies to all months) or a monthly override.',
     parameters: {
       type: 'object',
       properties: {
@@ -105,7 +105,11 @@ const BUDGET_TOOL = {
         },
         period: {
           type: 'string',
-          description: 'Time period for the budget'
+          description: 'Time period for the budget (for monthly budgets)'
+        },
+        is_default: {
+          type: 'boolean',
+          description: 'True if this should be a default/fixed budget applying to all months. Set to true when user says "fixo", "sempre", "todo mês", "fixed", "every month".'
         }
       },
       required: ['action']
@@ -368,13 +372,17 @@ const DELETE_BUDGET_TOOL = {
   type: 'function' as const,
   function: {
     name: 'delete_budget',
-    description: 'Delete a budget for a specific category',
+    description: 'Delete a budget for a specific category. Can delete either a default/fixed budget or a monthly budget.',
     parameters: {
       type: 'object',
       properties: {
         category: { type: 'string', description: 'Category name' },
-        month: { type: 'integer', description: 'Month (1-12)' },
-        year: { type: 'integer', description: 'Year' }
+        month: { type: 'integer', description: 'Month (1-12) - only for monthly budgets' },
+        year: { type: 'integer', description: 'Year - only for monthly budgets' },
+        is_default: {
+          type: 'boolean',
+          description: 'True if deleting a default/fixed budget. Set to true when user says "fixo", "padrão", "default".'
+        }
       },
       required: ['category']
     }
@@ -776,7 +784,8 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
         entities: {
           category: args.category,
           amount: args.amount,
-          description: args.period
+          description: args.period,
+          is_default: args.is_default
         }
       }
       break
@@ -927,7 +936,8 @@ function convertFunctionCallToIntent(functionName: string, args: any): ParsedInt
         entities: {
           category: args.category,
           month: args.month,
-          year: args.year
+          year: args.year,
+          is_default: args.is_default
         }
       }
       break

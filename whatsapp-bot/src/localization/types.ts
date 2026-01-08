@@ -126,6 +126,10 @@ export interface Messages {
   // NEW: Budget Management
   budgetDeleted: (category: string) => string
   budgetNotFound: (category: string) => string
+  // Default/Fixed Budget Management
+  defaultBudgetSet: (category: string, amount: number) => string
+  defaultBudgetDeleted: (category: string) => string
+  defaultBudgetNotFound: (category: string) => string
   
   // NEW: Analysis & Search
   analysisResult: string  // Used as prefix for AI-generated analysis

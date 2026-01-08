@@ -230,6 +230,11 @@ Vamos começar? 🚀`,
   // NEW: Budget Management
   budgetDeleted: (category: string) => `✅ Orçamento da categoria "${category}" removido com sucesso.`,
   budgetNotFound: (category: string) => `❌ Orçamento para "${category}" não encontrado.`,
+  // Default/Fixed budgets
+  defaultBudgetSet: (category: string, amount: number) =>
+    `✅ Orçamento fixo definido!\n📁 Categoria: ${category}\n💰 Valor: R$ ${amount.toFixed(2)}\n🔄 Este valor será aplicado automaticamente todo mês.`,
+  defaultBudgetDeleted: (category: string) => `✅ Orçamento fixo da categoria "${category}" removido com sucesso.`,
+  defaultBudgetNotFound: (category: string) => `❌ Orçamento fixo para "${category}" não encontrado.`,
 
   // NEW: Analysis & Search
   analysisResult: '📊 Análise Financeira:\n\n',

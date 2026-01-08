@@ -66,11 +66,20 @@ export interface Budget {
   user_id: string
   category_id: string
   amount: number
-  month: number
-  year: number
+  month: number | null  // NULL for default budgets
+  year: number | null   // NULL for default budgets
+  is_default: boolean   // true = applies to all months, false = specific month
   created_at: string
   updated_at: string
   category?: Category
+}
+
+// Extended budget with spending info and source tracking
+export interface BudgetWithSpending extends Budget {
+  spent: number
+  remaining: number
+  percentage: number
+  source_type: 'default' | 'override'  // indicates where the budget came from
 }
 
 export interface RecurringTransaction {
