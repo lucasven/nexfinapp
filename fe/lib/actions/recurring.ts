@@ -38,6 +38,9 @@ export async function getRecurringPayments(month?: number, year?: number) {
   const targetMonth = month ?? currentDate.getMonth() + 1
   const targetYear = year ?? currentDate.getFullYear()
 
+  // Ensure payments exist for the target month (lazy generation)
+  await ensureRecurringPaymentsForMonth(supabase, user.id, targetMonth, targetYear)
+
   const startDate = new Date(targetYear, targetMonth - 1, 1).toISOString().split("T")[0]
   const endDate = new Date(targetYear, targetMonth, 0).toISOString().split("T")[0]
 
@@ -58,6 +61,52 @@ export async function getRecurringPayments(month?: number, year?: number) {
 
   // Filter by user_id through the recurring_transaction relationship
   return data?.filter((payment) => payment.recurring_transaction?.user_id === user.id) || []
+}
+
+/**
+ * Ensure recurring payments exist for a given month.
+ * Creates missing payment records for all active recurring transactions.
+ */
+async function ensureRecurringPaymentsForMonth(
+  supabase: any,
+  userId: string,
+  targetMonth: number,
+  targetYear: number
+) {
+  // Get all active recurring transactions for the user
+  const { data: recurringTransactions } = await supabase
+    .from("recurring_transactions")
+    .select("id, day_of_month")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+
+  if (!recurringTransactions || recurringTransactions.length === 0) return
+
+  // Get the last day of the target month
+  const lastDayOfMonth = new Date(targetYear, targetMonth, 0).getDate()
+
+  for (const recurring of recurringTransactions) {
+    // Use the smaller of day_of_month and last day of month
+    const actualDay = Math.min(recurring.day_of_month, lastDayOfMonth)
+    const targetDate = new Date(targetYear, targetMonth - 1, actualDay)
+    const dueDate = targetDate.toISOString().split("T")[0]
+
+    // Check if payment already exists
+    const { data: existing } = await supabase
+      .from("recurring_payments")
+      .select("id")
+      .eq("recurring_transaction_id", recurring.id)
+      .eq("due_date", dueDate)
+      .maybeSingle()
+
+    if (!existing) {
+      await supabase.from("recurring_payments").insert({
+        recurring_transaction_id: recurring.id,
+        due_date: dueDate,
+        is_paid: false,
+      })
+    }
+  }
 }
 
 export async function createRecurringTransaction(formData: {
