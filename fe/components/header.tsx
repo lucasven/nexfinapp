@@ -76,12 +76,6 @@ export function Header({
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/budgets" className="cursor-pointer">
-                    <PiggyBankIcon className="h-4 w-4 mr-2" />
-                    {t('nav.budgets')}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
                   <Link href="/reports" className="cursor-pointer">
                     <BarChart3Icon className="h-4 w-4 mr-2" />
                     {t('nav.reports')}
@@ -143,6 +137,12 @@ export function Header({
                     {t('nav.paymentMethods')}
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/budgets" className="cursor-pointer">
+                    <PiggyBankIcon className="h-4 w-4 mr-2" />
+                    {t('nav.budgets')}
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -197,12 +197,6 @@ export function Header({
                 </Link>
               </Button>
               <Button variant="ghost" asChild className="w-full justify-start pl-9">
-                <Link href="/budgets" onClick={() => setMobileMenuOpen(false)}>
-                  <PiggyBankIcon className="h-4 w-4 mr-2" />
-                  {t('nav.budgets')}
-                </Link>
-              </Button>
-              <Button variant="ghost" asChild className="w-full justify-start pl-9">
                 <Link href="/reports" onClick={() => setMobileMenuOpen(false)}>
                   <BarChart3Icon className="h-4 w-4 mr-2" />
                   {t('nav.reports')}
@@ -252,6 +246,12 @@ export function Header({
                 <Link href="/payment-methods" onClick={() => setMobileMenuOpen(false)}>
                   <WalletIcon className="h-4 w-4 mr-2" />
                   {t('nav.paymentMethods')}
+                </Link>
+              </Button>
+              <Button variant="ghost" asChild className="w-full justify-start pl-9">
+                <Link href="/budgets" onClick={() => setMobileMenuOpen(false)}>
+                  <PiggyBankIcon className="h-4 w-4 mr-2" />
+                  {t('nav.budgets')}
                 </Link>
               </Button>
             </div>
