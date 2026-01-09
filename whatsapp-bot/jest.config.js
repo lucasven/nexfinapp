@@ -12,6 +12,8 @@ export default {
     '__tests__/engagement/idempotency.test.ts',
     '__tests__/engagement/weekly-job.test.ts',
     '__tests__/engagement/state-machine.test.ts',
+    '__tests__/engagement/example.test.ts',
+    '__tests__/handlers/engagement/destination-handler.integration.test.ts',
   ],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   moduleNameMapper: {

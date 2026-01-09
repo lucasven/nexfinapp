@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CalendarIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { useTranslations, useLocale } from 'next-intl'
 import { formatCurrency } from '@/lib/localization/format'
@@ -25,6 +25,13 @@ export function FutureCommitmentsMonthList({ commitments }: FutureCommitmentsMon
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [monthDetails, setMonthDetails] = useState<Map<string, MonthCommitmentDetail[]>>(new Map())
   const [loadingMonths, setLoadingMonths] = useState<Set<string>>(new Set())
+
+  // Clear cached details when commitments change (e.g., after installment deletion)
+  // This ensures stale data is discarded when revalidatePath triggers a refetch
+  useEffect(() => {
+    setMonthDetails(new Map())
+    setExpandedMonths(new Set())
+  }, [commitments])
 
   const dateLocale = locale === 'pt-br' ? ptBR : enUS
 

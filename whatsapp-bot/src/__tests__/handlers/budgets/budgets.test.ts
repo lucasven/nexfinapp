@@ -183,14 +183,14 @@ describe('Budgets Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
 
-      // Create a simple mock that returns the expected data
-      // Use mockQuerySequence for multiple from() calls
+      // The handler now makes 3 queries:
+      // 1. Category lookup
+      // 2. Check for existing budget (returns null/not found)
+      // 3. Insert new budget (error)
       mockQuerySequence([
-        { data: [{ id: 'cat-123', name: 'comida' }], error: null }, // First call: category lookup
-        { 
-          data: null,
-          error: new Error('Database error')
-        } // Second call: budget upsert error
+        { data: [{ id: 'cat-123', name: 'comida' }], error: null }, // Category lookup
+        { data: null, error: null }, // Check existing budget (not found)
+        { data: null, error: new Error('Database error') } // Budget insert error
       ])
 
       const intent = createMockParsedIntent({
@@ -228,17 +228,29 @@ describe('Budgets Handler', () => {
       const session = createMockUserSession()
       jest.mocked(getUserSession).mockResolvedValue(session)
 
+      // Handler now uses dual budget system with is_default field
+      // Default budgets (is_default: true) or monthly budgets matching current month
+      const now = new Date()
+      const currentMonth = now.getMonth() + 1
+      const currentYear = now.getFullYear()
+
       const mockBudgets = [
         {
           id: 'budget-1',
           amount: 500,
           category_id: 'cat-1',
+          is_default: true, // Required for filtering
+          month: null,
+          year: null,
           category: { name: 'comida', icon: '🍽️' }
         },
         {
           id: 'budget-2',
           amount: 200,
           category_id: 'cat-2',
+          is_default: true, // Required for filtering
+          month: null,
+          year: null,
           category: { name: 'transporte', icon: '🚗' }
         }
       ]
@@ -274,6 +286,9 @@ describe('Budgets Handler', () => {
           id: 'budget-1',
           amount: 500,
           category_id: 'cat-1',
+          is_default: true, // Required for filtering
+          month: null,
+          year: null,
           category: { name: 'comida', icon: '🍽️' }
         }
       ]
@@ -300,6 +315,9 @@ describe('Budgets Handler', () => {
           id: 'budget-1',
           amount: 500,
           category_id: 'cat-1',
+          is_default: true, // Required for filtering
+          month: null,
+          year: null,
           category: { name: 'comida', icon: '🍽️' }
         }
       ]
@@ -326,6 +344,9 @@ describe('Budgets Handler', () => {
           id: 'budget-1',
           amount: 500,
           category_id: 'cat-1',
+          is_default: true, // Required for filtering
+          month: null,
+          year: null,
           category: null
         }
       ]
@@ -363,6 +384,9 @@ describe('Budgets Handler', () => {
           id: 'budget-1',
           amount: 500,
           category_id: 'cat-1',
+          is_default: true, // Required for filtering
+          month: null,
+          year: null,
           category: { name: 'comida', icon: '🍽️' }
         }
       ]

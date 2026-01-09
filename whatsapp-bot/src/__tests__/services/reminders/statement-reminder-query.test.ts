@@ -9,12 +9,10 @@
  */
 
 import { getEligibleUsersForStatementReminders, getUserJid } from '../../../services/reminders/statement-reminder-query.js'
-import { getSupabaseClient } from '../../../services/database/supabase-client.js'
+import { mockQuerySequence, resetSupabaseMocks } from '../../../__mocks__/supabase.js'
 
-// Mock Supabase client
-jest.mock('../../../services/database/supabase-client.js', () => ({
-  getSupabaseClient: jest.fn()
-}))
+// Mock Supabase client using centralized mock
+jest.mock('../../../services/database/supabase-client.js', () => require('../../../__mocks__/supabase.js'))
 
 // Mock logger
 jest.mock('../../../services/monitoring/logger.js', () => ({
@@ -27,29 +25,13 @@ jest.mock('../../../services/monitoring/logger.js', () => ({
 }))
 
 describe('Statement Reminder Query', () => {
-  let mockSupabase: any
-  let mockQueryBuilder: any
-
   beforeEach(() => {
-    // Create a chainable query builder mock
-    // The chain is: from().select().eq().not().eq()
-    // The last .eq() should return a promise with { data, error }
-    mockQueryBuilder = {
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      not: jest.fn().mockReturnThis(),
-      or: jest.fn().mockReturnThis()
-    }
-
-    mockSupabase = {
-      from: jest.fn().mockReturnValue(mockQueryBuilder)
-    }
-
-    ;(getSupabaseClient as any).mockReturnValue(mockSupabase)
+    resetSupabaseMocks()
   })
 
   afterEach(() => {
     jest.clearAllMocks()
+    jest.useRealTimers()
   })
 
   describe('getEligibleUsersForStatementReminders', () => {
@@ -59,32 +41,41 @@ describe('Statement Reminder Query', () => {
       jest.useFakeTimers()
       jest.setSystemTime(mockDate)
 
-      const mockData = [
+      // Mock the 3 sequential queries:
+      // 1. payment_methods query
+      // 2. authorized_whatsapp_numbers query (uses .in())
+      // 3. user_profiles query (uses .in())
+      mockQuerySequence([
         {
-          id: 'pm-1',
-          name: 'Nubank Roxinho',
-          statement_closing_day: 5, // Jan 5 (3 days from Jan 2)
-          monthly_budget: 2000,
-          credit_mode: true,
-          user_id: 'user-1',
-          users: {
-            id: 'user-1',
+          data: [{
+            id: 'pm-1',
+            name: 'Nubank Roxinho',
+            statement_closing_day: 5,
+            monthly_budget: 2000,
+            credit_mode: true,
+            user_id: 'user-1'
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             whatsapp_jid: 'jid123',
             whatsapp_lid: null,
-            whatsapp_number: '5511999999999'
-          },
-          user_profiles: {
+            whatsapp_number: '5511999999999',
+            is_primary: true
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             locale: 'pt-BR',
             statement_reminders_enabled: true
-          }
+          }],
+          error: null
         }
-      ]
-
-      // Set up the query chain: select().eq().not().eq()
-      // The last .eq() is the one that returns the promise
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: mockData, error: null }) // Second .eq('statement_closing_day', targetDay)
+      ])
 
       const result = await getEligibleUsersForStatementReminders()
 
@@ -97,8 +88,6 @@ describe('Statement Reminder Query', () => {
         monthly_budget: 2000,
         locale: 'pt-BR'
       })
-
-      jest.useRealTimers()
     })
 
     it('should filter out users with closing day not in 3 days', async () => {
@@ -106,37 +95,15 @@ describe('Statement Reminder Query', () => {
       jest.useFakeTimers()
       jest.setSystemTime(mockDate)
 
-      const mockData = [
-        {
-          id: 'pm-1',
-          name: 'Card 1',
-          statement_closing_day: 15, // Jan 15 (not 3 days from Jan 2)
-          monthly_budget: 2000,
-          credit_mode: true,
-          user_id: 'user-1',
-          users: {
-            id: 'user-1',
-            whatsapp_jid: 'jid123',
-            whatsapp_lid: null,
-            whatsapp_number: '5511999999999'
-          },
-          user_profiles: {
-            locale: 'pt-BR',
-            statement_reminders_enabled: true
-          }
-        }
-      ]
-
-      // Query will filter by closing_day = 5 (3 days from today), so this won't be returned
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: [], error: null }) // Second .eq('statement_closing_day', targetDay)
+      // Query will filter by closing_day = 5 (3 days from today)
+      // Return empty since no cards have closing_day = 5
+      mockQuerySequence([
+        { data: [], error: null } // No payment methods match
+      ])
 
       const result = await getEligibleUsersForStatementReminders()
 
       expect(result).toHaveLength(0)
-
-      jest.useRealTimers()
     })
 
     it('should handle month boundary correctly (Dec 29 → Jan 1)', async () => {
@@ -144,64 +111,80 @@ describe('Statement Reminder Query', () => {
       jest.useFakeTimers()
       jest.setSystemTime(mockDate)
 
-      const mockData = [
+      // Dec 29 + 3 days = Jan 1
+      mockQuerySequence([
         {
-          id: 'pm-1',
-          name: 'Card 1',
-          statement_closing_day: 1, // Jan 1 (3 days from Dec 29)
-          monthly_budget: 2000,
-          credit_mode: true,
-          user_id: 'user-1',
-          users: {
-            id: 'user-1',
+          data: [{
+            id: 'pm-1',
+            name: 'Card 1',
+            statement_closing_day: 1,
+            monthly_budget: 2000,
+            credit_mode: true,
+            user_id: 'user-1'
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             whatsapp_jid: 'jid123',
             whatsapp_lid: null,
-            whatsapp_number: '5511999999999'
-          },
-          user_profiles: {
+            whatsapp_number: '5511999999999',
+            is_primary: true
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             locale: 'pt-BR',
             statement_reminders_enabled: true
-          }
+          }],
+          error: null
         }
-      ]
-
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: mockData, error: null }) // Second .eq('statement_closing_day', targetDay)
+      ])
 
       const result = await getEligibleUsersForStatementReminders()
 
       expect(result).toHaveLength(1)
       expect(result[0].statement_closing_day).toBe(1)
-
-      jest.useRealTimers()
     })
 
     it('should filter out users without WhatsApp identifier', async () => {
-      const mockData = [
+      jest.useFakeTimers()
+      jest.setSystemTime(new Date('2025-01-02T10:00:00Z'))
+
+      mockQuerySequence([
         {
-          id: 'pm-1',
-          name: 'Card 1',
-          statement_closing_day: 5,
-          monthly_budget: 2000,
-          credit_mode: true,
-          user_id: 'user-1',
-          users: {
-            id: 'user-1',
+          data: [{
+            id: 'pm-1',
+            name: 'Card 1',
+            statement_closing_day: 5,
+            monthly_budget: 2000,
+            credit_mode: true,
+            user_id: 'user-1'
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             whatsapp_jid: null,
             whatsapp_lid: null,
-            whatsapp_number: null // No WhatsApp identifier
-          },
-          user_profiles: {
+            whatsapp_number: null, // No WhatsApp identifier
+            is_primary: true
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             locale: 'pt-BR',
             statement_reminders_enabled: true
-          }
+          }],
+          error: null
         }
-      ]
-
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: mockData, error: null }) // Second .eq('statement_closing_day', targetDay)
+      ])
 
       const result = await getEligibleUsersForStatementReminders()
 
@@ -209,30 +192,40 @@ describe('Statement Reminder Query', () => {
     })
 
     it('should filter out users who opted out of reminders', async () => {
-      const mockData = [
+      jest.useFakeTimers()
+      jest.setSystemTime(new Date('2025-01-02T10:00:00Z'))
+
+      mockQuerySequence([
         {
-          id: 'pm-1',
-          name: 'Card 1',
-          statement_closing_day: 5,
-          monthly_budget: 2000,
-          credit_mode: true,
-          user_id: 'user-1',
-          users: {
-            id: 'user-1',
+          data: [{
+            id: 'pm-1',
+            name: 'Card 1',
+            statement_closing_day: 5,
+            monthly_budget: 2000,
+            credit_mode: true,
+            user_id: 'user-1'
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             whatsapp_jid: 'jid123',
             whatsapp_lid: null,
-            whatsapp_number: '5511999999999'
-          },
-          user_profiles: {
+            whatsapp_number: '5511999999999',
+            is_primary: true
+          }],
+          error: null
+        },
+        {
+          data: [{
+            user_id: 'user-1',
             locale: 'pt-BR',
             statement_reminders_enabled: false // Opted out
-          }
+          }],
+          error: null
         }
-      ]
-
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: mockData, error: null }) // Second .eq('statement_closing_day', targetDay)
+      ])
 
       const result = await getEligibleUsersForStatementReminders()
 
@@ -240,9 +233,9 @@ describe('Statement Reminder Query', () => {
     })
 
     it('should return empty array when no eligible users', async () => {
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: [], error: null }) // Second .eq('statement_closing_day', targetDay)
+      mockQuerySequence([
+        { data: [], error: null } // No payment methods match
+      ])
 
       const result = await getEligibleUsersForStatementReminders()
 
@@ -251,9 +244,9 @@ describe('Statement Reminder Query', () => {
 
     it('should throw error on database error', async () => {
       const mockError = new Error('Database connection failed')
-      mockQueryBuilder.eq
-        .mockReturnValueOnce(mockQueryBuilder) // First .eq('credit_mode', true)
-        .mockResolvedValueOnce({ data: null, error: mockError }) // Second .eq('statement_closing_day', targetDay)
+      mockQuerySequence([
+        { data: null, error: mockError }
+      ])
 
       await expect(getEligibleUsersForStatementReminders()).rejects.toThrow('Database connection failed')
     })
