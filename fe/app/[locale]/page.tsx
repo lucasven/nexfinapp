@@ -18,10 +18,15 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Calculate first day of current month for transaction filtering
+  const now = new Date()
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const startDate = firstDayOfMonth.toISOString().split('T')[0]
+
   const [balance, categories, transactions, paymentMethods, isAdmin] = await Promise.all([
     getBalance(),
     getCategories(),
-    getTransactions(),
+    getTransactions({ startDate }), // Show current month + future only
     getPaymentMethods(),
     checkIsAdmin()
   ])
