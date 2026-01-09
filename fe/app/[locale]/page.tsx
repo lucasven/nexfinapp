@@ -11,6 +11,7 @@ import { getPaymentMethods } from "@/lib/actions/payment-methods"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { checkIsAdmin } from "@/lib/actions/admin"
 import { HomeOnboardingWrapper } from "./home-client"
+import { getStatementPeriod } from "@/lib/utils/statement-period"
 
 export default async function HomePage() {
   const supabase = await getSupabaseServerClient()
@@ -18,21 +19,34 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Calculate first day of current month for transaction filtering
+  // First fetch payment methods to determine statement period
+  const paymentMethods = await getPaymentMethods()
+
+  // Find credit mode card with closing day to calculate statement period
+  const creditModeCard = paymentMethods.find(
+    pm => pm.type === 'credit' && pm.credit_mode === true && pm.statement_closing_day
+  )
+
+  // Calculate start date: use earlier of calendar month start OR statement period start
+  // This ensures we show: current month transactions + credit card "fatura atual" transactions
   const now = new Date()
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const startDate = firstDayOfMonth.toISOString().split('T')[0]
+  const calendarMonthStart = firstDayOfMonth.toISOString().split('T')[0]
 
-  const [balance, categories, transactions, paymentMethods, isAdmin] = await Promise.all([
+  let startDate = calendarMonthStart
+  if (creditModeCard?.statement_closing_day) {
+    const period = getStatementPeriod(new Date(), creditModeCard.statement_closing_day)
+    const statementPeriodStart = period.periodStart.toISOString().split('T')[0]
+    // Use the earlier date to include both current month AND statement period
+    startDate = statementPeriodStart < calendarMonthStart ? statementPeriodStart : calendarMonthStart
+  }
+
+  const [balance, categories, transactions, isAdmin] = await Promise.all([
     getBalance(),
     getCategories(),
-    getTransactions({ startDate }), // Show current month + future only
-    getPaymentMethods(),
+    getTransactions({ startDate }), // Show current month + statement period + future
     checkIsAdmin()
   ])
-
-  // Find first credit card with credit mode enabled for budget breakdown
-  const creditModeCard = paymentMethods.find(pm => pm.type === 'credit' && pm.credit_mode === true)
 
   return (
     <HomeOnboardingWrapper>

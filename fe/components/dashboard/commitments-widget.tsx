@@ -62,7 +62,7 @@ export async function CommitmentsWidget() {
       installmentCommitments = detailsResult.data.map(detail => ({
         id: detail.plan_id,
         type: 'installment' as const,
-        date: firstMonth.month + '-01', // Use first day of month as date
+        date: detail.due_date, // Use actual due date
         description: detail.description || 'Installment',
         amount: detail.amount,
         icon: '💳',

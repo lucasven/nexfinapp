@@ -516,6 +516,7 @@ export async function getFutureCommitmentsByMonth(
       .select(`
         installment_number,
         amount,
+        due_date,
         plan:installment_plans!inner (
           id,
           user_id,
@@ -546,7 +547,7 @@ export async function getFutureCommitmentsByMonth(
       }
     }
 
-    // Transform to MonthCommitmentDetail format and sort by description
+    // Transform to MonthCommitmentDetail format and sort by due_date
     const details: MonthCommitmentDetail[] = data
       .map((item: any) => ({
         plan_id: item.plan.id,
@@ -554,9 +555,10 @@ export async function getFutureCommitmentsByMonth(
         installment_number: item.installment_number,
         total_installments: item.plan.total_installments,
         amount: item.amount,
-        category_id: item.plan.category_id
+        category_id: item.plan.category_id,
+        due_date: item.due_date
       }))
-      .sort((a, b) => a.description.localeCompare(b.description))
+      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
 
     // Track analytics event
     await trackServerEvent(user.id, AnalyticsEvent.FUTURE_COMMITMENTS_MONTH_EXPANDED, {

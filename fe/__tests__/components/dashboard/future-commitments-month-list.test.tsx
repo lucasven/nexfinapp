@@ -113,6 +113,7 @@ describe('FutureCommitmentsMonthList', () => {
             total_installments: 12,
             amount: 200,
             category_id: null,
+            due_date: '2025-01-15',
           },
           {
             plan_id: 'plan-2',
@@ -121,6 +122,7 @@ describe('FutureCommitmentsMonthList', () => {
             total_installments: 8,
             amount: 150,
             category_id: null,
+            due_date: '2025-01-20',
           },
         ],
       })
@@ -156,6 +158,7 @@ describe('FutureCommitmentsMonthList', () => {
             total_installments: 12,
             amount: 200,
             category_id: null,
+            due_date: '2025-01-15',
           },
         ],
       })
@@ -206,6 +209,7 @@ describe('FutureCommitmentsMonthList', () => {
               total_installments: 3,
               amount: 200,
               category_id: null,
+              due_date: '2025-01-15',
             },
           ],
         })
@@ -219,6 +223,7 @@ describe('FutureCommitmentsMonthList', () => {
               total_installments: 3,
               amount: 200,
               category_id: null,
+              due_date: '2025-02-15',
             },
           ],
         })
@@ -255,6 +260,7 @@ describe('FutureCommitmentsMonthList', () => {
             total_installments: 3,
             amount: 200,
             category_id: null,
+            due_date: '2025-01-15',
           },
         ],
       })

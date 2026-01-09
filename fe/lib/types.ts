@@ -230,6 +230,7 @@ export interface MonthCommitmentDetail {
   total_installments: number
   amount: number
   category_id: string | null
+  due_date: string
 }
 
 // Story 2.4: View All Installments types
