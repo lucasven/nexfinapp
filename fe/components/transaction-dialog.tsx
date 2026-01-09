@@ -317,6 +317,48 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* Payment Method - First field for better UX */}
+            <div className="grid gap-2">
+              <Label htmlFor="payment_method_id">{t('transaction.paymentMethod')}</Label>
+              <Select
+                value={formData.payment_method_id}
+                onValueChange={(value) => setFormData({ ...formData, payment_method_id: value })}
+                required
+              >
+                <SelectTrigger id="payment_method_id">
+                  <SelectValue placeholder={t('transaction.selectPaymentMethod')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* Existing payment methods */}
+                  {paymentMethods.map((pm) => (
+                    <SelectItem key={pm.id} value={pm.id}>
+                      {translatePaymentMethodName(pm.name, locale)}
+                      {pm.type === 'credit' && pm.credit_mode !== null && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({pm.credit_mode ? t('paymentMethodTypes.creditMode') : t('paymentMethodTypes.simpleMode')})
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                  {/* Default suggestions (shown when not already existing) */}
+                  {defaultSuggestions.length > 0 && paymentMethods.length > 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground border-t mt-1 pt-2">
+                      {t('transaction.suggestedPaymentMethods')}
+                    </div>
+                  )}
+                  {defaultSuggestions.map((suggestion) => (
+                    <SelectItem key={suggestion.id} value={suggestion.id} className="text-muted-foreground">
+                      <span className="flex items-center gap-2">
+                        <span>{suggestion.icon}</span>
+                        <span>{suggestion.name}</span>
+                        <span className="text-xs opacity-60">({t('transaction.willBeCreated')})</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid gap-2">
               <Label htmlFor="type">{t('transaction.type')}</Label>
               <Select
@@ -384,47 +426,6 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
                 />
               </div>
             )}
-
-            <div className="grid gap-2">
-              <Label htmlFor="payment_method_id">{t('transaction.paymentMethod')}</Label>
-              <Select
-                value={formData.payment_method_id}
-                onValueChange={(value) => setFormData({ ...formData, payment_method_id: value })}
-                required
-              >
-                <SelectTrigger id="payment_method_id">
-                  <SelectValue placeholder={t('transaction.selectPaymentMethod')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Existing payment methods */}
-                  {paymentMethods.map((pm) => (
-                    <SelectItem key={pm.id} value={pm.id}>
-                      {translatePaymentMethodName(pm.name, locale)}
-                      {pm.type === 'credit' && pm.credit_mode !== null && (
-                        <span className="text-xs text-muted-foreground ml-1">
-                          ({pm.credit_mode ? t('paymentMethodTypes.creditMode') : t('paymentMethodTypes.simpleMode')})
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                  {/* Default suggestions (shown when not already existing) */}
-                  {defaultSuggestions.length > 0 && paymentMethods.length > 0 && (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground border-t mt-1 pt-2">
-                      {t('transaction.suggestedPaymentMethods')}
-                    </div>
-                  )}
-                  {defaultSuggestions.map((suggestion) => (
-                    <SelectItem key={suggestion.id} value={suggestion.id} className="text-muted-foreground">
-                      <span className="flex items-center gap-2">
-                        <span>{suggestion.icon}</span>
-                        <span>{suggestion.name}</span>
-                        <span className="text-xs opacity-60">({t('transaction.willBeCreated')})</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             {/* Story 2.2: Installment toggle and fields (AC2.1, AC2.2) */}
             {showInstallmentFields && !transaction && (
