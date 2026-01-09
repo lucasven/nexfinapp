@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '../services/database/supabase-client'
+import { getSupabaseClient } from '../services/database/supabase-client.js'
 
 /**
  * Checks if a payment method requires credit mode selection.
