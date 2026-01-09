@@ -18,6 +18,7 @@ import { getLocale } from 'next-intl/server'
 import { getBudgetForPeriod, getCurrentBudget } from '@/lib/actions/budget'
 import { getStatementPeriod, formatStatementPeriod } from '@/lib/utils/statement-period'
 import { CalendarIcon, TrendingDownIcon, CreditCardIcon } from "lucide-react"
+import { parseISO } from "date-fns"
 import type { BudgetCategoryBreakdown } from '@/lib/actions/budget'
 
 /**
@@ -207,7 +208,7 @@ function CategoryBreakdownSection({
                 </span>
               </div>
               <span className="text-xs text-muted-foreground ml-5">
-                {new Date(transaction.date).toLocaleDateString(locale, {
+                {parseISO(transaction.date).toLocaleDateString(locale, {
                   day: 'numeric',
                   month: 'short',
                   year: 'numeric',

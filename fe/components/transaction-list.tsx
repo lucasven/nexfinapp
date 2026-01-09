@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Category, Transaction, PaymentMethod } from "@/lib/types"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { EditIcon, SearchIcon, TrashIcon } from "lucide-react"
 import { TransactionDialog } from "./transaction-dialog"
 import { deleteTransaction } from "@/lib/actions/transactions"
@@ -49,7 +49,7 @@ export function TransactionList({ transactions, categories, paymentMethods }: Tr
       const paymentMethod = paymentMethods.find(pm => pm.id === transaction.payment_method_id)
       return {
         id: transaction.id,
-        date: new Date(transaction.date),
+        date: parseISO(transaction.date),
         payment_method_id: transaction.payment_method_id,
         payment_method: paymentMethod ? {
           credit_mode: paymentMethod.credit_mode ?? false,
@@ -145,7 +145,7 @@ export function TransactionList({ transactions, categories, paymentMethods }: Tr
               ) : (
                 filteredTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
-                    <TableCell className="font-medium">{format(new Date(transaction.date), "MMM dd, yyyy")}</TableCell>
+                    <TableCell className="font-medium">{format(parseISO(transaction.date), "MMM dd, yyyy")}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span>{transaction.description || "-"}</span>
