@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { useTranslations } from 'next-intl'
 
 interface TrendChartProps {
@@ -17,7 +17,7 @@ export function TrendChart({ data }: TrendChartProps) {
   const t = useTranslations()
   const chartData = data.map((item) => ({
     ...item,
-    date: format(new Date(item.date), "MMM dd"),
+    date: format(parseISO(item.date), "MMM dd"),
   }))
 
   return (

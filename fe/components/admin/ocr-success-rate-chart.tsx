@@ -1,6 +1,7 @@
 "use client"
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { format, parseISO } from "date-fns"
 
 interface OCRTrendData {
   date: string
@@ -15,13 +16,10 @@ interface OCRSuccessRateChartProps {
 }
 
 export function OCRSuccessRateChart({ data }: OCRSuccessRateChartProps) {
-  // Format date for display (MM/DD)
+  // Format date for display (MMM d)
   const formattedData = data.map((item) => ({
     ...item,
-    displayDate: new Date(item.date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    }),
+    displayDate: format(parseISO(item.date), "MMM d"),
   }))
 
   return (

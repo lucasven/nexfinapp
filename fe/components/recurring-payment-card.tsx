@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { RecurringPayment } from "@/lib/types"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { markPaymentAsPaid } from "@/lib/actions/recurring"
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
@@ -35,7 +35,7 @@ export function RecurringPaymentCard({ payment }: RecurringPaymentCardProps) {
     }
   }
 
-  const isOverdue = new Date(payment.due_date) < new Date() && !payment.is_paid
+  const isOverdue = parseISO(payment.due_date) < new Date() && !payment.is_paid
 
   return (
     <Card className={isOverdue ? "border-red-300" : ""}>
@@ -50,7 +50,7 @@ export function RecurringPaymentCard({ payment }: RecurringPaymentCardProps) {
             </span>
           </div>
           <div className="text-sm text-muted-foreground">
-            {t('recurring.dueDate')}: {format(new Date(payment.due_date), "MMM dd, yyyy")}
+            {t('recurring.dueDate')}: {format(parseISO(payment.due_date), "MMM dd, yyyy")}
             {isOverdue && <span className="text-red-600 ml-2 font-medium">{t('recurring.overdue')}</span>}
           </div>
         </div>

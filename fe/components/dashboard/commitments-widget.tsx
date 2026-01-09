@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, CreditCardIcon, RepeatIcon } from "lucide-react"
 import { getTranslations } from 'next-intl/server'
+import { parseISO, format } from 'date-fns'
+import { ptBR, enUS } from 'date-fns/locale'
 import { getFutureCommitments, getFutureCommitmentsByMonth } from '@/lib/actions/installments'
 import { getRecurringPayments } from '@/lib/actions/recurring'
 import { formatCurrency } from '@/lib/localization/format'
@@ -73,7 +75,7 @@ export async function CommitmentsWidget() {
 
   // Merge and sort by date
   const allCommitments = [...recurringCommitments, ...installmentCommitments]
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
 
   // Get top 3
   const topCommitments = allCommitments.slice(0, 3)
@@ -123,12 +125,10 @@ export async function CommitmentsWidget() {
       </CardHeader>
       <CardContent className="space-y-3">
         {topCommitments.map((commitment) => {
-          const date = new Date(commitment.date)
+          const date = parseISO(commitment.date)
           const locale = user?.user_metadata?.locale || 'pt-br'
-          const dateStr = date.toLocaleDateString(locale, {
-            month: 'short',
-            day: 'numeric'
-          })
+          const dateLocale = locale === 'pt-br' ? ptBR : enUS
+          const dateStr = format(date, 'MMM d', { locale: dateLocale })
 
           return (
             <div
