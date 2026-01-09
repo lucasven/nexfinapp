@@ -1854,8 +1854,9 @@ async function recalculatePendingPayments(
  * Story 2.7: Delete Installment Plan
  *
  * Permanently deletes an installment plan and all associated payments.
- * Preserves paid transactions by orphaning them (sets installment_payment_id to NULL).
- * Atomically removes plan and pending payments via CASCADE DELETE.
+ * Transactions created from paid installments are preserved as orphaned records
+ * (the FK is from installment_payments -> transactions, so transactions remain).
+ * Atomically removes plan and payments via CASCADE DELETE.
  *
  * @param planId - Installment plan ID
  * @returns Success/error response with deletion details
@@ -1976,8 +1977,7 @@ export async function deleteInstallment(
  * Steps:
  * 1. Verify ownership (RLS + explicit check)
  * 2. Count payments for response (paid/pending)
- * 3. Orphan paid transactions (set installment_payment_id = NULL)
- * 4. Delete plan (CASCADE deletes all payments)
+ * 3. Delete plan (CASCADE deletes all payments, transactions remain orphaned)
  *
  * @param supabase - Supabase client
  * @param planId - Installment plan ID
@@ -2036,49 +2036,11 @@ async function executeAtomicDeletion(
       }
     }
 
-    // Step 3: Orphan paid transactions (preserve history)
-    // First, fetch all paid payment IDs for this plan
-    const { data: paidPayments, error: paidPaymentsError } = await supabase
-      .from('installment_payments')
-      .select('id, transaction_id')
-      .eq('plan_id', planId)
-      .eq('status', 'paid')
-      .not('transaction_id', 'is', null)
-
-    if (paidPaymentsError) {
-      console.error('Error fetching paid payment IDs:', paidPaymentsError)
-      return {
-        success: false,
-        error: "Erro ao deletar parcelamento. Tente novamente."
-      }
-    }
-
-    // If there are paid payments with transactions, orphan them
-    if (paidPayments && paidPayments.length > 0) {
-      const transactionIds = paidPayments
-        .map((p: any) => p.transaction_id)
-        .filter((id: any) => id !== null) as string[]
-
-      if (transactionIds.length > 0) {
-        const { error: orphanError } = await supabase
-          .from('transactions')
-          .update({
-            installment_payment_id: null,
-            updated_at: new Date().toISOString()
-          })
-          .in('id', transactionIds)
-
-        if (orphanError) {
-          console.error('Error orphaning paid transactions:', orphanError)
-          return {
-            success: false,
-            error: "Erro ao deletar parcelamento. Tente novamente."
-          }
-        }
-      }
-    }
-
-    // Step 4: Delete plan (CASCADE deletes all payments)
+    // Step 3: Delete plan (CASCADE deletes all payments)
+    // Note: Transactions created from installment payments will remain in the database
+    // as orphaned records (preserving history). The FK relationship is from
+    // installment_payments.transaction_id -> transactions, so transactions are not
+    // automatically deleted when payments are deleted.
     const { error: deleteError } = await supabase
       .from('installment_plans')
       .delete()
