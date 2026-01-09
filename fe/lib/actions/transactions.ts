@@ -327,7 +327,21 @@ export async function getBalance() {
   } = await supabase.auth.getUser()
   if (!user) return { income: 0, expenses: 0, balance: 0 }
 
-  const { data: transactions } = await supabase.from("transactions").select("amount, type").eq("user_id", user.id)
+  // Calculate current month boundaries
+  const now = new Date()
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+
+  const startDate = firstDayOfMonth.toISOString().split('T')[0]
+  const endDate = lastDayOfMonth.toISOString().split('T')[0]
+
+  // Filter transactions by current month
+  const { data: transactions } = await supabase
+    .from("transactions")
+    .select("amount, type")
+    .eq("user_id", user.id)
+    .gte("date", startDate)
+    .lte("date", endDate)
 
   if (!transactions) return { income: 0, expenses: 0, balance: 0 }
 
