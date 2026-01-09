@@ -17,6 +17,7 @@ import { PlusIcon, CreditCardIcon, EditIcon, TrashIcon } from "lucide-react"
 import { useTranslations, useLocale } from 'next-intl'
 import { formatCurrency } from '@/lib/localization/format'
 import { PaymentMethod } from '@/lib/types'
+import { calculatePaymentDueDate, formatPaymentDueDate } from '@/lib/utils/payment-due-date'
 import { useState } from 'react'
 import { AddCreditCardDialog } from '@/components/settings/add-credit-card-dialog'
 import { deletePaymentMethod } from '@/lib/actions/payment-methods'
@@ -183,8 +184,14 @@ export function CreditCardsList({ creditCards }: CreditCardsListProps) {
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">{t('creditCards.dueDay')}</p>
                           <p className="text-sm font-medium">
-                            {card.payment_due_day
-                              ? t('creditCards.day', { day: card.payment_due_day })
+                            {card.payment_due_day && card.statement_closing_day
+                              ? formatPaymentDueDate(
+                                  calculatePaymentDueDate(
+                                    card.statement_closing_day,
+                                    card.payment_due_day
+                                  ).nextDueDate,
+                                  locale
+                                )
                               : t('creditCards.notConfigured')}
                           </p>
                         </div>
