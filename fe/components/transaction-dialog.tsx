@@ -317,74 +317,7 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="type">{t('transaction.type')}</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: "income" | "expense") => {
-                  setFormData({ ...formData, type: value, category_id: "" })
-                }}
-              >
-                <SelectTrigger id="type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="income">{t('transaction.income')}</SelectItem>
-                  <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Story 2.2: Show standard amount field only if NOT in installment mode */}
-            {!isInstallment && (
-              <div className="grid gap-2">
-                <Label htmlFor="amount">{t('transaction.amount')}</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  required
-                />
-              </div>
-            )}
-
-            <div className="grid gap-2">
-              <Label htmlFor="category">{t('transaction.category')}</Label>
-              <Select
-                value={formData.category_id}
-                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-                required
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder={t('transaction.selectCategory')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredCategories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.icon} {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Story 2.2: Show date field only if NOT in installment mode */}
-            {!isInstallment && (
-              <div className="grid gap-2">
-                <Label htmlFor="date">{t('transaction.date')}</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
-              </div>
-            )}
-
+            {/* Payment Method - First field for better UX */}
             <div className="grid gap-2">
               <Label htmlFor="payment_method_id">{t('transaction.paymentMethod')}</Label>
               <Select
@@ -526,6 +459,74 @@ export function TransactionDialog({ categories, paymentMethods, transaction, tri
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="type">{t('transaction.type')}</Label>
+              <Select
+                value={formData.type}
+                onValueChange={(value: "income" | "expense") => {
+                  setFormData({ ...formData, type: value, category_id: "" })
+                }}
+              >
+                <SelectTrigger id="type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="income">{t('transaction.income')}</SelectItem>
+                  <SelectItem value="expense">{t('transaction.expense')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Story 2.2: Show standard amount field only if NOT in installment mode */}
+            {!isInstallment && (
+              <div className="grid gap-2">
+                <Label htmlFor="amount">{t('transaction.amount')}</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="category">{t('transaction.category')}</Label>
+              <Select
+                value={formData.category_id}
+                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                required
+              >
+                <SelectTrigger id="category">
+                  <SelectValue placeholder={t('transaction.selectCategory')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredCategories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.icon} {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Story 2.2: Show date field only if NOT in installment mode */}
+            {!isInstallment && (
+              <div className="grid gap-2">
+                <Label htmlFor="date">{t('transaction.date')}</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  required
+                />
               </div>
             )}
 
