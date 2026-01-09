@@ -4,7 +4,7 @@ import { FinancialOverviewCard } from "@/components/dashboard/financial-overview
 import { CommitmentsWidget } from "@/components/dashboard/commitments-widget"
 import { CollapsibleCategoryBreakdownWrapper } from "@/components/budget/collapsible-category-breakdown-wrapper"
 import { BudgetProgressWidgetsSection } from "@/components/dashboard/budget-progress-widgets-section"
-import { getBalance, getTransactions } from "@/lib/actions/transactions"
+import { getBalance, getDashboardTransactions } from "@/lib/actions/transactions"
 import { getCategories } from "@/lib/actions/categories"
 import { getRecurringPayments } from "@/lib/actions/recurring"
 import { getPaymentMethods } from "@/lib/actions/payment-methods"
@@ -22,29 +22,34 @@ export default async function HomePage() {
   // First fetch payment methods to determine statement period
   const paymentMethods = await getPaymentMethods()
 
-  // Find credit mode card with closing day to calculate statement period
+  // Find credit mode card with closing day to calculate statement period (for budget widget)
   const creditModeCard = paymentMethods.find(
     pm => pm.type === 'credit' && pm.credit_mode === true && pm.statement_closing_day
   )
 
-  // Calculate start date: use earlier of calendar month start OR statement period start
-  // This ensures we show: current month transactions + credit card "fatura atual" transactions
+  // Collect ALL credit mode payment method IDs for dashboard transaction filtering
+  const creditModePaymentMethodIds = paymentMethods
+    .filter(pm => pm.type === 'credit' && pm.credit_mode === true)
+    .map(pm => pm.id)
+
+  // Calculate date boundaries for two-query approach:
+  // - Credit card transactions: from statement period start (fatura atual)
+  // - Non-credit card transactions: from current month start
   const now = new Date()
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const calendarMonthStart = firstDayOfMonth.toISOString().split('T')[0]
 
-  let startDate = calendarMonthStart
+  // Calculate statement period start (use first credit mode card with closing day)
+  let statementPeriodStart = calendarMonthStart
   if (creditModeCard?.statement_closing_day) {
     const period = getStatementPeriod(new Date(), creditModeCard.statement_closing_day)
-    const statementPeriodStart = period.periodStart.toISOString().split('T')[0]
-    // Use the earlier date to include both current month AND statement period
-    startDate = statementPeriodStart < calendarMonthStart ? statementPeriodStart : calendarMonthStart
+    statementPeriodStart = period.periodStart.toISOString().split('T')[0]
   }
 
   const [balance, categories, transactions, isAdmin] = await Promise.all([
     getBalance(),
     getCategories(),
-    getTransactions({ startDate }), // Show current month + statement period + future
+    getDashboardTransactions(creditModePaymentMethodIds, statementPeriodStart, calendarMonthStart),
     checkIsAdmin()
   ])
 

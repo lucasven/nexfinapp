@@ -51,6 +51,79 @@ export async function getTransactions(filters?: {
   return data
 }
 
+/**
+ * Get transactions for dashboard display
+ *
+ * Two-query approach to show:
+ * 1. Credit card transactions from current statement period (fatura atual + future)
+ * 2. Non-credit card transactions from current calendar month + future
+ *
+ * This ensures:
+ * - Credit card "fatura atual" transactions are shown (even if before current month)
+ * - Non-credit card transactions only show current month (not past months)
+ * - No duplicates
+ */
+export async function getDashboardTransactions(
+  creditModePaymentMethodIds: string[],
+  statementPeriodStart: string,
+  calendarMonthStart: string
+) {
+  const supabase = await getSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  // Query 1: Credit card transactions from statement period start
+  let creditCardTransactions: any[] = []
+  if (creditModePaymentMethodIds.length > 0) {
+    const { data: ccData, error: ccError } = await supabase
+      .from("transactions")
+      .select(`
+        *,
+        category:categories(*)
+      `)
+      .eq("user_id", user.id)
+      .in("payment_method_id", creditModePaymentMethodIds)
+      .gte("date", statementPeriodStart)
+      .order("date", { ascending: false })
+
+    if (ccError) throw ccError
+    creditCardTransactions = ccData || []
+  }
+
+  // Query 2: Non-credit card transactions from current month start
+  let nonCreditCardTransactions: any[] = []
+
+  // Build query for non-credit card transactions
+  let nonCcQuery = supabase
+    .from("transactions")
+    .select(`
+      *,
+      category:categories(*)
+    `)
+    .eq("user_id", user.id)
+    .gte("date", calendarMonthStart)
+    .order("date", { ascending: false })
+
+  // Exclude credit card payment methods if there are any
+  if (creditModePaymentMethodIds.length > 0) {
+    // Use NOT IN by filtering out credit card payment method IDs
+    nonCcQuery = nonCcQuery.not("payment_method_id", "in", `(${creditModePaymentMethodIds.join(",")})`)
+  }
+
+  const { data: nonCcData, error: nonCcError } = await nonCcQuery
+  if (nonCcError) throw nonCcError
+  nonCreditCardTransactions = nonCcData || []
+
+  // Merge and sort by date descending
+  const allTransactions = [...creditCardTransactions, ...nonCreditCardTransactions]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  return allTransactions
+}
+
 export async function createTransaction(formData: {
   amount: number
   type: "income" | "expense"
