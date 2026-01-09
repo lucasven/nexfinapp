@@ -958,6 +958,9 @@ export const messages: Messages = {
       activeDescription: 'Crie um novo parcelamento para começar a acompanhar suas compras parceladas.',
       paidOff: 'Você ainda não quitou nenhum parcelamento.',
       paidOffDescription: 'Quando você quitar um parcelamento, ele aparecerá aqui.',
+      // Snake_case versions for dynamic tab-based lookup (tab values match DB status)
+      paid_off: 'Você ainda não quitou nenhum parcelamento.',
+      paid_offDescription: 'Quando você quitar um parcelamento, ele aparecerá aqui.',
       createButton: 'Criar Parcelamento',
     },
     pagination: {

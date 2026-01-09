@@ -874,6 +874,9 @@ export const messages: Messages = {
       activeDescription: 'Create a new installment to start tracking your installment purchases.',
       paidOff: 'You haven\'t paid off any installments yet.',
       paidOffDescription: 'When you pay off an installment, it will appear here.',
+      // Snake_case versions for dynamic tab-based lookup (tab values match DB status)
+      paid_off: 'You haven\'t paid off any installments yet.',
+      paid_offDescription: 'When you pay off an installment, it will appear here.',
       createButton: 'Create Installment',
     },
     pagination: {

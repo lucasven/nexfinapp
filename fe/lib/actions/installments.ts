@@ -1853,10 +1853,13 @@ async function recalculatePendingPayments(
 /**
  * Story 2.7: Delete Installment Plan
  *
- * Permanently deletes an installment plan and all associated payments.
- * Transactions created from paid installments are preserved as orphaned records
- * (the FK is from installment_payments -> transactions, so transactions remain).
- * Atomically removes plan and payments via CASCADE DELETE.
+ * Permanently deletes an installment plan, all associated payments, and
+ * all transactions created from those payments.
+ *
+ * Deletion order:
+ * 1. Collect transaction_ids from payments
+ * 2. Delete plan (CASCADE deletes payments)
+ * 3. Delete associated transactions
  *
  * @param planId - Installment plan ID
  * @returns Success/error response with deletion details
@@ -1973,11 +1976,12 @@ export async function deleteInstallment(
 /**
  * Helper: Execute Atomic Deletion
  *
- * Performs atomic deletion of installment plan with paid transaction preservation.
+ * Performs complete deletion of installment plan including all related data.
  * Steps:
  * 1. Verify ownership (RLS + explicit check)
- * 2. Count payments for response (paid/pending)
- * 3. Delete plan (CASCADE deletes all payments, transactions remain orphaned)
+ * 2. Count payments and collect transaction_ids
+ * 3. Delete plan (CASCADE deletes all payments)
+ * 4. Delete associated transactions
  *
  * @param supabase - Supabase client
  * @param planId - Installment plan ID
@@ -2006,10 +2010,10 @@ async function executeAtomicDeletion(
       }
     }
 
-    // Step 2: Count payments for response
+    // Step 2: Count payments and collect transaction_ids for deletion
     const { data: paymentsData, error: paymentsError } = await supabase
       .from('installment_payments')
-      .select('status, amount')
+      .select('status, amount, transaction_id')
       .eq('plan_id', planId)
 
     if (paymentsError) {
@@ -2020,11 +2024,12 @@ async function executeAtomicDeletion(
       }
     }
 
-    // Calculate paid and pending totals
+    // Calculate paid and pending totals, and collect transaction_ids
     let paidCount = 0
     let paidAmount = 0
     let pendingCount = 0
     let pendingAmount = 0
+    const transactionIds: string[] = []
 
     for (const payment of paymentsData || []) {
       if (payment.status === 'paid') {
@@ -2034,13 +2039,13 @@ async function executeAtomicDeletion(
         pendingCount++
         pendingAmount += payment.amount
       }
+      // Collect transaction_id for deletion
+      if (payment.transaction_id) {
+        transactionIds.push(payment.transaction_id)
+      }
     }
 
     // Step 3: Delete plan (CASCADE deletes all payments)
-    // Note: Transactions created from installment payments will remain in the database
-    // as orphaned records (preserving history). The FK relationship is from
-    // installment_payments.transaction_id -> transactions, so transactions are not
-    // automatically deleted when payments are deleted.
     const { error: deleteError } = await supabase
       .from('installment_plans')
       .delete()
@@ -2052,6 +2057,20 @@ async function executeAtomicDeletion(
       return {
         success: false,
         error: "Erro ao deletar parcelamento. Tente novamente."
+      }
+    }
+
+    // Step 4: Delete associated transactions (created from installment payments)
+    if (transactionIds.length > 0) {
+      const { error: txDeleteError } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', transactionIds)
+        .eq('user_id', userId)
+
+      if (txDeleteError) {
+        // Log but don't fail - the plan is already deleted
+        console.error('Error deleting associated transactions:', txDeleteError)
       }
     }
 

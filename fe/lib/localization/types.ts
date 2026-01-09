@@ -677,6 +677,9 @@ export interface Messages {
       activeDescription: string
       paidOff: string
       paidOffDescription: string
+      // Snake_case versions for dynamic tab-based lookup (tab values match DB status)
+      paid_off: string
+      paid_offDescription: string
       createButton: string
     }
     pagination: {
