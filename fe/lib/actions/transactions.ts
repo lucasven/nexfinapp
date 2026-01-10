@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 import { updateUserPropertiesInAnalytics } from "@/lib/analytics/user-properties"
+import { requireAuthenticatedUser, getAuthenticatedUser, isValidUUID } from "./shared"
 
 export async function getTransactions(filters?: {
   startDate?: string
@@ -14,11 +15,7 @@ export async function getTransactions(filters?: {
   search?: string
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   let query = supabase
     .from("transactions")
@@ -69,11 +66,7 @@ export async function getDashboardTransactions(
   calendarMonthStart: string
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Query 1: Credit card transactions from statement period start
   let creditCardTransactions: any[] = []
@@ -133,16 +126,10 @@ export async function createTransaction(formData: {
   payment_method_id: string
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Story 2.0 Part 1: Payment Method ID Validation (AC1.4, AC1.10)
-  // Validate payment_method_id is a valid UUID format
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (!uuidRegex.test(formData.payment_method_id)) {
+  if (!isValidUUID(formData.payment_method_id)) {
     throw new Error("Invalid payment method ID format")
   }
 
@@ -254,11 +241,7 @@ export async function updateTransaction(
   },
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Story 4.4: Fetch old transaction before update (for analytics)
   const { data: oldTransaction, error: fetchError } = await supabase
@@ -275,8 +258,7 @@ export async function updateTransaction(
   // Story 2.0 Part 1: Payment Method ID Validation (AC1.4, AC1.10)
   // If payment_method_id is being updated, validate it
   if (formData.payment_method_id) {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(formData.payment_method_id)) {
+    if (!isValidUUID(formData.payment_method_id)) {
       throw new Error("Invalid payment method ID format")
     }
 
@@ -343,11 +325,7 @@ export async function updateTransaction(
 
 export async function deleteTransaction(id: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Story 4.4 (AC4.4.3): Fetch transaction before deletion (for analytics)
   const { data: transaction, error: fetchError } = await supabase
@@ -394,10 +372,7 @@ export async function deleteTransaction(id: string) {
 
 export async function getBalance() {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser()
   if (!user) return { income: 0, expenses: 0, balance: 0 }
 
   // Calculate current month boundaries

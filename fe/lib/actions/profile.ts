@@ -6,14 +6,11 @@ import type { UserProfile, AuthorizedWhatsAppNumber } from "@/lib/types"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 import { updateUserPropertiesInAnalytics } from "@/lib/analytics/user-properties"
+import { requireAuthenticatedUser, getAuthenticatedUser } from "./shared"
 
 export async function getProfile(): Promise<UserProfile | null> {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("user_profiles")
@@ -65,11 +62,7 @@ export async function getProfile(): Promise<UserProfile | null> {
 
 export async function updateProfile(data: { display_name?: string; locale?: 'pt-br' | 'en' }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Ensure profile exists
   await getProfile()
@@ -120,11 +113,7 @@ export async function updateProfile(data: { display_name?: string; locale?: 'pt-
 
 export async function getUserLocale(): Promise<'pt-br' | 'en'> {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  
+  const { user } = await getAuthenticatedUser()
   if (!user) return 'pt-br' // Default for non-authenticated users
 
   const { data } = await supabase
@@ -138,11 +127,7 @@ export async function getUserLocale(): Promise<'pt-br' | 'en'> {
 
 export async function setUserLocale(locale: 'pt-br' | 'en') {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Get current locale before updating
   const currentProfile = await getProfile()
@@ -177,11 +162,7 @@ export async function setUserLocale(locale: 'pt-br' | 'en') {
 
 export async function getAuthorizedNumbers(): Promise<AuthorizedWhatsAppNumber[]> {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("authorized_whatsapp_numbers")
@@ -208,11 +189,7 @@ export async function addAuthorizedNumber(data: {
   }
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data: newNumber, error } = await supabase
     .from("authorized_whatsapp_numbers")
@@ -267,11 +244,7 @@ export async function updateAuthorizedNumber(
   },
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data: updatedNumber, error } = await supabase
     .from("authorized_whatsapp_numbers")
@@ -292,11 +265,7 @@ export async function updateAuthorizedNumber(
 
 export async function deleteAuthorizedNumber(id: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Get number details before deletion for analytics
   const { data: numberToDelete } = await supabase
@@ -335,10 +304,7 @@ export async function checkOnboardingStatus(): Promise<{
   onboarding_step: string | null
 } | null> {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser()
   if (!user) return null
 
   const { data, error } = await supabase
@@ -361,11 +327,7 @@ export async function updateOnboardingStep(
   }
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { error } = await supabase
     .from("user_profiles")
@@ -383,11 +345,7 @@ export async function updateOnboardingStep(
 
 export async function markOnboardingComplete() {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { error } = await supabase
     .from("user_profiles")

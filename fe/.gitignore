@@ -49,3 +49,6 @@ Thumbs.db
 # Misc
 .vercel
 .turbo
+
+# Claude Code context files
+**/CLAUDE.md

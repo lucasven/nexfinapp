@@ -4,14 +4,11 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
+import { requireAuthenticatedUser } from "./shared"
 
 export async function getRecurringTransactions() {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("recurring_transactions")
@@ -28,11 +25,7 @@ export async function getRecurringTransactions() {
 
 export async function getRecurringPayments(month?: number, year?: number) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const currentDate = new Date()
   const targetMonth = month ?? currentDate.getMonth() + 1
@@ -118,11 +111,7 @@ export async function createRecurringTransaction(formData: {
   day_of_month: number
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("recurring_transactions")
@@ -168,11 +157,7 @@ export async function updateRecurringTransaction(
   },
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("recurring_transactions")
@@ -205,11 +190,7 @@ export async function updateRecurringTransaction(
 
 export async function deleteRecurringTransaction(id: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { error } = await supabase.from("recurring_transactions").delete().eq("id", id).eq("user_id", user.id)
 
@@ -227,11 +208,7 @@ export async function deleteRecurringTransaction(id: string) {
 
 export async function generateRecurringPayments(recurringTransactionId: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Get the recurring transaction
   const { data: recurring } = await supabase
@@ -285,11 +262,7 @@ export async function generateRecurringPayments(recurringTransactionId: string) 
 
 export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Get the payment with recurring transaction
   const { data: payment } = await supabase
