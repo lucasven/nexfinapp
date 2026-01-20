@@ -224,11 +224,11 @@ async function analyzeWithAI(
   const client = getOpenAIClient()
 
   const completion = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-5',
     messages: [
-      { 
-        role: 'system', 
-        content: 'Você é um assistente financeiro experiente. Forneça análises claras, práticas e em português brasileiro. Seja conciso (máximo 5 parágrafos) e use emojis quando apropriado.' 
+      {
+        role: 'system',
+        content: 'Você é um assistente financeiro experiente. Forneça análises claras, práticas e em português brasileiro. Seja conciso (máximo 5 parágrafos) e use emojis quando apropriado.'
       },
       { role: 'user', content: prompt }
     ],
@@ -247,7 +247,7 @@ async function analyzeWithAI(
   logger.info('AI analysis LLM call completed', {
     userId,
     analysisType,
-    model: 'gpt-4o-mini',
+    model: 'gpt-5',
     inputTokens,
     outputTokens,
     durationMs: duration

@@ -550,7 +550,7 @@ export async function parseWithAI(
   
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5',
       messages,
       tools: [
         EXPENSE_TOOL,
@@ -669,7 +669,7 @@ export async function parseOCRWithAI(
     })
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5',
       messages,
       tools: [
         EXPENSE_TOOL,  // Only need expense tool for OCR extraction

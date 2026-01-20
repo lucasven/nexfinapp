@@ -3,12 +3,12 @@
  * Calculates costs for OpenAI API usage
  */
 
-// OpenAI pricing (as of January 2025)
+// OpenAI pricing (as of January 2026)
 const PRICING = {
-  // GPT-4o-mini pricing per 1M tokens
-  GPT4O_MINI: {
-    INPUT: 0.150,  // $0.150 per 1M input tokens
-    OUTPUT: 0.600  // $0.600 per 1M output tokens
+  // GPT-5 pricing per 1M tokens
+  GPT5: {
+    INPUT: 1.25,   // $1.25 per 1M input tokens
+    OUTPUT: 10.00  // $10.00 per 1M output tokens
   },
   // text-embedding-3-small pricing per 1M tokens
   EMBEDDING_SMALL: 0.020 // $0.020 per 1M tokens
@@ -26,11 +26,11 @@ export interface CostBreakdown {
 }
 
 /**
- * Calculate cost for GPT-4o-mini API call
+ * Calculate cost for GPT-5 API call
  */
 export function calculateLLMCost(usage: TokenUsage): CostBreakdown {
-  const inputCost = (usage.inputTokens / 1_000_000) * PRICING.GPT4O_MINI.INPUT
-  const outputCost = (usage.outputTokens / 1_000_000) * PRICING.GPT4O_MINI.OUTPUT
+  const inputCost = (usage.inputTokens / 1_000_000) * PRICING.GPT5.INPUT
+  const outputCost = (usage.outputTokens / 1_000_000) * PRICING.GPT5.OUTPUT
   const totalCost = inputCost + outputCost
   
   return {

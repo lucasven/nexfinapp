@@ -1060,7 +1060,7 @@ export async function handleTextMessage(
           [WhatsAppAnalyticsProperty.INTENT_TYPE]: aiResult.action,
           [WhatsAppAnalyticsProperty.INTENT_CONFIDENCE]: aiResult.confidence,
           [WhatsAppAnalyticsProperty.PROCESSING_TIME_MS]: llmDuration,
-          [WhatsAppAnalyticsProperty.OPENAI_MODEL]: 'gpt-4o-mini',
+          [WhatsAppAnalyticsProperty.OPENAI_MODEL]: 'gpt-5',
         }
       )
       
