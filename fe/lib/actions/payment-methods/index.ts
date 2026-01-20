@@ -21,7 +21,7 @@ export { setCreditMode, switchCreditMode } from "./credit-mode"
 export type { SwitchResult } from "./credit-mode"
 
 // CRUD operations
-export { getPaymentMethods, findOrCreatePaymentMethod, deletePaymentMethod } from "./crud"
+export { getPaymentMethods, findOrCreatePaymentMethod, updatePaymentMethod, deletePaymentMethod } from "./crud"
 
 // Statement settings
 export { getStatementPeriodPreview, updateStatementSettings } from "./statement-settings"

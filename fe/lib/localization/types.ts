@@ -169,6 +169,7 @@ export interface Messages {
     addSuccess: string
     addError: string
     editComingSoon: string
+    editSuccess: string
     editError: string
     deleteSuccess: string
     deleteError: string

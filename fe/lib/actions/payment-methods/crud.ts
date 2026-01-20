@@ -104,6 +104,51 @@ export async function findOrCreatePaymentMethod(
 }
 
 /**
+ * Update Payment Method
+ */
+export async function updatePaymentMethod(
+  paymentMethodId: string,
+  data: { name: string; type: PaymentMethodType }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await getSupabaseServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const { error: updateError } = await supabase
+      .from('payment_methods')
+      .update({
+        name: data.name.trim(),
+        type: data.type,
+      })
+      .eq('id', paymentMethodId)
+      .eq('user_id', user.id)
+
+    if (updateError) {
+      console.error('[updatePaymentMethod] Error updating:', updateError)
+      return { success: false, error: updateError.message }
+    }
+
+    revalidatePath('/')
+    revalidatePath('/[locale]')
+    revalidatePath('/[locale]/credit-cards')
+
+    return { success: true }
+  } catch (error) {
+    console.error('[updatePaymentMethod] Unexpected error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+}
+
+/**
  * Delete Payment Method
  */
 export async function deletePaymentMethod(paymentMethodId: string) {

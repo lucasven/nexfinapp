@@ -124,6 +124,7 @@ export const messages: Messages = {
     addSuccess: 'Método de pagamento adicionado com sucesso',
     addError: 'Erro ao adicionar método de pagamento',
     editComingSoon: 'Funcionalidade de edição em breve',
+    editSuccess: 'Método de pagamento atualizado com sucesso',
     editError: 'Erro ao atualizar método de pagamento',
     deleteSuccess: 'Método de pagamento excluído com sucesso',
     deleteError: 'Erro ao excluir método de pagamento',
