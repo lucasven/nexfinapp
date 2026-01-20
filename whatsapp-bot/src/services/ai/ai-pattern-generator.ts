@@ -582,7 +582,7 @@ export async function parseWithAI(
       ],
       tool_choice: 'auto',
       temperature: 0.1,
-      max_tokens: 1500  // Increased for OCR scenarios with multiple transactions
+      max_completion_tokens: 1500  // Increased for OCR scenarios with multiple transactions
     })
     
     // Record usage
@@ -676,7 +676,7 @@ export async function parseOCRWithAI(
       ],
       tool_choice: 'auto',
       temperature: 0.1,  // Low temperature for accuracy
-      max_tokens: 2000   // Higher limit for multi-transaction OCR
+      max_completion_tokens: 2000   // Higher limit for multi-transaction OCR
     })
 
     // Record usage

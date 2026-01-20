@@ -233,7 +233,7 @@ async function analyzeWithAI(
       { role: 'user', content: prompt }
     ],
     temperature: 0.7,
-    max_tokens: 500
+    max_completion_tokens: 500
   })
 
   const duration = Date.now() - startTime
