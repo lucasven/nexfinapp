@@ -581,7 +581,6 @@ export async function parseWithAI(
         STATEMENT_SUMMARY_TOOL
       ],
       tool_choice: 'auto',
-      temperature: 0.1,
       max_completion_tokens: 1500  // Increased for OCR scenarios with multiple transactions
     })
     
@@ -675,7 +674,6 @@ export async function parseOCRWithAI(
         EXPENSE_TOOL,  // Only need expense tool for OCR extraction
       ],
       tool_choice: 'auto',
-      temperature: 0.1,  // Low temperature for accuracy
       max_completion_tokens: 2000   // Higher limit for multi-transaction OCR
     })
 
