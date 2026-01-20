@@ -30,8 +30,10 @@ export function initializePostHog(): PostHog | null {
   try {
     posthogInstance = new PostHog(apiKey, {
       host: host,
-      flushAt: 1, // Send events immediately (important for serverless/Railway)
-      flushInterval: 0, // Don't batch events
+      flushAt: 20, // Batch up to 20 events before flushing
+      flushInterval: 10000, // Flush every 10 seconds
+      requestTimeout: 30000, // 30 second timeout (default is 10s)
+      disableGeoip: true, // Reduce payload size
     })
 
     console.log('PostHog analytics initialized successfully')
