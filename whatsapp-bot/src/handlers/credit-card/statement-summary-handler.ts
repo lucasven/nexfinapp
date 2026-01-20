@@ -79,31 +79,33 @@ export async function handleStatementSummaryRequest(
       return messages.statementSummary?.noCards || 'No credit cards found.'
     }
 
-    // 5. Edge case: Card without closing date
-    const cardsWithoutClosingDate = paymentMethods.filter(pm => !pm.statement_closing_day)
-    if (cardsWithoutClosingDate.length > 0) {
+    // 5. Filter to only cards with closing date configured
+    const cardsWithClosingDate = paymentMethods.filter(pm => pm.statement_closing_day != null)
+
+    // Edge case: No cards have closing date
+    if (cardsWithClosingDate.length === 0) {
       return messages.statementSummary?.noClosingDate || 'Credit card has no closing date configured.'
     }
 
-    // 6. Single card: Show summary immediately
-    if (paymentMethods.length === 1) {
+    // 6. Single card with closing date: Show summary immediately
+    if (cardsWithClosingDate.length === 1) {
       return await fetchAndFormatSummary(
         session.userId,
-        paymentMethods[0].id,
+        cardsWithClosingDate[0].id,
         locale,
         messages
       )
     }
 
-    // 7. Multiple cards: Ask for selection
-    const cardList = paymentMethods
+    // 7. Multiple cards: Ask for selection (only show cards with closing date)
+    const cardList = cardsWithClosingDate
       .map((pm, idx) => `${idx + 1}. ${pm.name}`)
       .join('\n')
 
     // Store pending state
     const context: PendingStatementSummaryContext = {
       type: 'pending_statement_summary',
-      creditCards: paymentMethods.map(pm => ({ id: pm.id, name: pm.name })),
+      creditCards: cardsWithClosingDate.map(pm => ({ id: pm.id, name: pm.name })),
       locale,
       createdAt: new Date().toISOString()
     }
@@ -114,7 +116,7 @@ export async function handleStatementSummaryRequest(
       pendingStatementSummaryState.delete(whatsappNumber)
     }, STATE_TTL_MS)
 
-    return messages.statementSummary?.cardSelection(paymentMethods.length, cardList) || 'Select a card.'
+    return messages.statementSummary?.cardSelection(cardsWithClosingDate.length, cardList) || 'Select a card.'
 
   } catch (error: any) {
     console.error('Error handling statement summary request:', error)
