@@ -59,3 +59,7 @@ Thumbs.db
 .turbo
 fe/.env.local.backup
 whatsapp-bot/test-output.txt
+
+# Claude Code context files (in subdirectories only, keep root CLAUDE.md)
+**/CLAUDE.md
+!/CLAUDE.md

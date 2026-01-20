@@ -5,17 +5,14 @@ import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 import type { Budget, BudgetWithSpending } from "@/lib/types"
+import { requireAuthenticatedUser, getAuthenticatedUser } from "./shared"
 
 /**
  * Get monthly budgets for a specific month/year (excludes defaults)
  */
 export async function getBudgets(month?: number, year?: number) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const currentDate = new Date()
   const targetMonth = month ?? currentDate.getMonth() + 1
@@ -42,11 +39,7 @@ export async function getBudgets(month?: number, year?: number) {
  */
 export async function getDefaultBudgets(): Promise<Budget[]> {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("budgets")
@@ -68,10 +61,7 @@ export async function getDefaultBudgets(): Promise<Budget[]> {
  */
 export async function getBudgetWithSpending(month?: number, year?: number): Promise<BudgetWithSpending[]> {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { user } = await getAuthenticatedUser()
   if (!user) return []
 
   const currentDate = new Date()
@@ -146,11 +136,7 @@ export async function createBudget(formData: {
   year: number
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("budgets")
@@ -190,11 +176,7 @@ export async function createDefaultBudget(formData: {
   amount: number
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("budgets")
@@ -232,11 +214,7 @@ export async function updateBudget(
   },
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("budgets")
@@ -262,11 +240,7 @@ export async function updateBudget(
 
 export async function deleteBudget(id: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { error } = await supabase.from("budgets").delete().eq("id", id).eq("user_id", user.id)
 

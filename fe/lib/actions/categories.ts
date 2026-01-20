@@ -4,14 +4,11 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
+import { requireAuthenticatedUser } from "./shared"
 
 export async function getCategories() {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Get default categories (user_id is null) and user's custom categories
   const { data, error } = await supabase
@@ -31,11 +28,7 @@ export async function createCategory(formData: {
   color?: string
 }) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from("categories")
@@ -74,11 +67,7 @@ export async function updateCategory(
   }
 ) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Check if user owns this category (for custom categories)
   const { data: category } = await supabase
@@ -120,11 +109,7 @@ export async function updateCategory(
 
 export async function deleteCategory(id: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Check if category is custom and owned by user
   const { data: category } = await supabase
@@ -173,11 +158,7 @@ export async function deleteCategory(id: string) {
 
 export async function checkCategoryUsage(categoryId: string) {
   const supabase = await getSupabaseServerClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  const user = await requireAuthenticatedUser()
 
   // Check transactions
   const { count: transactionCount } = await supabase

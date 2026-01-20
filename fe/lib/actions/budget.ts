@@ -20,6 +20,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent, AnalyticsProperty } from "@/lib/analytics/events"
 import { getStatementPeriod } from "@/lib/utils/statement-period"
+import { getAuthenticatedUser } from "./shared"
 
 /**
  * Transaction detail in budget breakdown
@@ -98,16 +99,12 @@ export async function getBudgetForPeriod(
 
   try {
     const supabase = await getSupabaseServerClient()
-
-    // Get authenticated user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { user, error: authError } = await getAuthenticatedUser()
 
     if (!user) {
       return {
         success: false,
-        error: "Not authenticated"
+        error: authError || "Not authenticated"
       }
     }
 
@@ -354,11 +351,7 @@ export async function getBudgetProgress(
 
   try {
     const supabase = await getSupabaseServerClient()
-
-    // Get authenticated user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { user } = await getAuthenticatedUser()
 
     if (!user) {
       console.error("getBudgetProgress: Not authenticated")
@@ -496,11 +489,7 @@ export async function getBudgetProgress(
 export async function getAllBudgetProgress(): Promise<BudgetProgress[]> {
   try {
     const supabase = await getSupabaseServerClient()
-
-    // Get authenticated user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { user } = await getAuthenticatedUser()
 
     if (!user) {
       console.error("getAllBudgetProgress: Not authenticated")

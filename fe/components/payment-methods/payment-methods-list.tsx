@@ -226,11 +226,13 @@ export function PaymentMethodsList({ paymentMethods }: PaymentMethodsListProps) 
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('paymentMethods.deleteMethod')}</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>{t('paymentMethods.deleteConfirm')}</p>
-              <p className="text-sm text-muted-foreground">
-                {t('paymentMethods.deleteWarning')}
-              </p>
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>{t('paymentMethods.deleteConfirm')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t('paymentMethods.deleteWarning')}
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

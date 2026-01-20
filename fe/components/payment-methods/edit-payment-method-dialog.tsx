@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import { PaymentMethod } from '@/lib/types'
 import type { PaymentMethodType } from '@/lib/constants/payment-methods'
+import { updatePaymentMethod } from '@/lib/actions/payment-methods'
 
 interface EditPaymentMethodDialogProps {
   method: PaymentMethod
@@ -68,11 +69,20 @@ export function EditPaymentMethodDialog({ method, open, onOpenChange, onSuccess 
 
     setIsSubmitting(true)
     try {
-      // TODO: Create updatePaymentMethod server action
-      // For now, just show a success message
-      toast.info(t('paymentMethods.editComingSoon'))
+      const result = await updatePaymentMethod(method.id, {
+        name: trimmedName,
+        type: methodType,
+      })
+
+      if (!result.success) {
+        toast.error(result.error || t('paymentMethods.editError'))
+        return
+      }
+
+      toast.success(t('paymentMethods.editSuccess'))
       onOpenChange(false)
       onSuccess?.()
+      router.refresh()
     } catch (error) {
       console.error('Error updating payment method:', error)
       toast.error(t('paymentMethods.editError'))
