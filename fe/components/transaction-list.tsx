@@ -33,12 +33,14 @@ export function TransactionList({ transactions, categories, paymentMethods }: Tr
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all")
 
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch = transaction.description?.toLowerCase().includes(search.toLowerCase()) ?? true
     const matchesType = typeFilter === "all" || transaction.type === typeFilter
     const matchesCategory = categoryFilter === "all" || transaction.category_id === categoryFilter
-    return matchesSearch && matchesType && matchesCategory
+    const matchesPaymentMethod = paymentMethodFilter === "all" || transaction.payment_method_id === paymentMethodFilter
+    return matchesSearch && matchesType && matchesCategory && matchesPaymentMethod
   })
 
   // Calculate statement period badges for all transactions (batch calculation)
@@ -117,6 +119,20 @@ export function TransactionList({ transactions, categories, paymentMethods }: Tr
               {categories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
                   {category.icon} {translateCategoryName(category.name, locale as 'pt-br' | 'en')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+            <SelectTrigger className="w-full md:w-[200px]">
+              <SelectValue placeholder={t('table.paymentMethod')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('transaction.allPaymentMethods')}</SelectItem>
+              {paymentMethods.map((pm) => (
+                <SelectItem key={pm.id} value={pm.id}>
+                  {pm.name}
                 </SelectItem>
               ))}
             </SelectContent>
