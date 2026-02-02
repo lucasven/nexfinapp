@@ -261,24 +261,21 @@ export async function findBestCategoryMatch(
   categoryName: string,
   options: MatchOptions
 ): Promise<CategoryMatch | null> {
-  const { userId, type = 'expense', threshold = 0.6, includeCustom = true } = options;
+  const { userId, type = 'expense', threshold = 0.6 } = options;
 
-  // Fetch all available categories for the user
+  // Fetch visible categories for the user (respects hidden defaults)
   const supabase = getSupabaseClient();
-  let query = supabase
-    .from('categories')
-    .select('id, name, is_custom')
-    .eq('type', type);
+  const { data: allCategories, error } = await supabase
+    .rpc('get_visible_categories', { p_user_id: userId });
 
-  if (includeCustom) {
-    query = query.or(`user_id.eq.${userId},user_id.is.null`);
-  } else {
-    query = query.is('user_id', null);
+  if (error || !allCategories || allCategories.length === 0) {
+    return null;
   }
 
-  const { data: categories, error } = await query;
+  // Filter by type
+  const categories = allCategories.filter((c: any) => c.type === type);
 
-  if (error || !categories || categories.length === 0) {
+  if (categories.length === 0) {
     return null;
   }
 
@@ -432,13 +429,12 @@ export async function guessCategoryFromDescription(
 ): Promise<CategoryMatch | null> {
   const normalizedDesc = normalizePortugueseText(description);
 
-  // Fetch all categories
+  // Fetch visible categories for the user (respects hidden defaults)
   const supabase = getSupabaseClient();
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('id, name, is_custom')
-    .eq('type', type)
-    .or(`user_id.eq.${userId},user_id.is.null`);
+  const { data: allCategories } = await supabase
+    .rpc('get_visible_categories', { p_user_id: userId });
+
+  const categories = allCategories?.filter((c: any) => c.type === type);
 
   if (!categories || categories.length === 0) {
     return null;

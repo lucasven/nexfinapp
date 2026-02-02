@@ -315,6 +315,10 @@ export interface Messages {
     systemBadge: string
     cannotDeleteSystemCategory: string
     deleteSystemCategoryTooltip: string
+    hideTitle: string
+    hideConfirm: string
+    hideNote: string
+    hide: string
   }
 
   // Default categories

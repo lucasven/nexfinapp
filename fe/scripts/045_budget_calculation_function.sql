@@ -11,44 +11,43 @@
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION calculate_statement_budget_spent(
-  p_payment_method_id UUID,
-  p_user_id UUID,
-  p_start_date DATE,
-  p_end_date DATE
-) RETURNS DECIMAL(10,2) AS $$
-DECLARE
-  transactions_sum DECIMAL(10,2);
-  installments_sum DECIMAL(10,2);
-  total_spent DECIMAL(10,2);
-BEGIN
-  -- Calculate sum of expense transactions in period
-  SELECT COALESCE(SUM(amount), 0)
-  INTO transactions_sum
-  FROM transactions
-  WHERE user_id = p_user_id
-    AND payment_method_id = p_payment_method_id
-    AND type = 'expense'
-    AND date >= p_start_date
-    AND date <= p_end_date;
+    p_payment_method_id UUID,
+    p_user_id UUID,
+    p_start_date DATE,
+    p_end_date DATE
+  ) RETURNS DECIMAL(10,2) AS $$
+  DECLARE
+    transactions_sum DECIMAL(10,2);
+    installments_sum DECIMAL(10,2);
+    total_spent DECIMAL(10,2);
+  BEGIN
+    -- Calculate sum of expense transactions in period
+    SELECT COALESCE(SUM(amount), 0)
+    INTO transactions_sum
+    FROM transactions
+    WHERE user_id = p_user_id
+      AND payment_method_id = p_payment_method_id
+      AND type = 'expense'
+      AND date >= p_start_date
+      AND date <= p_end_date;
 
-  -- Calculate sum of pending installment payments due in period
-  -- Only include pending payments (paid payments would be double-counted as transactions)
-  SELECT COALESCE(SUM(ip.amount), 0)
-  INTO installments_sum
-  FROM installment_payments ip
-  INNER JOIN installment_plans ipl ON ip.plan_id = ipl.id
-  WHERE ipl.user_id = p_user_id
-    AND ipl.payment_method_id = p_payment_method_id
-    AND ip.status = 'pending'
-    AND ip.due_date >= p_start_date
-    AND ip.due_date <= p_end_date;
+    -- Calculate sum of pending installment payments due in period
+    -- FIX: Only count if NOT already linked to a transaction (to avoid double-counting)
+    SELECT COALESCE(SUM(ip.amount), 0)
+    INTO installments_sum
+    FROM installment_payments ip
+    INNER JOIN installment_plans ipl ON ip.plan_id = ipl.id
+    WHERE ipl.user_id = p_user_id
+      AND ipl.payment_method_id = p_payment_method_id
+      AND ip.status = 'pending'
+      AND ip.transaction_id IS NULL  -- <<< NEW: Exclude linked installments
+      AND ip.due_date >= p_start_date
+      AND ip.due_date <= p_end_date;
 
-  -- Total spent = transactions + installment payments
-  total_spent := transactions_sum + installments_sum;
-
-  RETURN total_spent;
-END;
-$$ LANGUAGE plpgsql STABLE;
+    total_spent := transactions_sum + installments_sum;
+    RETURN total_spent;
+  END;
+  $$ LANGUAGE plpgsql STABLE;
 
 -- Add comment for documentation
 COMMENT ON FUNCTION calculate_statement_budget_spent(UUID, UUID, DATE, DATE) IS

@@ -361,6 +361,10 @@ export const messages: Messages = {
     systemBadge: 'Sistema',
     cannotDeleteSystemCategory: 'Categorias do sistema não podem ser deletadas',
     deleteSystemCategoryTooltip: 'Categoria do sistema não pode ser deletada',
+    hideTitle: 'Ocultar Categoria',
+    hideConfirm: 'Tem certeza que deseja ocultar a categoria "{name}"?',
+    hideNote: 'Transações existentes com esta categoria serão mantidas.',
+    hide: 'Ocultar',
   },
 
   categories: {

@@ -39,6 +39,8 @@ export enum AnalyticsEvent {
   CATEGORY_CREATED = 'category_created',
   CATEGORY_EDITED = 'category_edited',
   CATEGORY_DELETED = 'category_deleted',
+  DEFAULT_CATEGORY_EDITED = 'default_category_edited',
+  DEFAULT_CATEGORY_HIDDEN = 'default_category_hidden',
   
   // Recurring Transaction Events
   RECURRING_CREATED = 'recurring_created',

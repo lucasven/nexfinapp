@@ -39,6 +39,7 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isDefaultCategory, setIsDefaultCategory] = useState(false)
 
   // Onboarding state
   const { currentStep, isOnboarding, loading, refresh: refreshOnboarding } = useOnboarding()
@@ -70,9 +71,11 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
   }
 
   const handleDeleteClick = (category: Category) => {
-    if (!category.is_custom || category.is_system) {
+    if (category.is_system) {
       return
     }
+    const isDefault = !category.is_custom && !category.is_system && category.user_id === null
+    setIsDefaultCategory(isDefault)
     setCategoryToDelete(category)
     setDeleteDialogOpen(true)
     setDeleteError(null)
@@ -100,7 +103,8 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
     const isCustom = category.is_custom
     const isSystem = category.is_system
     const isOwned = category.user_id === userId
-    const canDelete = isCustom && isOwned && !isSystem
+    const isDefault = !isCustom && !isSystem && category.user_id === null
+    const canDelete = (isCustom && isOwned && !isSystem) || isDefault
 
     return (
       <div
@@ -218,11 +222,22 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('category.deleteTitle')}</DialogTitle>
+            <DialogTitle>
+              {isDefaultCategory ? t('category.hideTitle') : t('category.deleteTitle')}
+            </DialogTitle>
             <DialogDescription>
-              {t('category.deleteConfirm')} &ldquo;{categoryToDelete?.name}&rdquo;?
+              {isDefaultCategory
+                ? t('category.hideConfirm', { name: categoryToDelete?.name ?? '' })
+                : `${t('category.deleteConfirm')} "${categoryToDelete?.name}"?`
+              }
             </DialogDescription>
           </DialogHeader>
+
+          {isDefaultCategory && (
+            <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
+              {t('category.hideNote')}
+            </div>
+          )}
 
           {deleteError && (
             <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 p-3 rounded-md border border-red-200">
@@ -236,7 +251,7 @@ export function CategoriesClient({ categories, userId, userEmail, displayName }:
               {t('common.cancel')}
             </Button>
             <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleteLoading}>
-              {deleteLoading ? t('common.deleting') : t('common.delete')}
+              {deleteLoading ? t('common.deleting') : isDefaultCategory ? t('category.hide') : t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>
