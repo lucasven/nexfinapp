@@ -9,8 +9,7 @@ import {
   UnifiedMessage,
   MessageButton,
   SendResult,
-  Platform,
-  MessagingConfig
+  Platform
 } from './types.js';
 import { TelegramProvider } from './providers/telegram-provider.js';
 import { logger } from '../services/monitoring/logger.js';
@@ -110,14 +109,7 @@ export function initializeTelegram(botToken: string, webhookUrl?: string): Teleg
     botToken,
     webhookUrl
   });
-  
+
   messagingManager.registerProvider(provider);
   return provider;
-}
-
-/**
- * Get messaging manager instance
- */
-export function getMessagingManager(): MessagingManager {
-  return messagingManager;
 }

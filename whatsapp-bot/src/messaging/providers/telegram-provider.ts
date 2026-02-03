@@ -253,14 +253,10 @@ export class TelegramProvider implements IMessagingProvider {
     this.callbackHandlers.push(handler);
   }
   
-  async getUserDisplayName(userId: string): Promise<string | null> {
-    try {
-      // Telegram doesn't have a direct API for this
-      // We'd need to cache user info from messages
-      return null;
-    } catch {
-      return null;
-    }
+  async getUserDisplayName(_userId: string): Promise<string | null> {
+    // Telegram doesn't have a direct API for this
+    // We'd need to cache user info from messages
+    return null;
   }
   
   async getChatInfo(chatId: string): Promise<{ name?: string; isGroup: boolean } | null> {

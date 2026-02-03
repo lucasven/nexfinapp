@@ -58,32 +58,14 @@ export function toMessageContext(message: UnifiedMessage): MessageContext {
  * Handle a unified message using the existing NexFin handler
  */
 export async function handleUnifiedMessage(message: UnifiedMessage): Promise<string | string[] | null> {
-  try {
-    logger.info('Processing unified message', {
-      platform: message.platform,
-      from: message.from,
-      hasText: !!message.text,
-      hasImage: message.hasImage,
-      isGroup: message.isGroup
-    });
-    
-    const context = toMessageContext(message);
-    
-    // Use the existing message handler
-    const response = await handleMessage(context);
-    
-    return response;
-  } catch (error) {
-    logger.error('Error handling unified message', { error, messageId: message.id });
-    throw error;
-  }
-}
+  logger.info('Processing unified message', {
+    platform: message.platform,
+    from: message.from,
+    hasText: !!message.text,
+    hasImage: message.hasImage,
+    isGroup: message.isGroup
+  });
 
-/**
- * Create a message handler function for use with providers
- */
-export function createMessageHandler() {
-  return async (message: UnifiedMessage): Promise<string | string[] | null> => {
-    return handleUnifiedMessage(message);
-  };
+  const context = toMessageContext(message);
+  return handleMessage(context);
 }

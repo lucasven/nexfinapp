@@ -92,16 +92,3 @@ export interface IMessagingProvider {
   getChatInfo(chatId: string): Promise<{ name?: string; isGroup: boolean } | null>;
 }
 
-/**
- * Configuration for messaging providers
- */
-export interface MessagingConfig {
-  whatsapp?: {
-    authStatePath: string;
-  };
-  telegram?: {
-    botToken: string;
-    webhookUrl?: string;
-    webhookSecret?: string;
-  };
-}

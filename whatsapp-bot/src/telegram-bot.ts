@@ -7,7 +7,7 @@
 import * as dotenv from 'dotenv';
 import http from 'http';
 import { TelegramProvider } from './messaging/providers/telegram-provider.js';
-import { createMessageHandler } from './messaging/nexfin-adapter.js';
+import { handleUnifiedMessage } from './messaging/nexfin-adapter.js';
 import { logger } from './services/monitoring/logger.js';
 import { initializePostHog, shutdownPostHog } from './analytics/index.js';
 
@@ -42,8 +42,7 @@ async function startTelegramBot() {
   });
 
   // Register message handler
-  const messageHandler = createMessageHandler();
-  telegramProvider.onMessage(messageHandler);
+  telegramProvider.onMessage(handleUnifiedMessage);
 
   // Connect to Telegram
   await telegramProvider.connect();
