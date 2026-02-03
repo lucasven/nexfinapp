@@ -15,11 +15,11 @@
 import type { proto } from '@whiskeysockets/baileys'
 
 /**
- * Complete set of identifiers for a WhatsApp user
+ * Complete set of identifiers for a user (WhatsApp or Telegram)
  */
 export interface UserIdentifiers {
-  /** Full WhatsApp JID - always available, most reliable */
-  jid: string
+  /** Full WhatsApp JID - always available for WhatsApp, most reliable */
+  jid?: string
 
   /** Extracted phone number (digits only) - may be null for some Business accounts */
   phoneNumber: string | null
@@ -27,7 +27,10 @@ export interface UserIdentifiers {
   /** Local Identifier (LID) for anonymous/Business accounts - may be null */
   lid: string | null
 
-  /** User's display name from WhatsApp - not unique but useful for display */
+  /** Telegram user ID - available for Telegram messages */
+  telegramId?: string
+
+  /** User's display name from WhatsApp/Telegram - not unique but useful for display */
   pushName: string | null
 
   /** Account type detection */
@@ -38,6 +41,9 @@ export interface UserIdentifiers {
 
   /** Group JID if message is from a group */
   groupJid: string | null
+
+  /** Platform identifier */
+  platform?: 'whatsapp' | 'telegram'
 }
 
 /**
