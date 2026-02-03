@@ -20,6 +20,7 @@ import { getConversationState } from '../../services/conversation/state-manager.
 import { getUserLocale } from '../../localization/i18n.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
 import type { UserIdentifiers } from '../../utils/user-identifiers.js'
+import { isWhatsAppUser } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { recordParsingMetric, ParsingStrategy } from '../../services/monitoring/metrics-tracker.js'
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
@@ -731,8 +732,8 @@ export async function handleTextMessage(
         // Check permissions
         const requiredPermission = ACTION_PERMISSION_MAP[commandResult.action]
         if (requiredPermission) {
-          // Use multi-identifier authorization if available, fallback to legacy
-          const authResult = userIdentifiers
+          // Use multi-identifier authorization if available (WhatsApp only), fallback to legacy
+          const authResult = userIdentifiers && isWhatsAppUser(userIdentifiers)
             ? await checkAuthorizationWithIdentifiers(userIdentifiers)
             : await checkAuthorization(whatsappNumber)
           
@@ -929,8 +930,8 @@ export async function handleTextMessage(
       // Check permissions for cached action
       const requiredPermission = ACTION_PERMISSION_MAP[cachedIntent.action]
       if (requiredPermission) {
-        // Use multi-identifier authorization if available, fallback to legacy
-        const authResult = userIdentifiers
+        // Use multi-identifier authorization if available (WhatsApp only), fallback to legacy
+        const authResult = userIdentifiers && isWhatsAppUser(userIdentifiers)
           ? await checkAuthorizationWithIdentifiers(userIdentifiers)
           : await checkAuthorization(whatsappNumber)
 
@@ -1067,8 +1068,8 @@ export async function handleTextMessage(
       // Check permissions
       const requiredPermission = ACTION_PERMISSION_MAP[aiResult.action]
       if (requiredPermission) {
-        // Use multi-identifier authorization if available, fallback to legacy
-        const authResult = userIdentifiers
+        // Use multi-identifier authorization if available (WhatsApp only), fallback to legacy
+        const authResult = userIdentifiers && isWhatsAppUser(userIdentifiers)
           ? await checkAuthorizationWithIdentifiers(userIdentifiers)
           : await checkAuthorization(whatsappNumber)
         

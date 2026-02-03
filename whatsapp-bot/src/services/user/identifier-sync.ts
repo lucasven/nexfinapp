@@ -7,7 +7,7 @@
  */
 
 import { getSupabaseClient } from '../database/supabase-client.js'
-import type { UserIdentifiers } from '../../utils/user-identifiers.js'
+import type { WhatsAppUserIdentifiers } from '../../utils/user-identifiers.js'
 
 /**
  * Sync user identifiers to the database after successful authorization
@@ -26,7 +26,7 @@ import type { UserIdentifiers } from '../../utils/user-identifiers.js'
  */
 export async function syncUserIdentifiers(
   userId: string,
-  identifiers: UserIdentifiers
+  identifiers: WhatsAppUserIdentifiers
 ): Promise<boolean> {
   try {
     const supabase = getSupabaseClient()
@@ -80,7 +80,7 @@ export async function syncUserIdentifiers(
  */
 export async function shouldSyncIdentifiers(
   userId: string,
-  identifiers: UserIdentifiers
+  identifiers: WhatsAppUserIdentifiers
 ): Promise<boolean> {
   try {
     const supabase = getSupabaseClient()

@@ -8,7 +8,10 @@ import {
   extractUserIdentifiers,
   normalizePhoneNumber,
   isSameUser,
-  formatIdentifiersForLog
+  formatIdentifiersForLog,
+  isWhatsAppUser,
+  isTelegramUser,
+  createTelegramIdentifiers
 } from '../user-identifiers'
 import type { proto } from '@whiskeysockets/baileys'
 
@@ -202,6 +205,7 @@ describe('User Identifiers', () => {
   describe('formatIdentifiersForLog', () => {
     it('should sanitize phone number (show only last 4 digits)', () => {
       const identifiers: any = {
+        platform: 'whatsapp',
         jid: '5511999999999@s.whatsapp.net',
         phoneNumber: '5511999999999',
         lid: null,
@@ -213,6 +217,7 @@ describe('User Identifiers', () => {
 
       const result = formatIdentifiersForLog(identifiers)
 
+      expect(result).toContain('platform:whatsapp')
       expect(result).toContain('phone:****9999')
       expect(result).toContain('type:regular')
       expect(result).toContain('name:Test User')
@@ -221,6 +226,7 @@ describe('User Identifiers', () => {
 
     it('should sanitize LID (show only first 8 chars)', () => {
       const identifiers: any = {
+        platform: 'whatsapp',
         jid: 'test@lid',
         phoneNumber: null,
         lid: 'business_lid_1234567890',
@@ -232,6 +238,7 @@ describe('User Identifiers', () => {
 
       const result = formatIdentifiersForLog(identifiers)
 
+      expect(result).toContain('platform:whatsapp')
       expect(result).toContain('lid:business...')
       expect(result).toContain('type:business')
       expect(result).not.toContain('business_lid_1234567890') // Full LID should not appear
@@ -239,6 +246,7 @@ describe('User Identifiers', () => {
 
     it('should include group information when applicable', () => {
       const identifiers: any = {
+        platform: 'whatsapp',
         jid: '5511888888888@s.whatsapp.net',
         phoneNumber: '5511888888888',
         lid: null,
@@ -250,11 +258,13 @@ describe('User Identifiers', () => {
 
       const result = formatIdentifiersForLog(identifiers)
 
+      expect(result).toContain('platform:whatsapp')
       expect(result).toContain('group:123456789')
     })
 
     it('should handle minimal identifier data', () => {
       const identifiers: any = {
+        platform: 'whatsapp',
         jid: 'test@s.whatsapp.net',
         phoneNumber: null,
         lid: null,
@@ -266,10 +276,29 @@ describe('User Identifiers', () => {
 
       const result = formatIdentifiersForLog(identifiers)
 
+      expect(result).toContain('platform:whatsapp')
       expect(result).toContain('type:unknown')
       expect(result).not.toContain('phone:')
       expect(result).not.toContain('lid:')
       expect(result).not.toContain('name:')
+    })
+
+    it('should format Telegram identifiers', () => {
+      const identifiers: any = {
+        platform: 'telegram',
+        telegramId: '123456789012',
+        chatId: '123456789012',
+        pushName: 'Telegram User',
+        isGroup: false,
+        groupId: null
+      }
+
+      const result = formatIdentifiersForLog(identifiers)
+
+      expect(result).toContain('platform:telegram')
+      expect(result).toContain('tgId:****9012')
+      expect(result).toContain('name:Telegram User')
+      expect(result).not.toContain('123456789012') // Full ID should not appear
     })
   })
 })
