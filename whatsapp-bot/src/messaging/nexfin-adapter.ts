@@ -1,6 +1,6 @@
 /**
  * NexFin Adapter
- * 
+ *
  * Bridges the unified messaging system to the existing NexFin handlers
  */
 
@@ -8,11 +8,39 @@ import { UnifiedMessage } from './types.js';
 import { MessageContext } from '../types.js';
 import { handleMessage } from '../handlers/core/message-handler.js';
 import { logger } from '../services/monitoring/logger.js';
+import {
+  UserIdentifiers,
+  WhatsAppUserIdentifiers,
+  createTelegramIdentifiers
+} from '../utils/user-identifiers.js';
 
 /**
  * Convert a UnifiedMessage to the existing MessageContext format
  */
 export function toMessageContext(message: UnifiedMessage): MessageContext {
+  let userIdentifiers: UserIdentifiers;
+
+  if (message.platform === 'whatsapp') {
+    userIdentifiers = {
+      platform: 'whatsapp',
+      jid: `${message.from}@s.whatsapp.net`,
+      phoneNumber: message.from,
+      lid: null,
+      pushName: null,
+      accountType: 'unknown',
+      isGroup: message.isGroup,
+      groupJid: message.groupId || null
+    } satisfies WhatsAppUserIdentifiers;
+  } else {
+    userIdentifiers = createTelegramIdentifiers(
+      message.from,
+      message.chatId,
+      message.isGroup,
+      null, // pushName - could be extracted from raw if needed
+      message.groupId || null
+    );
+  }
+
   return {
     from: message.from,
     isGroup: message.isGroup,
@@ -22,12 +50,7 @@ export function toMessageContext(message: UnifiedMessage): MessageContext {
     hasImage: message.hasImage,
     imageBuffer: message.imageBuffer,
     quotedMessage: undefined, // TODO: Handle quoted messages
-    userIdentifiers: {
-      jid: message.platform === 'whatsapp' ? `${message.from}@s.whatsapp.net` : undefined,
-      phoneNumber: message.platform === 'whatsapp' ? message.from : undefined,
-      telegramId: message.platform === 'telegram' ? message.from : undefined,
-      platform: message.platform
-    }
+    userIdentifiers
   };
 }
 

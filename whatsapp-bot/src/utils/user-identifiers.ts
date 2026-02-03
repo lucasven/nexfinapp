@@ -15,11 +15,24 @@
 import type { proto } from '@whiskeysockets/baileys'
 
 /**
- * Complete set of identifiers for a user (WhatsApp or Telegram)
+ * Base identifiers shared across platforms
  */
-export interface UserIdentifiers {
-  /** Full WhatsApp JID - always available for WhatsApp, most reliable */
-  jid?: string
+interface BaseUserIdentifiers {
+  /** User's display name - not unique but useful for display */
+  pushName: string | null
+
+  /** Whether this message is from a group */
+  isGroup: boolean
+}
+
+/**
+ * WhatsApp-specific user identifiers
+ */
+export interface WhatsAppUserIdentifiers extends BaseUserIdentifiers {
+  platform: 'whatsapp'
+
+  /** Full WhatsApp JID - always available, most reliable */
+  jid: string
 
   /** Extracted phone number (digits only) - may be null for some Business accounts */
   phoneNumber: string | null
@@ -27,23 +40,47 @@ export interface UserIdentifiers {
   /** Local Identifier (LID) for anonymous/Business accounts - may be null */
   lid: string | null
 
-  /** Telegram user ID - available for Telegram messages */
-  telegramId?: string
-
-  /** User's display name from WhatsApp/Telegram - not unique but useful for display */
-  pushName: string | null
-
   /** Account type detection */
   accountType: 'regular' | 'business' | 'unknown'
 
-  /** Whether this message is from a group */
-  isGroup: boolean
-
   /** Group JID if message is from a group */
   groupJid: string | null
+}
 
-  /** Platform identifier */
-  platform?: 'whatsapp' | 'telegram'
+/**
+ * Telegram-specific user identifiers
+ */
+export interface TelegramUserIdentifiers extends BaseUserIdentifiers {
+  platform: 'telegram'
+
+  /** Telegram user ID - always available for Telegram messages */
+  telegramId: string
+
+  /** Telegram chat ID */
+  chatId: string
+
+  /** Group ID if message is from a group */
+  groupId: string | null
+}
+
+/**
+ * Union type for user identifiers across all platforms
+ * Use type guards (isWhatsAppUser, isTelegramUser) to narrow the type
+ */
+export type UserIdentifiers = WhatsAppUserIdentifiers | TelegramUserIdentifiers
+
+/**
+ * Type guard to check if identifiers are from WhatsApp
+ */
+export function isWhatsAppUser(identifiers: UserIdentifiers): identifiers is WhatsAppUserIdentifiers {
+  return identifiers.platform === 'whatsapp'
+}
+
+/**
+ * Type guard to check if identifiers are from Telegram
+ */
+export function isTelegramUser(identifiers: UserIdentifiers): identifiers is TelegramUserIdentifiers {
+  return identifiers.platform === 'telegram'
 }
 
 /**
@@ -112,12 +149,12 @@ export function extractPhoneNumberFromJid(jid: string): string | null {
  *
  * @param message - Baileys WebMessageInfo object
  * @param isGroup - Whether the message is from a group
- * @returns Complete UserIdentifiers object
+ * @returns WhatsAppUserIdentifiers object
  */
 export function extractUserIdentifiers(
   message: ExtendedWebMessageInfo,
   isGroup: boolean
-): UserIdentifiers {
+): WhatsAppUserIdentifiers {
   const key = message.key as ExtendedMessageKey
   const remoteJid = key.remoteJid || ''
 
@@ -156,6 +193,7 @@ export function extractUserIdentifiers(
   const groupJid = isGroup ? remoteJid : null
 
   return {
+    platform: 'whatsapp',
     jid: rawJid,
     phoneNumber,
     lid,
@@ -244,27 +282,66 @@ export function isSameUser(jid1: string, jid2: string): boolean {
 export function formatIdentifiersForLog(identifiers: UserIdentifiers): string {
   const parts: string[] = []
 
-  if (identifiers.phoneNumber) {
-    // Show only last 4 digits
-    const masked = '****' + identifiers.phoneNumber.slice(-4)
-    parts.push(`phone:${masked}`)
-  }
+  parts.push(`platform:${identifiers.platform}`)
 
-  if (identifiers.lid) {
-    // Show only first 8 chars of LID
-    const masked = identifiers.lid.substring(0, 8) + '...'
-    parts.push(`lid:${masked}`)
-  }
+  if (isWhatsAppUser(identifiers)) {
+    if (identifiers.phoneNumber) {
+      // Show only last 4 digits
+      const masked = '****' + identifiers.phoneNumber.slice(-4)
+      parts.push(`phone:${masked}`)
+    }
 
-  parts.push(`type:${identifiers.accountType}`)
+    if (identifiers.lid) {
+      // Show only first 8 chars of LID
+      const masked = identifiers.lid.substring(0, 8) + '...'
+      parts.push(`lid:${masked}`)
+    }
+
+    parts.push(`type:${identifiers.accountType}`)
+
+    if (identifiers.isGroup && identifiers.groupJid) {
+      parts.push(`group:${identifiers.groupJid.split('@')[0]}`)
+    }
+  } else if (isTelegramUser(identifiers)) {
+    // Show only last 4 digits of Telegram ID
+    const masked = '****' + identifiers.telegramId.slice(-4)
+    parts.push(`tgId:${masked}`)
+
+    if (identifiers.isGroup && identifiers.groupId) {
+      parts.push(`group:${identifiers.groupId}`)
+    }
+  }
 
   if (identifiers.pushName) {
     parts.push(`name:${identifiers.pushName}`)
   }
 
-  if (identifiers.isGroup && identifiers.groupJid) {
-    parts.push(`group:${identifiers.groupJid.split('@')[0]}`)
-  }
-
   return parts.join(', ')
+}
+
+/**
+ * Create Telegram user identifiers
+ *
+ * @param telegramId - Telegram user ID
+ * @param chatId - Telegram chat ID
+ * @param isGroup - Whether the message is from a group
+ * @param pushName - User's display name
+ * @param groupId - Group ID if applicable
+ * @returns TelegramUserIdentifiers object
+ */
+export function createTelegramIdentifiers(
+  telegramId: string,
+  chatId: string,
+  isGroup: boolean,
+  pushName: string | null = null,
+  groupId: string | null = null
+): TelegramUserIdentifiers {
+  return {
+    platform: 'telegram',
+    telegramId,
+    chatId,
+    isGroup,
+    pushName,
+    groupId
+  }
 }

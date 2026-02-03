@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../services/database/supabase-client.js'
-import type { UserIdentifiers } from '../utils/user-identifiers.js'
+import type { WhatsAppUserIdentifiers } from '../utils/user-identifiers.js'
 import { syncUserIdentifiers, shouldSyncIdentifiers } from '../services/user/identifier-sync.js'
 import { queueGreetingForNewUser, shouldReceiveGreeting } from '../services/onboarding/queue-greeting.js'
 
@@ -27,7 +27,7 @@ export interface AuthorizationResult {
  * 4. Try legacy sessions (backward compatibility)
  */
 export async function checkAuthorizationWithIdentifiers(
-  identifiers: UserIdentifiers
+  identifiers: WhatsAppUserIdentifiers
 ): Promise<AuthorizationResult> {
   try {
     const supabase = getSupabaseClient()
@@ -175,7 +175,8 @@ export async function checkAuthorizationFromJid(
     ? localPart.split(':')[0]
     : null
 
-  const identifiers: UserIdentifiers = {
+  const identifiers: WhatsAppUserIdentifiers = {
+    platform: 'whatsapp',
     jid: jid,
     lid: domain === 'lid' ? jid : null,
     phoneNumber: phoneNumber,
