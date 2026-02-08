@@ -42,6 +42,11 @@ let sock: WASocket | null = null
 // Store current QR code for web endpoint
 let currentQR: string | null = null
 
+// Track WhatsApp connection state for health endpoint
+let whatsappConnectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected'
+let whatsappConnectedAt: Date | null = null
+let whatsappLastError: string | null = null
+
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(authStatePath)
 
@@ -88,9 +93,19 @@ async function connectToWhatsApp() {
     if (connection === 'open') {
       // Clear QR code when connected
       currentQR = null
+      // Track connection state
+      whatsappConnectionState = 'connected'
+      whatsappConnectedAt = new Date()
+      whatsappLastError = null
+    }
+
+    if (connection === 'connecting') {
+      whatsappConnectionState = 'connecting'
     }
 
     if (connection === 'close') {
+      whatsappConnectionState = 'disconnected'
+      whatsappLastError = lastDisconnect?.error?.message || 'Unknown error'
       // According to Baileys docs, check the error properly
       const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
@@ -530,8 +545,25 @@ const server = http.createServer(async (req: any, res: any) => {
 
   // Health check endpoint
   if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }))
+    const uptime = whatsappConnectedAt 
+      ? Math.floor((Date.now() - whatsappConnectedAt.getTime()) / 1000) 
+      : 0
+    
+    const healthStatus = {
+      status: whatsappConnectionState === 'connected' ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      service: 'nexfinapp',
+      whatsapp: {
+        state: whatsappConnectionState,
+        connectedAt: whatsappConnectedAt?.toISOString() || null,
+        uptimeSeconds: uptime,
+        lastError: whatsappLastError
+      }
+    }
+    
+    const statusCode = whatsappConnectionState === 'connected' ? 200 : 503
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(healthStatus))
     return
   }
 
