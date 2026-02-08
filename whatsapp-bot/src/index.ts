@@ -47,6 +47,24 @@ let whatsappConnectionState: 'disconnected' | 'connecting' | 'connected' = 'disc
 let whatsappConnectedAt: Date | null = null
 let whatsappLastError: string | null = null
 
+// Message tracking for health endpoint (48h window for NexFinApp)
+let lastMessageAt: Date | null = null
+let messageCountLast48h: number = 0
+let messageCountResetAt: number = Date.now()
+
+function trackMessageReceived(): void {
+  lastMessageAt = new Date()
+  
+  // Reset counter if more than 48h since last reset
+  const now = Date.now()
+  if (now - messageCountResetAt > 48 * 60 * 60 * 1000) {
+    messageCountLast48h = 0
+    messageCountResetAt = now
+  }
+  
+  messageCountLast48h++
+}
+
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(authStatePath)
 
@@ -157,6 +175,9 @@ async function connectToWhatsApp() {
       
       // Ignore messages without content
       if (!message.message) continue
+
+      // Track message for health metrics
+      trackMessageReceived()
 
       await handleIncomingMessage(sock!, message)
     }
@@ -548,6 +569,9 @@ const server = http.createServer(async (req: any, res: any) => {
     const uptime = whatsappConnectedAt 
       ? Math.floor((Date.now() - whatsappConnectedAt.getTime()) / 1000) 
       : 0
+    const lastMessageAgeSeconds = lastMessageAt
+      ? Math.floor((Date.now() - lastMessageAt.getTime()) / 1000)
+      : -1
     
     const healthStatus = {
       status: whatsappConnectionState === 'connected' ? 'ok' : 'degraded',
@@ -557,7 +581,10 @@ const server = http.createServer(async (req: any, res: any) => {
         state: whatsappConnectionState,
         connectedAt: whatsappConnectedAt?.toISOString() || null,
         uptimeSeconds: uptime,
-        lastError: whatsappLastError
+        lastError: whatsappLastError,
+        lastMessageAt: lastMessageAt?.toISOString() || null,
+        lastMessageAgeSeconds,
+        messagesLast48h: messageCountLast48h
       }
     }
     
