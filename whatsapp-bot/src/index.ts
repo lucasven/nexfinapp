@@ -589,7 +589,10 @@ const server = http.createServer(async (req: any, res: any) => {
     }
     
     const statusCode = whatsappConnectionState === 'connected' ? 200 : 503
-    res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+    res.writeHead(statusCode, { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    })
     res.end(JSON.stringify(healthStatus))
     return
   }
