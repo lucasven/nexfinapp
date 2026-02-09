@@ -22,6 +22,7 @@ import { processOnboardingMessages } from './services/onboarding/greeting-sender
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
+import { initTelegram, handleTelegramWebhook, shutdownTelegram } from './telegram-integration.js'
 
 dotenv.config()
 
@@ -531,7 +532,11 @@ const server = http.createServer(async (req: any, res: any) => {
   // Health check endpoint
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }))
+    res.end(JSON.stringify({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      telegram: !!process.env.TELEGRAM_BOT_TOKEN ? 'enabled' : 'disabled'
+    }))
     return
   }
 
@@ -872,6 +877,11 @@ const server = http.createServer(async (req: any, res: any) => {
     return
   }
 
+  // Telegram webhook
+  if (handleTelegramWebhook(req, res)) {
+    return
+  }
+
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'text/plain' })
   res.end('Not Found')
@@ -887,6 +897,12 @@ if (process.env.NODE_ENV !== 'test') {
     // Start the cron scheduler
     startScheduler()
 
+    // Start Telegram bot (if configured)
+    initTelegram().catch(error => {
+      console.error('⚠️ Error starting Telegram bot:', error)
+      console.error('   WhatsApp bot will still start normally')
+    })
+
     // Start the WhatsApp bot AFTER the health check server is ready
     connectToWhatsApp().catch(error => {
       console.error('⚠️ Error starting WhatsApp bot:', error)
@@ -900,6 +916,7 @@ if (process.env.NODE_ENV !== 'test') {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...')
   stopScheduler()
+  await shutdownTelegram()
   await shutdownPostHog()
   process.exit(0)
 })
@@ -907,6 +924,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...')
   stopScheduler()
+  await shutdownTelegram()
   await shutdownPostHog()
   process.exit(0)
 })
