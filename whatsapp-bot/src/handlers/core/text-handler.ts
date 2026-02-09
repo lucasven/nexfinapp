@@ -732,8 +732,8 @@ export async function handleTextMessage(
         // Check permissions
         const requiredPermission = ACTION_PERMISSION_MAP[commandResult.action]
         if (requiredPermission) {
-          // Use multi-identifier authorization if available (WhatsApp only), fallback to legacy
-          const authResult = userIdentifiers && isWhatsAppUser(userIdentifiers)
+          // Use multi-identifier authorization if available, fallback to legacy
+          const authResult = userIdentifiers
             ? await checkAuthorizationWithIdentifiers(userIdentifiers)
             : await checkAuthorization(whatsappNumber)
           
@@ -930,8 +930,8 @@ export async function handleTextMessage(
       // Check permissions for cached action
       const requiredPermission = ACTION_PERMISSION_MAP[cachedIntent.action]
       if (requiredPermission) {
-        // Use multi-identifier authorization if available (WhatsApp only), fallback to legacy
-        const authResult = userIdentifiers && isWhatsAppUser(userIdentifiers)
+        // Use multi-identifier authorization if available, fallback to legacy
+        const authResult = userIdentifiers
           ? await checkAuthorizationWithIdentifiers(userIdentifiers)
           : await checkAuthorization(whatsappNumber)
 
@@ -1068,8 +1068,8 @@ export async function handleTextMessage(
       // Check permissions
       const requiredPermission = ACTION_PERMISSION_MAP[aiResult.action]
       if (requiredPermission) {
-        // Use multi-identifier authorization if available (WhatsApp only), fallback to legacy
-        const authResult = userIdentifiers && isWhatsAppUser(userIdentifiers)
+        // Use multi-identifier authorization if available, fallback to legacy
+        const authResult = userIdentifiers
           ? await checkAuthorizationWithIdentifiers(userIdentifiers)
           : await checkAuthorization(whatsappNumber)
         

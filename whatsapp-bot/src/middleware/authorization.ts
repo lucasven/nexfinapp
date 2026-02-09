@@ -1,7 +1,24 @@
 import { getSupabaseClient } from '../services/database/supabase-client.js'
-import type { WhatsAppUserIdentifiers } from '../utils/user-identifiers.js'
+import type { UserIdentifiers, WhatsAppUserIdentifiers } from '../utils/user-identifiers.js'
+import { isWhatsAppUser, isTelegramUser } from '../utils/user-identifiers.js'
 import { syncUserIdentifiers, shouldSyncIdentifiers } from '../services/user/identifier-sync.js'
 import { queueGreetingForNewUser, shouldReceiveGreeting } from '../services/onboarding/queue-greeting.js'
+
+/**
+ * Telegram allowlist for development/testing
+ * Maps Telegram user IDs to Supabase user IDs
+ * TODO: Replace with proper DB lookup when Telegram onboarding is implemented
+ */
+const TELEGRAM_ALLOWED_IDS: Record<string, string> = (() => {
+  const raw = process.env.TELEGRAM_ALLOWED_IDS || ''
+  // Format: "telegramId:userId,telegramId:userId" or just "telegramId" (uses first user)
+  const map: Record<string, string> = {}
+  for (const entry of raw.split(',').filter(Boolean)) {
+    const [tgId, userId] = entry.split(':')
+    if (tgId) map[tgId.trim()] = userId?.trim() || ''
+  }
+  return map
+})()
 
 export interface AuthorizationResult {
   authorized: boolean
@@ -27,9 +44,14 @@ export interface AuthorizationResult {
  * 4. Try legacy sessions (backward compatibility)
  */
 export async function checkAuthorizationWithIdentifiers(
-  identifiers: WhatsAppUserIdentifiers
+  identifiers: UserIdentifiers
 ): Promise<AuthorizationResult> {
   try {
+    // Telegram: check allowlist
+    if (isTelegramUser(identifiers)) {
+      return checkTelegramAuthorization(identifiers.telegramId)
+    }
+
     const supabase = getSupabaseClient()
 
     console.log('[Authorization] Checking authorization with multi-identifier lookup')
@@ -296,6 +318,62 @@ export function hasPermission(
       return permissions.can_view_reports
     default:
       return false
+  }
+}
+
+/**
+ * Check Telegram authorization against allowlist
+ * 
+ * For MVP/testing: uses TELEGRAM_ALLOWED_IDS env var
+ * Format: "telegramId:supabaseUserId,telegramId:supabaseUserId"
+ */
+async function checkTelegramAuthorization(telegramId: string): Promise<AuthorizationResult> {
+  console.log('[Authorization] Checking Telegram allowlist for ID:', telegramId)
+
+  const userId = TELEGRAM_ALLOWED_IDS[telegramId]
+
+  if (userId === undefined) {
+    console.log('[Authorization] Telegram user not in allowlist')
+    return {
+      authorized: false,
+      error: 'Telegram user not authorized. Ask the account owner to add your Telegram ID.',
+    }
+  }
+
+  // If userId is empty string, try to find the first user in DB
+  let resolvedUserId = userId
+  if (!resolvedUserId) {
+    const supabase = getSupabaseClient()
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .limit(1)
+      .maybeSingle()
+    
+    if (data) {
+      resolvedUserId = data.id
+    } else {
+      console.error('[Authorization] No user found in DB for Telegram allowlist fallback')
+      return {
+        authorized: false,
+        error: 'No user account configured for Telegram access.',
+      }
+    }
+  }
+
+  console.log('[Authorization] Telegram user authorized! User ID:', resolvedUserId)
+
+  return {
+    authorized: true,
+    userId: resolvedUserId,
+    permissions: {
+      can_view: true,
+      can_add: true,
+      can_edit: true,
+      can_delete: true,
+      can_manage_budgets: true,
+      can_view_reports: true,
+    },
   }
 }
 
