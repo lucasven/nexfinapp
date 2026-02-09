@@ -20,6 +20,7 @@ import { getConversationState } from '../../services/conversation/state-manager.
 import { getUserLocale } from '../../localization/i18n.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
 import type { UserIdentifiers } from '../../utils/user-identifiers.js'
+import { isWhatsAppUser } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { recordParsingMetric, ParsingStrategy } from '../../services/monitoring/metrics-tracker.js'
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
