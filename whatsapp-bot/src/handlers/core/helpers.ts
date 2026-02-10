@@ -4,7 +4,7 @@
  */
 
 import { getUserSession, createUserSession } from '../../auth/session-manager.js'
-import { checkAuthorization } from '../../middleware/authorization.js'
+import { checkAuthorization, checkAuthorizationWithIdentifiers } from '../../middleware/authorization.js'
 import { getSupabaseClient } from '../../services/database/supabase-client.js'
 import { logger } from '../../services/monitoring/logger.js'
 
@@ -50,17 +50,19 @@ export async function getCategoryId(categoryName: string, userId: string): Promi
  * Helper function to auto-authenticate using authorized WhatsApp numbers
  * Returns existing session or creates one if the number is authorized
  */
-export async function getOrCreateSession(whatsappNumber: string): Promise<any | null> {
+export async function getOrCreateSession(whatsappNumber: string, userIdentifiers?: import('../../utils/user-identifiers.js').UserIdentifiers): Promise<any | null> {
   // Check for existing session first
   let session = await getUserSession(whatsappNumber)
   if (session) {
     return session
   }
 
-  // Try auto-authentication via authorized_whatsapp_numbers
-  const authResult = await checkAuthorization(whatsappNumber)
+  // Try auto-authentication — use multi-identifier if available, fallback to legacy
+  const authResult = userIdentifiers
+    ? await checkAuthorizationWithIdentifiers(userIdentifiers)
+    : await checkAuthorization(whatsappNumber)
   if (authResult.authorized && authResult.userId) {
-    logger.info('Auto-authenticating WhatsApp number', { whatsappNumber, userId: authResult.userId })
+    logger.info('Auto-authenticating user', { whatsappNumber, userId: authResult.userId, platform: userIdentifiers?.platform || 'whatsapp' })
     await createUserSession(whatsappNumber, authResult.userId)
     session = await getUserSession(whatsappNumber)
     return session
