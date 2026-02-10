@@ -6,7 +6,9 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node --no-deprecation dist/index.js",
+    "start:telegram": "node --no-deprecation dist/telegram-bot.js",
     "dev": "tsx src/index.ts",
+    "dev:telegram": "tsx src/telegram-bot.ts",
     "build": "tsc",
     "watch": "tsc -w",
     "cleanup-parsers": "tsx scripts/cleanup-parsers.ts",
