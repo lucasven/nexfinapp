@@ -142,6 +142,7 @@ export async function createRecurringTransaction(formData: {
   )
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
   return data
 }
 
@@ -187,6 +188,7 @@ export async function updateRecurringTransaction(
   )
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
   return data
 }
 
@@ -206,6 +208,7 @@ export async function deleteRecurringTransaction(id: string) {
   )
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
 }
 
 export async function generateRecurringPayments(recurringTransactionId: string) {
@@ -260,6 +263,7 @@ export async function generateRecurringPayments(recurringTransactionId: string) 
   }
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
 }
 
 export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
@@ -347,5 +351,7 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
   }
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
   revalidatePath("/")
+  revalidatePath("/reports")
 }
