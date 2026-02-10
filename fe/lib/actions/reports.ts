@@ -20,7 +20,8 @@ export async function getMonthlyReport(month: number, year: number) {
     .from("transactions")
     .select(`
       *,
-      category:categories(*)
+      category:categories(*),
+      payment_method:payment_methods(id, name, type)
     `)
     .eq("user_id", user.id)
     .gte("date", startDate)
@@ -70,7 +71,10 @@ export async function getMonthlyReport(month: number, year: number) {
   // Group by payment method
   const paymentMethodBreakdown = transactions.reduce(
     (acc, transaction) => {
-      const method = transaction.payment_method || "Not specified"
+      // Use payment_method relation name, fallback to legacy field or "Not specified"
+      const method = transaction.payment_method?.name || 
+                     (transaction as { payment_method_legacy?: string }).payment_method_legacy || 
+                     "Not specified"
 
       if (!acc[method]) {
         acc[method] = {

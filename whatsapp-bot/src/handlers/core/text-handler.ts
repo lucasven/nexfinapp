@@ -20,6 +20,7 @@ import { getConversationState } from '../../services/conversation/state-manager.
 import { getUserLocale } from '../../localization/i18n.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
 import type { UserIdentifiers } from '../../utils/user-identifiers.js'
+import { isWhatsAppUser } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
 import { recordParsingMetric, ParsingStrategy } from '../../services/monitoring/metrics-tracker.js'
 import { parseWithAI, getUserContext } from '../../services/ai/ai-pattern-generator.js'
@@ -153,7 +154,7 @@ export async function handleTextMessage(
         logger.info('User has pending credit mode selection', { whatsappNumber, message })
 
         // Get user session for mode selection
-        session = await getOrCreateSession(whatsappNumber)
+        session = await getOrCreateSession(whatsappNumber, userIdentifiers)
 
         if (!session) {
           logger.warn('Failed to get session for mode selection', { whatsappNumber })
@@ -213,7 +214,7 @@ export async function handleTextMessage(
       }
 
       // Check for mode switch warning response (Story 1.5 - installment cleanup choice)
-      session = session || await getOrCreateSession(whatsappNumber)
+      session = session || await getOrCreateSession(whatsappNumber, userIdentifiers)
       if (session) {
         const modeSwitchConfirmState = await getConversationState(session.userId, 'mode_switch_confirm')
         if (modeSwitchConfirmState) {
@@ -310,7 +311,7 @@ export async function handleTextMessage(
           session = await getUserSession(whatsappNumber)
         }
       } else {
-        session = await getOrCreateSession(whatsappNumber)
+        session = await getOrCreateSession(whatsappNumber, userIdentifiers)
       }
 
       if (!session) {
@@ -351,7 +352,7 @@ export async function handleTextMessage(
             optOutSession = await getUserSession(whatsappNumber)
           }
         } else {
-          optOutSession = await getOrCreateSession(whatsappNumber)
+          optOutSession = await getOrCreateSession(whatsappNumber, userIdentifiers)
         }
       }
 
@@ -418,7 +419,7 @@ export async function handleTextMessage(
             goodbyeSession = await getUserSession(whatsappNumber)
           }
         } else {
-          goodbyeSession = await getOrCreateSession(whatsappNumber)
+          goodbyeSession = await getOrCreateSession(whatsappNumber, userIdentifiers)
         }
       }
 
@@ -467,7 +468,7 @@ export async function handleTextMessage(
             destSession = await getUserSession(whatsappNumber)
           }
         } else {
-          destSession = await getOrCreateSession(whatsappNumber)
+          destSession = await getOrCreateSession(whatsappNumber, userIdentifiers)
         }
       }
 
@@ -577,7 +578,7 @@ export async function handleTextMessage(
               session = await getUserSession(whatsappNumber)
             }
           } else {
-            session = await getOrCreateSession(whatsappNumber)
+            session = await getOrCreateSession(whatsappNumber, userIdentifiers)
           }
 
           if (!session) {
@@ -709,7 +710,7 @@ export async function handleTextMessage(
           }
         } else {
           // For DMs, use normal authentication
-          session = await getOrCreateSession(whatsappNumber)
+          session = await getOrCreateSession(whatsappNumber, userIdentifiers)
         }
         
         if (!session) {
@@ -793,7 +794,7 @@ export async function handleTextMessage(
       }
     } else {
       // For DMs, use normal authentication
-      session = await getOrCreateSession(whatsappNumber)
+      session = await getOrCreateSession(whatsappNumber, userIdentifiers)
     }
     
     if (!session) {

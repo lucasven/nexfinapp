@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../database/supabase-client.js'
-import type { UserIdentifiers } from '../../utils/user-identifiers.js'
+import type { WhatsAppUserIdentifiers } from '../../utils/user-identifiers.js'
 
 /**
  * Queue a greeting message for a new user
@@ -11,7 +11,7 @@ import type { UserIdentifiers } from '../../utils/user-identifiers.js'
  */
 export async function queueGreetingForNewUser(
   userId: string,
-  identifiers: UserIdentifiers
+  identifiers: WhatsAppUserIdentifiers
 ): Promise<boolean> {
   try {
     const supabase = getSupabaseClient()

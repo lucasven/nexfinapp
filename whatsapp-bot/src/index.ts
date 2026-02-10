@@ -22,6 +22,7 @@ import { processOnboardingMessages } from './services/onboarding/greeting-sender
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
+import { initTelegram, handleTelegramWebhook, shutdownTelegram } from './telegram-integration.js'
 
 dotenv.config()
 
@@ -41,6 +42,29 @@ let sock: WASocket | null = null
 
 // Store current QR code for web endpoint
 let currentQR: string | null = null
+
+// Track WhatsApp connection state for health endpoint
+let whatsappConnectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected'
+let whatsappConnectedAt: Date | null = null
+let whatsappLastError: string | null = null
+
+// Message tracking for health endpoint (48h window for NexFinApp)
+let lastMessageAt: Date | null = null
+let messageCountLast48h: number = 0
+let messageCountResetAt: number = Date.now()
+
+function trackMessageReceived(): void {
+  lastMessageAt = new Date()
+  
+  // Reset counter if more than 48h since last reset
+  const now = Date.now()
+  if (now - messageCountResetAt > 48 * 60 * 60 * 1000) {
+    messageCountLast48h = 0
+    messageCountResetAt = now
+  }
+  
+  messageCountLast48h++
+}
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(authStatePath)
@@ -88,9 +112,19 @@ async function connectToWhatsApp() {
     if (connection === 'open') {
       // Clear QR code when connected
       currentQR = null
+      // Track connection state
+      whatsappConnectionState = 'connected'
+      whatsappConnectedAt = new Date()
+      whatsappLastError = null
+    }
+
+    if (connection === 'connecting') {
+      whatsappConnectionState = 'connecting'
     }
 
     if (connection === 'close') {
+      whatsappConnectionState = 'disconnected'
+      whatsappLastError = lastDisconnect?.error?.message || 'Unknown error'
       // According to Baileys docs, check the error properly
       const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
@@ -142,6 +176,9 @@ async function connectToWhatsApp() {
       
       // Ignore messages without content
       if (!message.message) continue
+
+      // Track message for health metrics
+      trackMessageReceived()
 
       await handleIncomingMessage(sock!, message)
     }
@@ -530,8 +567,35 @@ const server = http.createServer(async (req: any, res: any) => {
 
   // Health check endpoint
   if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }))
+    const uptime = whatsappConnectedAt 
+      ? Math.floor((Date.now() - whatsappConnectedAt.getTime()) / 1000) 
+      : 0
+    const lastMessageAgeSeconds = lastMessageAt
+      ? Math.floor((Date.now() - lastMessageAt.getTime()) / 1000)
+      : -1
+    
+    const healthStatus = {
+      status: whatsappConnectionState === 'connected' ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      service: 'nexfinapp',
+      telegram: !!process.env.TELEGRAM_BOT_TOKEN ? 'enabled' : 'disabled',
+      whatsapp: {
+        state: whatsappConnectionState,
+        connectedAt: whatsappConnectedAt?.toISOString() || null,
+        uptimeSeconds: uptime,
+        lastError: whatsappLastError,
+        lastMessageAt: lastMessageAt?.toISOString() || null,
+        lastMessageAgeSeconds,
+        messagesLast48h: messageCountLast48h
+      }
+    }
+    
+    const statusCode = whatsappConnectionState === 'connected' ? 200 : 503
+    res.writeHead(statusCode, { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    })
+    res.end(JSON.stringify(healthStatus))
     return
   }
 
@@ -872,6 +936,11 @@ const server = http.createServer(async (req: any, res: any) => {
     return
   }
 
+  // Telegram webhook
+  if (handleTelegramWebhook(req, res)) {
+    return
+  }
+
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'text/plain' })
   res.end('Not Found')
@@ -887,6 +956,12 @@ if (process.env.NODE_ENV !== 'test') {
     // Start the cron scheduler
     startScheduler()
 
+    // Start Telegram bot (if configured)
+    initTelegram().catch(error => {
+      console.error('⚠️ Error starting Telegram bot:', error)
+      console.error('   WhatsApp bot will still start normally')
+    })
+
     // Start the WhatsApp bot AFTER the health check server is ready
     connectToWhatsApp().catch(error => {
       console.error('⚠️ Error starting WhatsApp bot:', error)
@@ -900,6 +975,7 @@ if (process.env.NODE_ENV !== 'test') {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...')
   stopScheduler()
+  await shutdownTelegram()
   await shutdownPostHog()
   process.exit(0)
 })
@@ -907,6 +983,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...')
   stopScheduler()
+  await shutdownTelegram()
   await shutdownPostHog()
   process.exit(0)
 })
