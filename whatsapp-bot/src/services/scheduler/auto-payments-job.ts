@@ -97,6 +97,37 @@ async function createTransactionFromPayment(
     throw idError
   }
 
+  // Map payment_method TEXT to payment_method_id UUID
+  // recurring_transactions still uses TEXT, but transactions table now uses UUID foreign key
+  let paymentMethodId: string | null = null
+
+  if (payment.recurring_transaction.payment_method) {
+    const { data: paymentMethods } = await supabase
+      .from('payment_methods')
+      .select('id')
+      .eq('user_id', payment.user_id)
+      .ilike('name', payment.recurring_transaction.payment_method)
+      .limit(1)
+
+    paymentMethodId = paymentMethods?.[0]?.id || null
+  }
+
+  // If no payment method found, use the user's first payment method (required field)
+  if (!paymentMethodId) {
+    const { data: fallbackMethod } = await supabase
+      .from('payment_methods')
+      .select('id')
+      .eq('user_id', payment.user_id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+
+    if (!fallbackMethod?.[0]?.id) {
+      throw new Error('No payment method available. Please create a payment method first.')
+    }
+
+    paymentMethodId = fallbackMethod[0].id
+  }
+
   // Create the transaction
   const { data: transaction, error: transactionError } = await supabase
     .from('transactions')
@@ -106,7 +137,7 @@ async function createTransactionFromPayment(
       type: payment.recurring_transaction.type,
       category_id: payment.recurring_transaction.category_id,
       description: payment.recurring_transaction.description,
-      payment_method: payment.recurring_transaction.payment_method,
+      payment_method_id: paymentMethodId,
       date: payment.due_date,
       user_readable_id: readableIdData,
     })
