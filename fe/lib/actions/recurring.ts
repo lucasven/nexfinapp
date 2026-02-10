@@ -109,6 +109,7 @@ export async function createRecurringTransaction(formData: {
   description?: string
   payment_method?: string
   day_of_month: number
+  auto_pay?: boolean
 }) {
   const supabase = await getSupabaseServerClient()
   const user = await requireAuthenticatedUser()
@@ -154,6 +155,7 @@ export async function updateRecurringTransaction(
     payment_method?: string
     day_of_month?: number
     is_active?: boolean
+    auto_pay?: boolean
   },
 ) {
   const supabase = await getSupabaseServerClient()
