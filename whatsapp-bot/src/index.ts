@@ -22,6 +22,7 @@ import { processOnboardingMessages } from './services/onboarding/greeting-sender
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
 import { startScheduler, stopScheduler } from './scheduler.js'
+import { initTelegram, handleTelegramWebhook, shutdownTelegram } from './telegram-integration.js'
 
 dotenv.config()
 
@@ -577,6 +578,7 @@ const server = http.createServer(async (req: any, res: any) => {
       status: whatsappConnectionState === 'connected' ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       service: 'nexfinapp',
+      telegram: !!process.env.TELEGRAM_BOT_TOKEN ? 'enabled' : 'disabled',
       whatsapp: {
         state: whatsappConnectionState,
         connectedAt: whatsappConnectedAt?.toISOString() || null,
@@ -934,6 +936,11 @@ const server = http.createServer(async (req: any, res: any) => {
     return
   }
 
+  // Telegram webhook
+  if (handleTelegramWebhook(req, res)) {
+    return
+  }
+
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'text/plain' })
   res.end('Not Found')
@@ -949,6 +956,12 @@ if (process.env.NODE_ENV !== 'test') {
     // Start the cron scheduler
     startScheduler()
 
+    // Start Telegram bot (if configured)
+    initTelegram().catch(error => {
+      console.error('⚠️ Error starting Telegram bot:', error)
+      console.error('   WhatsApp bot will still start normally')
+    })
+
     // Start the WhatsApp bot AFTER the health check server is ready
     connectToWhatsApp().catch(error => {
       console.error('⚠️ Error starting WhatsApp bot:', error)
@@ -962,6 +975,7 @@ if (process.env.NODE_ENV !== 'test') {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...')
   stopScheduler()
+  await shutdownTelegram()
   await shutdownPostHog()
   process.exit(0)
 })
@@ -969,6 +983,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...')
   stopScheduler()
+  await shutdownTelegram()
   await shutdownPostHog()
   process.exit(0)
 })
