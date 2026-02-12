@@ -87,17 +87,30 @@ export async function middleware(request: NextRequest) {
   const pathnameWithoutLocale = pathname.replace(/^\/(en|pt-br)/, '') || '/'
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/auth', '/landing']
+  const publicRoutes = ['/auth', '/landing', '/login']
   const isPublicRoute = publicRoutes.some(route => pathnameWithoutLocale.startsWith(route))
 
-  // Redirect to login if not authenticated and trying to access protected routes
-  if (!user && !isPublicRoute) {
+  // Special handling for /login route - redirect to /auth/login
+  if (pathnameWithoutLocale === '/login') {
     const locale = detectedLocale && locales.includes(detectedLocale as any) ? detectedLocale : defaultLocale
     return NextResponse.redirect(new URL(`/${locale}/auth/login`, request.url))
   }
 
-  // Redirect to home if authenticated and trying to access auth pages
-  if (user && pathnameWithoutLocale.startsWith('/auth')) {
+  // Handle unauthenticated users
+  if (!user && !isPublicRoute) {
+    const locale = detectedLocale && locales.includes(detectedLocale as any) ? detectedLocale : defaultLocale
+    
+    // If user is trying to access home page (/), show landing page instead of redirecting to login
+    if (pathnameWithoutLocale === '/') {
+      return NextResponse.redirect(new URL(`/${locale}/landing`, request.url))
+    }
+    
+    // For other protected routes, redirect to login
+    return NextResponse.redirect(new URL(`/${locale}/auth/login`, request.url))
+  }
+
+  // Redirect to home if authenticated and trying to access auth pages or landing page
+  if (user && (pathnameWithoutLocale.startsWith('/auth') || pathnameWithoutLocale === '/landing')) {
     const locale = detectedLocale && locales.includes(detectedLocale as any) ? detectedLocale : defaultLocale
     return NextResponse.redirect(new URL(`/${locale}`, request.url))
   }

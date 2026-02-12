@@ -37,8 +37,16 @@ export default function LandingPage() {
       <header className="container mx-auto px-4 py-6">
         <nav className="flex items-center justify-between">
           <NexFinLogo size="md" />
-          <div className="text-sm text-slate-600">
-            🇧🇷 <span className="font-medium">100% em Português</span>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-600">
+              🇧🇷 <span className="font-medium">100% em Português</span>
+            </div>
+            <a
+              href="/auth/login"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              Entrar
+            </a>
           </div>
         </nav>
       </header>
