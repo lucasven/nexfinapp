@@ -4,16 +4,25 @@ import { AuthorizedGroupsCard } from "@/components/authorized-groups-card"
 import { AccountSettingsSection } from "@/components/profile/account-settings-section"
 import { UserMenu } from "@/components/user-menu"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import { ArrowLeftIcon, CreditCardIcon } from "lucide-react"
+import { ArrowLeftIcon } from "lucide-react"
 import { Link } from "@/lib/localization/link"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { getTranslations } from 'next-intl/server'
 import { getMySubscription } from "@/lib/actions/subscriptions"
+
+const TIER_LABELS: Record<string, string> = {
+  free: 'Gratuito',
+  whatsapp: 'WhatsApp',
+  couples: 'Casais',
+  openfinance: 'Open Finance',
+}
 
 export default async function ProfilePage() {
   const t = await getTranslations()
   const supabase = await getSupabaseServerClient()
-  const [{ data: { user } }, { tier }] = await Promise.all([
+  const [{ data: { user } }, { tier, subscription }] = await Promise.all([
     supabase.auth.getUser(),
     getMySubscription(),
   ])
@@ -43,20 +52,44 @@ export default async function ProfilePage() {
           <AuthorizedGroupsCard />
         </div>
 
-        {/* CreditCardSettingsWrapper removed - settings now only in /credit-cards */}
-
         <div className="mt-6">
-          <Button variant="outline" asChild className="w-full sm:w-auto">
-            <Link href="/profile/subscription">
-              <CreditCardIcon className="h-4 w-4 mr-2" />
-              Minha Assinatura
-              {tier !== 'free' && (
-                <span className="ml-2 text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5 capitalize">
-                  {tier}
-                </span>
-              )}
-            </Link>
-          </Button>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Minha Assinatura</CardTitle>
+                <Badge variant={tier === 'free' ? 'secondary' : 'default'}>
+                  {TIER_LABELS[tier]}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                {subscription ? (
+                  <>
+                    <p>
+                      Tipo:{' '}
+                      <span className="font-medium text-foreground">
+                        {subscription.type === 'lifetime' ? 'Vitalício' : 'Mensal'}
+                      </span>
+                    </p>
+                    {subscription.expires_at && (
+                      <p>
+                        Próxima cobrança:{' '}
+                        <span className="font-medium text-foreground">
+                          {new Date(subscription.expires_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p>Você está no plano gratuito.</p>
+                )}
+              </div>
+              <Button asChild size="sm" variant="outline" className="shrink-0">
+                <Link href="/pricing">Ver planos</Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="mt-8">
@@ -70,4 +103,3 @@ export default async function ProfilePage() {
     </div>
   )
 }
-
