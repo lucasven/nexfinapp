@@ -15,6 +15,7 @@ import { getSocket } from '../../index.js'
 import { getUserLocale } from '../../localization/i18n.js'
 import { messages as ptBRMessages } from '../../localization/pt-br.js'
 import { messages as enMessages } from '../../localization/en.js'
+import { resolvePaymentMethodId } from '../../utils/resolve-payment-method.js'
 
 export interface AutoPayJobResult {
   processed: number
@@ -98,35 +99,11 @@ async function createTransactionFromPayment(
   }
 
   // Map payment_method TEXT to payment_method_id UUID
-  // recurring_transactions still uses TEXT, but transactions table now uses UUID foreign key
-  let paymentMethodId: string | null = null
-
-  if (payment.recurring_transaction.payment_method) {
-    const { data: paymentMethods } = await supabase
-      .from('payment_methods')
-      .select('id')
-      .eq('user_id', payment.user_id)
-      .ilike('name', payment.recurring_transaction.payment_method)
-      .limit(1)
-
-    paymentMethodId = paymentMethods?.[0]?.id || null
-  }
-
-  // If no payment method found, use the user's first payment method (required field)
-  if (!paymentMethodId) {
-    const { data: fallbackMethod } = await supabase
-      .from('payment_methods')
-      .select('id')
-      .eq('user_id', payment.user_id)
-      .order('created_at', { ascending: true })
-      .limit(1)
-
-    if (!fallbackMethod?.[0]?.id) {
-      throw new Error('No payment method available. Please create a payment method first.')
-    }
-
-    paymentMethodId = fallbackMethod[0].id
-  }
+  const paymentMethodId = await resolvePaymentMethodId(
+    supabase,
+    payment.user_id,
+    payment.recurring_transaction.payment_method,
+  )
 
   // Create the transaction
   const { data: transaction, error: transactionError } = await supabase

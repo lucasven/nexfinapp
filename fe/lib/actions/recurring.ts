@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 import { requireAuthenticatedUser } from "./shared"
+import { resolvePaymentMethodId } from "@/lib/utils/resolve-payment-method"
 
 export async function getRecurringTransactions() {
   const supabase = await getSupabaseServerClient()
@@ -291,35 +292,11 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
     if (idError) throw idError
 
     // Map payment_method TEXT to payment_method_id UUID
-    // recurring_transactions still uses TEXT, but transactions table now uses UUID foreign key
-    let paymentMethodId: string | null = null
-
-    if (payment.recurring_transaction.payment_method) {
-      const { data: paymentMethods } = await supabase
-        .from("payment_methods")
-        .select("id")
-        .eq("user_id", user.id)
-        .ilike("name", payment.recurring_transaction.payment_method)
-        .limit(1)
-
-      paymentMethodId = paymentMethods?.[0]?.id || null
-    }
-
-    // If no payment method found, use the user's first payment method (required field)
-    if (!paymentMethodId) {
-      const { data: fallbackMethod } = await supabase
-        .from("payment_methods")
-        .select("id")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-
-      if (!fallbackMethod?.[0]?.id) {
-        throw new Error("No payment method available. Please create a payment method first.")
-      }
-
-      paymentMethodId = fallbackMethod[0].id
-    }
+    const paymentMethodId = await resolvePaymentMethodId(
+      supabase,
+      user.id,
+      payment.recurring_transaction.payment_method,
+    )
 
     // Create actual transaction
     const { data: transaction, error: insertError } = await supabase
@@ -388,5 +365,4 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
   revalidatePath("/recurring")
   revalidatePath("/reports")
   revalidatePath("/")
-  revalidatePath("/reports")
 }
