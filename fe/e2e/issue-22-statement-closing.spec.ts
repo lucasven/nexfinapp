@@ -23,6 +23,7 @@ const LOCALE = 'pt-br'
 const DB_CONFIG = { host: '100.81.72.21', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' }
 
 async function getDbClient() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Client } = require('pg')
   const client = new Client(DB_CONFIG)
   await client.connect()
