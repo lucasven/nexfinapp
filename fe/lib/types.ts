@@ -92,6 +92,7 @@ export interface RecurringTransaction {
   payment_method: string | null
   day_of_month: number
   is_active: boolean
+  auto_pay: boolean
   last_generated_date: string | null
   created_at: string
   updated_at: string

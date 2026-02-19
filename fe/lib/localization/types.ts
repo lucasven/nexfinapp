@@ -359,6 +359,8 @@ export interface Messages {
     day: string
     descriptionPlaceholder: string
     selectPaymentMethod: string
+    autoPay: string
+    autoPayDescription: string
     viewAll: string
     overdue: string
     overdueLabel: string

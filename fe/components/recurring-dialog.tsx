@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { createRecurringTransaction, updateRecurringTransaction } from "@/lib/actions/recurring"
 import type { Category, RecurringTransaction } from "@/lib/types"
 import { PlusIcon } from "lucide-react"
@@ -41,6 +42,7 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
     description: recurring?.description || "",
     payment_method: recurring?.payment_method || "",
     day_of_month: recurring?.day_of_month.toString() || "1",
+    auto_pay: recurring?.auto_pay ?? true, // Default true for new transactions
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,6 +54,7 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
         ...formData,
         amount: Number.parseFloat(formData.amount),
         day_of_month: Number.parseInt(formData.day_of_month),
+        auto_pay: formData.auto_pay,
       }
 
       if (recurring) {
@@ -180,6 +183,22 @@ export function RecurringDialog({ categories, recurring, trigger }: RecurringDia
                   <SelectItem value="other">{t('paymentMethodTypes.other')}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto_pay" className="text-base">
+                  {t('recurring.autoPay')}
+                </Label>
+                <div className="text-sm text-muted-foreground">
+                  {t('recurring.autoPayDescription')}
+                </div>
+              </div>
+              <Switch
+                id="auto_pay"
+                checked={formData.auto_pay}
+                onCheckedChange={(checked) => setFormData({ ...formData, auto_pay: checked })}
+              />
             </div>
 
             <div className="grid gap-2">

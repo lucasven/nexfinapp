@@ -15,6 +15,7 @@ import { getSocket } from '../../index.js'
 import { getUserLocale } from '../../localization/i18n.js'
 import { messages as ptBRMessages } from '../../localization/pt-br.js'
 import { messages as enMessages } from '../../localization/en.js'
+import { resolvePaymentMethodId } from '../../utils/resolve-payment-method.js'
 
 export interface AutoPayJobResult {
   processed: number
@@ -97,6 +98,13 @@ async function createTransactionFromPayment(
     throw idError
   }
 
+  // Map payment_method TEXT to payment_method_id UUID
+  const paymentMethodId = await resolvePaymentMethodId(
+    supabase,
+    payment.user_id,
+    payment.recurring_transaction.payment_method,
+  )
+
   // Create the transaction
   const { data: transaction, error: transactionError } = await supabase
     .from('transactions')
@@ -106,7 +114,7 @@ async function createTransactionFromPayment(
       type: payment.recurring_transaction.type,
       category_id: payment.recurring_transaction.category_id,
       description: payment.recurring_transaction.description,
-      payment_method: payment.recurring_transaction.payment_method,
+      payment_method_id: paymentMethodId,
       date: payment.due_date,
       user_readable_id: readableIdData,
     })
