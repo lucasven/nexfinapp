@@ -81,7 +81,7 @@ test.describe('Issue #22 — Schema: days_before_closing field', () => {
       )
       // Should have constraint: payment_due_day BETWEEN 1 AND 31 (day of month)
       // not BETWEEN 1 AND 60 (offset)
-      const hasCorrectConstraint = constraints.some(c =>
+      const hasCorrectConstraint = constraints.some((c: { def: string }) =>
         c.def.includes('31') || c.def.includes('day of month')
       )
       expect(hasCorrectConstraint).toBe(true)
