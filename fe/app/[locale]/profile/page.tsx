@@ -43,12 +43,8 @@ export default async function ProfilePage() {
           <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           <ProfileSettingsCard />
-          <WhatsAppNumbersCard />
-        </div>
-
-        <div className="mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -58,7 +54,7 @@ export default async function ProfilePage() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="flex items-center justify-between gap-4">
+            <CardContent className="space-y-4">
               <div className="text-sm text-muted-foreground space-y-1">
                 {subscription ? (
                   <>
@@ -81,11 +77,12 @@ export default async function ProfilePage() {
                   <p>Você está no plano gratuito.</p>
                 )}
               </div>
-              <Button asChild size="sm" variant="outline" className="shrink-0">
+              <Button asChild size="sm" variant="outline" className="w-full">
                 <Link href="/pricing">Ver planos</Link>
               </Button>
             </CardContent>
           </Card>
+          <WhatsAppNumbersCard />
         </div>
 
         <div className="mt-6">
