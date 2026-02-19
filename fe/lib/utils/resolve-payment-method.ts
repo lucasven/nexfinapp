@@ -44,5 +44,5 @@ export async function resolvePaymentMethodId(
     paymentMethodId = fallbackMethod[0].id
   }
 
-  return paymentMethodId
+  return paymentMethodId!
 }

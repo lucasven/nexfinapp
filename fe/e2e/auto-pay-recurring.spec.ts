@@ -27,6 +27,7 @@ const DB_CONFIG = {
 }
 
 async function getDbClient() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Client } = require('pg')
   const client = new Client(DB_CONFIG)
   await client.connect()
