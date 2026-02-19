@@ -49,10 +49,6 @@ export default async function ProfilePage() {
         </div>
 
         <div className="mt-6">
-          <AuthorizedGroupsCard />
-        </div>
-
-        <div className="mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -90,6 +86,10 @@ export default async function ProfilePage() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="mt-6">
+          <AuthorizedGroupsCard />
         </div>
 
         <div className="mt-8">
