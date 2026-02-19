@@ -7,6 +7,7 @@ import { format, parseISO } from "date-fns"
 import { markPaymentAsPaid } from "@/lib/actions/recurring"
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
+import { useState } from "react"
 
 interface RecurringPaymentCardProps {
   payment: RecurringPayment & {
@@ -25,22 +26,25 @@ interface RecurringPaymentCardProps {
 export function RecurringPaymentCard({ payment }: RecurringPaymentCardProps) {
   const router = useRouter()
   const t = useTranslations()
+  const [isPaid, setIsPaid] = useState(payment.is_paid)
 
   const handleToggle = async (checked: boolean) => {
+    setIsPaid(checked)
     try {
       await markPaymentAsPaid(payment.id, checked)
       router.refresh()
     } catch (error) {
+      setIsPaid(!checked)
       console.error("Error updating payment:", error)
     }
   }
 
-  const isOverdue = parseISO(payment.due_date) < new Date() && !payment.is_paid
+  const isOverdue = parseISO(payment.due_date) < new Date() && !isPaid
 
   return (
     <Card className={isOverdue ? "border-red-300" : ""}>
       <CardContent className="flex items-center gap-4 p-4">
-        <Checkbox checked={payment.is_paid} onCheckedChange={handleToggle} className="h-5 w-5" />
+        <Checkbox checked={isPaid} onCheckedChange={handleToggle} className="h-5 w-5" />
 
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
