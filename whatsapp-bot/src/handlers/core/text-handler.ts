@@ -19,6 +19,7 @@ import { handleModeSwitchWarningResponse, handleModeSwitchCardSelection } from '
 import { getConversationState } from '../../services/conversation/state-manager.js'
 import { getUserLocale } from '../../localization/i18n.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, hasPermission } from '../../middleware/authorization.js'
+import { getUserTier, tierAllowsWhatsApp } from '../../services/subscription/tier-service.js'
 import type { UserIdentifiers } from '../../utils/user-identifiers.js'
 import { isWhatsAppUser } from '../../utils/user-identifiers.js'
 import { logger } from '../../services/monitoring/logger.js'
@@ -85,6 +86,15 @@ export async function handleTextMessage(
             originalMessage: message
           })
         }
+      }
+    }
+
+    // TIER CHECK: Block free-tier users from using the WhatsApp bot
+    // Groups use groupOwnerId, so we only check DM users here
+    if (!groupOwnerId && userIdentifiers) {
+      const authCheck = await checkAuthorizationWithIdentifiers(userIdentifiers)
+      if (!authCheck.authorized && authCheck.error === 'whatsapp_tier_required') {
+        return '🔒 O acesso ao bot pelo WhatsApp requer um plano pago.\n\nAcesse o app para escolher seu plano: https://nexfinapp.com/pricing'
       }
     }
 
