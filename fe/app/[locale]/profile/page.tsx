@@ -4,17 +4,19 @@ import { AuthorizedGroupsCard } from "@/components/authorized-groups-card"
 import { AccountSettingsSection } from "@/components/profile/account-settings-section"
 import { UserMenu } from "@/components/user-menu"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon, CreditCardIcon } from "lucide-react"
 import { Link } from "@/lib/localization/link"
 import { Button } from "@/components/ui/button"
 import { getTranslations } from 'next-intl/server'
+import { getMySubscription } from "@/lib/actions/subscriptions"
 
 export default async function ProfilePage() {
   const t = await getTranslations()
   const supabase = await getSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [{ data: { user } }, { tier }] = await Promise.all([
+    supabase.auth.getUser(),
+    getMySubscription(),
+  ])
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,6 +44,20 @@ export default async function ProfilePage() {
         </div>
 
         {/* CreditCardSettingsWrapper removed - settings now only in /credit-cards */}
+
+        <div className="mt-6">
+          <Button variant="outline" asChild className="w-full sm:w-auto">
+            <Link href="/profile/subscription">
+              <CreditCardIcon className="h-4 w-4 mr-2" />
+              Minha Assinatura
+              {tier !== 'free' && (
+                <span className="ml-2 text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5 capitalize">
+                  {tier}
+                </span>
+              )}
+            </Link>
+          </Button>
+        </div>
 
         <div className="mt-8">
           <AccountSettingsSection
