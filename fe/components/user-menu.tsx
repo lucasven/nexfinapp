@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { LogOutIcon, UserIcon, SettingsIcon, LayoutDashboardIcon } from "lucide-react"
+import { LogOutIcon, UserIcon, SettingsIcon, LayoutDashboardIcon, CreditCardIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Link } from '@/lib/localization/link'
 import { LanguageSwitcher } from './language-switcher'
@@ -59,6 +59,12 @@ export function UserMenu({ userEmail, displayName, isAdmin }: UserMenuProps) {
           <Link href="/profile">
             <SettingsIcon className="h-4 w-4 mr-2" />
             {t('profile.settings')}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/pricing">
+            <CreditCardIcon className="h-4 w-4 mr-2" />
+            Planos
           </Link>
         </DropdownMenuItem>
         {isAdmin && (
