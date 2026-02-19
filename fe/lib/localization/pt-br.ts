@@ -404,6 +404,8 @@ export const messages: Messages = {
     day: 'Dia',
     descriptionPlaceholder: 'ex: Assinatura Netflix, Pagamento de aluguel...',
     selectPaymentMethod: 'Selecione o método de pagamento',
+    autoPay: 'Pagamento Automático',
+    autoPayDescription: 'Criar transação automaticamente na data de vencimento',
     viewAll: 'Ver Todos',
     overdue: 'Atrasado',
     overdueLabel: 'atrasados',

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { trackServerEvent } from "@/lib/analytics/server-tracker"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 import { requireAuthenticatedUser } from "./shared"
+import { resolvePaymentMethodId } from "@/lib/utils/resolve-payment-method"
 
 export async function getRecurringTransactions() {
   const supabase = await getSupabaseServerClient()
@@ -109,6 +110,7 @@ export async function createRecurringTransaction(formData: {
   description?: string
   payment_method?: string
   day_of_month: number
+  auto_pay?: boolean
 }) {
   const supabase = await getSupabaseServerClient()
   const user = await requireAuthenticatedUser()
@@ -141,6 +143,7 @@ export async function createRecurringTransaction(formData: {
   )
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
   return data
 }
 
@@ -154,6 +157,7 @@ export async function updateRecurringTransaction(
     payment_method?: string
     day_of_month?: number
     is_active?: boolean
+    auto_pay?: boolean
   },
 ) {
   const supabase = await getSupabaseServerClient()
@@ -185,6 +189,7 @@ export async function updateRecurringTransaction(
   )
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
   return data
 }
 
@@ -204,6 +209,7 @@ export async function deleteRecurringTransaction(id: string) {
   )
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
 }
 
 export async function generateRecurringPayments(recurringTransactionId: string) {
@@ -258,6 +264,7 @@ export async function generateRecurringPayments(recurringTransactionId: string) 
   }
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
 }
 
 export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
@@ -284,8 +291,15 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
 
     if (idError) throw idError
 
+    // Map payment_method TEXT to payment_method_id UUID
+    const paymentMethodId = await resolvePaymentMethodId(
+      supabase,
+      user.id,
+      payment.recurring_transaction.payment_method,
+    )
+
     // Create actual transaction
-    const { data: transaction } = await supabase
+    const { data: transaction, error: insertError } = await supabase
       .from("transactions")
       .insert({
         user_id: user.id,
@@ -293,12 +307,16 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
         type: payment.recurring_transaction.type,
         category_id: payment.recurring_transaction.category_id,
         description: payment.recurring_transaction.description,
-        payment_method: payment.recurring_transaction.payment_method,
+        payment_method_id: paymentMethodId,
         date: payment.due_date,
         user_readable_id: readableIdData,
       })
       .select()
       .single()
+
+    if (insertError) {
+      throw new Error(`Failed to create transaction: ${insertError.message}`)
+    }
 
     // Update payment
     await supabase
@@ -345,5 +363,6 @@ export async function markPaymentAsPaid(paymentId: string, paid: boolean) {
   }
 
   revalidatePath("/recurring")
+  revalidatePath("/reports")
   revalidatePath("/")
 }

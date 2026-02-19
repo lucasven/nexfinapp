@@ -404,6 +404,8 @@ export const messages: Messages = {
     day: 'Day',
     descriptionPlaceholder: 'e.g., Netflix subscription, Rent payment...',
     selectPaymentMethod: 'Select payment method',
+    autoPay: 'Auto-Pay',
+    autoPayDescription: 'Automatically create transaction on due date',
     viewAll: 'View All',
     overdue: 'Overdue',
     overdueLabel: 'overdue',
