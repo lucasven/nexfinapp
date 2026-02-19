@@ -60,6 +60,8 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
   const [cardName, setCardName] = useState(card.name)
   const [creditMode, setCreditMode] = useState(card.credit_mode || false)
   const [closingDay, setClosingDay] = useState<number | null>(card.statement_closing_day)
+  const [paymentDay, setPaymentDay] = useState<number | null>(card.payment_due_day)
+  const [daysBeforeClosing, setDaysBeforeClosing] = useState<string>(card.days_before_closing?.toString() || '')
   const [dueDay, setDueDay] = useState<string>(card.payment_due_day?.toString() || '')
   const [monthlyBudget, setMonthlyBudget] = useState<string>(card.monthly_budget?.toString() || '')
 

@@ -76,6 +76,8 @@ export function AddCreditCardDialog({ onSuccess, trigger }: AddCreditCardDialogP
   const [cardName, setCardName] = useState('')
   const [creditMode, setCreditMode] = useState<boolean | null>(null)
   const [closingDay, setClosingDay] = useState<number | null>(null)
+  const [paymentDay, setPaymentDay] = useState<number | null>(null)
+  const [daysBeforeClosing, setDaysBeforeClosing] = useState<string>('')
   const [dueDay, setDueDay] = useState<string>('')
 
   // Previews

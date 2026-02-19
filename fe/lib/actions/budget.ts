@@ -361,7 +361,7 @@ export async function getBudgetProgress(
     // Get payment method with budget and closing day
     const { data: paymentMethod, error: pmError } = await supabase
       .from("payment_methods")
-      .select("id, name, credit_mode, statement_closing_day, monthly_budget")
+      .select("id, name, credit_mode, statement_closing_day, payment_due_day, days_before_closing, monthly_budget")
       .eq("id", paymentMethodId)
       .eq("user_id", user.id)
       .single()
@@ -376,19 +376,36 @@ export async function getBudgetProgress(
       return null
     }
 
-    // Require both closing day and budget to be set
-    if (!paymentMethod.statement_closing_day || !paymentMethod.monthly_budget) {
+    // Require budget to be set
+    if (!paymentMethod.monthly_budget) {
       return null
     }
 
-    // Calculate current statement period
-    const { data: periodData, error: periodError } = await supabase.rpc(
-      "calculate_statement_period",
-      {
-        p_closing_day: paymentMethod.statement_closing_day,
-        p_reference_date: new Date().toISOString().split("T")[0]
-      }
-    )
+    // Require either new model (payment_due_day + days_before_closing) or old model (statement_closing_day)
+    if (!paymentMethod.days_before_closing && !paymentMethod.statement_closing_day) {
+      return null
+    }
+
+    // Calculate current statement period using new or old model
+    let periodData, periodError;
+    if (paymentMethod.days_before_closing !== null && paymentMethod.payment_due_day) {
+      ({ data: periodData, error: periodError } = await supabase.rpc(
+        "calculate_statement_period_v2",
+        {
+          p_payment_day: paymentMethod.payment_due_day,
+          p_days_before: paymentMethod.days_before_closing,
+          p_reference_date: new Date().toISOString().split("T")[0]
+        }
+      ))
+    } else {
+      ({ data: periodData, error: periodError } = await supabase.rpc(
+        "calculate_statement_period",
+        {
+          p_closing_day: paymentMethod.statement_closing_day!,
+          p_reference_date: new Date().toISOString().split("T")[0]
+        }
+      ))
+    }
 
     if (periodError || !periodData || periodData.length === 0) {
       console.error("getBudgetProgress: Failed to calculate statement period", periodError)

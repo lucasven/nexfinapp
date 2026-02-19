@@ -219,6 +219,11 @@ export interface Messages {
   // Payment due settings (Story 4.1)
   paymentDueSettings: {
     title: string
+    paymentDay: string
+    paymentDayPlaceholder: string
+    daysBeforeClosing: string
+    daysBeforeClosingPlaceholder: string
+    calculatedClosing: string
     dueAfterClosingLabel: string
     dueAfterClosingPlaceholder: string
     notSet: string

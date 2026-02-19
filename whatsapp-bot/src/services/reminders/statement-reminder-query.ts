@@ -17,6 +17,8 @@ export interface EligibleUser {
   payment_method_id: string
   payment_method_name: string
   statement_closing_day: number
+  payment_due_day: number | null
+  days_before_closing: number | null
   monthly_budget: number | null
 }
 
@@ -51,22 +53,22 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
       targetDay,
     })
 
-    // Query for eligible payment methods first
-    // Note: We check if the closing day matches 3 days from now
-    // The month boundary handling is done automatically by date arithmetic
+    // Query for eligible payment methods
+    // With the new model, we need to calculate which cards close on targetDate
+    // using payment_due_day and days_before_closing
     const { data: paymentMethods, error: pmError } = await supabase
       .from('payment_methods')
       .select(`
         id,
         name,
         statement_closing_day,
+        payment_due_day,
+        days_before_closing,
         monthly_budget,
         credit_mode,
         user_id
       `)
       .eq('credit_mode', true)
-      .not('statement_closing_day', 'is', null)
-      .eq('statement_closing_day', targetDay)
 
     if (pmError) {
       logger.error('Error querying eligible users', {}, pmError)
@@ -78,8 +80,25 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
       return []
     }
 
+    // Filter cards whose closing date matches targetDate
+    // New model: calculate closing from payment_due_day - days_before_closing
+    // Old model: use statement_closing_day directly
+    const filteredMethods = paymentMethods.filter(pm => {
+      if (pm.days_before_closing !== null && pm.payment_due_day !== null) {
+        // New model: calculate closing date dynamically
+        const paymentDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), pm.payment_due_day)
+        const closingDate = new Date(paymentDate)
+        closingDate.setDate(closingDate.getDate() - pm.days_before_closing)
+        return closingDate.getDate() === targetDay && closingDate.getMonth() === targetDate.getMonth()
+      } else if (pm.statement_closing_day !== null) {
+        // Old model: fixed closing day
+        return pm.statement_closing_day === targetDay
+      }
+      return false
+    })
+
     // Get unique user IDs
-    const userIds = [...new Set(paymentMethods.map(pm => pm.user_id))]
+    const userIds = [...new Set(filteredMethods.map(pm => pm.user_id))]
 
     // Query authorized_whatsapp_numbers for WhatsApp identifiers
     const { data: whatsappData, error: waError } = await supabase
@@ -129,7 +148,7 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
     // Transform and filter the results
     const eligibleUsers: EligibleUser[] = []
 
-    for (const row of paymentMethods) {
+    for (const row of filteredMethods) {
       const userId = row.user_id
 
       // Check if user has WhatsApp authorization
@@ -164,7 +183,9 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
         locale: profile.locale || 'pt-BR',
         payment_method_id: row.id,
         payment_method_name: row.name,
-        statement_closing_day: row.statement_closing_day,
+        statement_closing_day: row.statement_closing_day ?? targetDay,
+        payment_due_day: row.payment_due_day,
+        days_before_closing: row.days_before_closing,
         monthly_budget: row.monthly_budget,
       })
     }

@@ -36,7 +36,7 @@ export async function getStatementSummaryData(
   // 1. Get payment method details (closing day, budget, name)
   const { data: paymentMethod, error: pmError } = await supabase
     .from('payment_methods')
-    .select('name, statement_closing_day, monthly_budget, credit_mode')
+    .select('name, statement_closing_day, payment_due_day, days_before_closing, monthly_budget, credit_mode')
     .eq('id', paymentMethodId)
     .eq('user_id', userId)
     .single()
@@ -49,18 +49,30 @@ export async function getStatementSummaryData(
     throw new Error('Payment method is not in Credit Mode')
   }
 
-  if (!paymentMethod.statement_closing_day) {
+  if (!paymentMethod.statement_closing_day && !paymentMethod.days_before_closing) {
     throw new Error('Statement closing date not set')
   }
 
-  // 2. Calculate statement period using database function
-  const { data: periodData, error: periodError } = await supabase.rpc(
-    'calculate_statement_period',
-    {
-      p_closing_day: paymentMethod.statement_closing_day,
-      p_reference_date: new Date().toISOString().split('T')[0]
-    }
-  )
+  // 2. Calculate statement period using new or old model
+  let periodData, periodError;
+  if (paymentMethod.days_before_closing !== null && paymentMethod.payment_due_day) {
+    ({ data: periodData, error: periodError } = await supabase.rpc(
+      'calculate_statement_period_v2',
+      {
+        p_payment_day: paymentMethod.payment_due_day,
+        p_days_before: paymentMethod.days_before_closing,
+        p_reference_date: new Date().toISOString().split('T')[0]
+      }
+    ))
+  } else {
+    ({ data: periodData, error: periodError } = await supabase.rpc(
+      'calculate_statement_period',
+      {
+        p_closing_day: paymentMethod.statement_closing_day!,
+        p_reference_date: new Date().toISOString().split('T')[0]
+      }
+    ))
+  }
 
   if (periodError || !periodData || periodData.length === 0) {
     console.error('Error calculating statement period:', periodError)
