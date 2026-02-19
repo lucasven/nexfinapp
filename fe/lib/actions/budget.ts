@@ -519,7 +519,6 @@ export async function getAllBudgetProgress(): Promise<BudgetProgress[]> {
       .select("id")
       .eq("user_id", user.id)
       .eq("credit_mode", true)
-      .not("statement_closing_day", "is", null)
       .not("monthly_budget", "is", null)
 
     if (pmError || !paymentMethods) {

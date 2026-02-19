@@ -133,7 +133,7 @@ export async function createInstallment(
     // Get payment method details for statement period calculation
     const { data: paymentMethodDetails, error: pmDetailsError } = await supabase
       .from("payment_methods")
-      .select("statement_closing_day")
+      .select("statement_closing_day, payment_due_day, days_before_closing")
       .eq("id", data.payment_method_id)
       .single()
 
@@ -207,10 +207,17 @@ export async function createInstallment(
 
         // Determine if this payment is in current/past period
         let isPastOrCurrent = false
-        if (paymentMethodDetails.statement_closing_day != null) {
+        const effectiveClosingDay = paymentMethodDetails.days_before_closing != null && paymentMethodDetails.payment_due_day != null
+          ? (() => {
+              const d = new Date()
+              d.setDate(paymentMethodDetails.payment_due_day! - paymentMethodDetails.days_before_closing!)
+              return d.getDate()
+            })()
+          : paymentMethodDetails.statement_closing_day
+        if (effectiveClosingDay != null) {
           const paymentDate = new Date(payment.due_date)
           const periodInfo = getStatementPeriodForDate(
-            paymentMethodDetails.statement_closing_day,
+            effectiveClosingDay,
             paymentDate,
             new Date()
           )
