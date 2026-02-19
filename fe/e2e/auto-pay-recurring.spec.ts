@@ -501,7 +501,7 @@ test.describe('Migration: Enable auto_pay for existing', () => {
         `SELECT auto_pay FROM recurring_transactions WHERE is_active = true AND user_id = $1`,
         [userId]
       )
-      activeOnes.forEach(row => expect(row.auto_pay).toBe(true))
+      activeOnes.forEach((row: { auto_pay: boolean }) => expect(row.auto_pay).toBe(true))
 
     } finally {
       await db.query(
