@@ -18,6 +18,7 @@ import http from 'http'
 import { handleMessage } from './handlers/core/message-handler.js'
 import { authorizeGroup } from './services/groups/group-manager.js'
 import { checkAuthorization, checkAuthorizationWithIdentifiers, checkAuthorizationFromJid } from './middleware/authorization.js'
+import { getUserTier, tierAllowsGroups } from './services/subscription/tier-service.js'
 import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
 import { initializePostHog, shutdownPostHog } from './analytics/index.js'
 import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
@@ -308,8 +309,18 @@ async function handleGroupInvite(
       : from  // Use full JID for LID accounts
     
     if (authResult.authorized && authResult.userId) {
+      // Check tier — groups require couples plan or above
+      const tier = await getUserTier(authResult.userId)
+      if (!tierAllowsGroups(tier)) {
+        console.log('[GROUP INVITE] User tier does not allow groups:', tier)
+        await sock.sendMessage(from, {
+          text: '🔒 Grupos são exclusivos para o plano *Casais* ou superior.\n\nAcesse o app para fazer upgrade: https://nexfinapp.com/pricing'
+        })
+        return
+      }
+
       console.log('[GROUP INVITE] Sender is authorized, accepting invite')
-      
+
       try {
         // Accept the group invite
         const joinResult = await sock.groupAcceptInvite(inviteCode)
