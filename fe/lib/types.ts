@@ -25,6 +25,7 @@ export interface PaymentMethod {
   credit_mode: boolean | null
   statement_closing_day: number | null
   payment_due_day: number | null
+  days_before_closing: number | null
   monthly_budget: number | null
   created_at: string
   updated_at: string

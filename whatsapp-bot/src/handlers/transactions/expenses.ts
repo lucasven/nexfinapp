@@ -366,11 +366,11 @@ export async function handleAddExpense(
     if (paymentMethodId) {
       const { data: pm } = await supabase
         .from('payment_methods')
-        .select('credit_mode, statement_closing_day, name')
+        .select('credit_mode, statement_closing_day, payment_due_day, days_before_closing, name')
         .eq('id', paymentMethodId)
         .single()
 
-      if (pm && pm.credit_mode === true && pm.statement_closing_day != null) {
+      if (pm && pm.credit_mode === true && (pm.statement_closing_day != null || pm.days_before_closing != null)) {
         // Calculate statement period for this transaction
         const { getStatementPeriodForDate, formatStatementPeriod, getStatementPeriod } = await import('../../utils/statement-period-helpers.js')
         const { getUserLocale } = await import('../../localization/i18n.js')
@@ -378,8 +378,17 @@ export async function handleAddExpense(
         const userLocale = await getUserLocale(session.userId)
         const locale = userLocale === 'en' ? 'en-US' : 'pt-BR'
 
+        // Calculate effective closing day
+        const effectiveClosingDay = pm.days_before_closing != null && pm.payment_due_day != null
+          ? (() => {
+              const d = new Date()
+              d.setDate(pm.payment_due_day! - pm.days_before_closing!)
+              return d.getDate()
+            })()
+          : pm.statement_closing_day!
+
         const periodInfo = getStatementPeriodForDate(
-          pm.statement_closing_day,
+          effectiveClosingDay,
           new Date(transactionDate),
           new Date()
         )

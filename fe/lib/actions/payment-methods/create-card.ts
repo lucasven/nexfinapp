@@ -22,6 +22,7 @@ export async function createCreditCard(data: {
   creditMode: boolean
   statementClosingDay?: number
   paymentDueDay?: number
+  daysBeforeClosing?: number
 }): Promise<{ success: boolean; paymentMethodId?: string; error?: string }> {
   const supabase = await getSupabaseServerClient()
 
@@ -85,11 +86,15 @@ export async function createCreditCard(data: {
 
     // Only add statement settings if Credit Mode
     if (data.creditMode) {
-      if (data.statementClosingDay) {
-        insertData.statement_closing_day = data.statementClosingDay
-      }
       if (data.paymentDueDay) {
         insertData.payment_due_day = data.paymentDueDay
+      }
+      if (data.daysBeforeClosing !== undefined) {
+        insertData.days_before_closing = data.daysBeforeClosing
+      }
+      // Calculate and cache statement_closing_day for backward compat
+      if (data.statementClosingDay) {
+        insertData.statement_closing_day = data.statementClosingDay
       }
     }
 

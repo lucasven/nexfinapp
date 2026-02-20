@@ -268,7 +268,7 @@ export async function handleCreateInstallment(
       // Get payment method details for statement period calculation
       const { data: paymentMethodDetails, error: pmDetailsError } = await supabase
         .from('payment_methods')
-        .select('statement_closing_day')
+        .select('statement_closing_day, payment_due_day, days_before_closing')
         .eq('id', selectedPaymentMethodId)
         .single()
 
@@ -711,7 +711,7 @@ export async function handleCardSelection(
       // Get payment method details for statement period calculation
       const { data: paymentMethodDetails, error: pmDetailsError } = await supabase
         .from('payment_methods')
-        .select('statement_closing_day')
+        .select('statement_closing_day, payment_due_day, days_before_closing')
         .eq('id', selectedCardId)
         .single()
 
