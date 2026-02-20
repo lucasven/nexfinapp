@@ -168,8 +168,8 @@ test.describe('Issue #22 — UI: Payment day + days before closing', () => {
   })
 
   test('credit card creation should ask for payment day (not closing day)', async ({ page }) => {
-    // Navigate to settings or credit cards page
-    await page.goto(`/${LOCALE}/settings`)
+    // Navigate to credit cards page (not settings - that route doesn't exist)
+    await page.goto(`/${LOCALE}/credit-cards`)
     await page.waitForLoadState('networkidle', { timeout: 15000 })
 
     // Look for "add credit card" button
@@ -189,7 +189,7 @@ test.describe('Issue #22 — UI: Payment day + days before closing', () => {
   })
 
   test('credit card edit should show payment day and days-before-closing', async ({ page }) => {
-    await page.goto(`/${LOCALE}/settings`)
+    await page.goto(`/${LOCALE}/credit-cards`)
     await page.waitForLoadState('networkidle', { timeout: 15000 })
 
     // Find a credit card and click edit
