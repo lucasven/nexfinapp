@@ -172,45 +172,48 @@ test.describe('Issue #22 — UI: Payment day + days before closing', () => {
   })
 
   test('credit card creation should ask for payment day (not closing day)', async ({ page }) => {
-    // Navigate to credit cards page (not settings - that route doesn't exist)
-    await page.goto(`/${LOCALE}/credit-cards`)
-    await page.waitForLoadState('networkidle', { timeout: 15000 })
+    // Navigate to credit cards page
+    await page.goto(`/${LOCALE}/credit-cards`, { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle', { timeout: 20000 })
 
-    // Look for "add credit card" button
-    const addButton = page.getByRole('button', { name: /adicionar.*cartão|novo.*cartão|criar.*cartão/i })
-    if (await addButton.isVisible()) {
-      await addButton.click()
-    }
+    // Look for "add credit card" button with increased timeout
+    const addButton = page.getByRole('button', { name: /adicionar.*cartão|novo.*cartão|criar.*cartão/i }).first()
+    await addButton.waitFor({ state: 'visible', timeout: 10000 })
+    await addButton.click()
+    
+    // Wait for dialog to open
+    await page.waitForTimeout(1000)
 
     // The form should ask for:
     // 1. "Dia de pagamento" (payment day) — NOT "Dia de fechamento"
     // 2. "Dias antes do pagamento para fechamento" — NOT "Dias após fechamento"
-    await expect(page.getByText(/dia de pagamento/i)).toBeVisible()
-    await expect(page.getByText(/dias antes.*fechamento|dias.*antes.*pagamento.*fecha/i)).toBeVisible()
+    await expect(page.getByText(/dia de pagamento/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/dias antes.*fechamento|dias.*antes.*pagamento.*fecha/i)).toBeVisible({ timeout: 10000 })
 
     // Should NOT show the old "Dia de fechamento da fatura" as primary input
     // (closing day should be CALCULATED, not manually entered)
   })
 
   test('credit card edit should show payment day and days-before-closing', async ({ page }) => {
-    await page.goto(`/${LOCALE}/credit-cards`)
-    await page.waitForLoadState('networkidle', { timeout: 15000 })
+    await page.goto(`/${LOCALE}/credit-cards`, { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle', { timeout: 20000 })
 
-    // Find a credit card and click edit
+    // Find a credit card and click edit with increased timeout
     const editButton = page.getByRole('button', { name: /editar|edit/i }).first()
-    if (await editButton.isVisible()) {
-      await editButton.click()
-      await page.waitForLoadState('networkidle')
+    await editButton.waitFor({ state: 'visible', timeout: 10000 })
+    await editButton.click({ timeout: 10000 })
+    
+    // Wait for dialog to open
+    await page.waitForTimeout(1000)
 
-      // Should show payment day field
-      await expect(page.getByText(/dia de pagamento/i)).toBeVisible()
+    // Should show payment day field
+    await expect(page.getByText(/dia de pagamento/i)).toBeVisible({ timeout: 10000 })
 
-      // Should show days-before-closing field
-      await expect(page.getByText(/dias antes.*fechamento/i)).toBeVisible()
+    // Should show days-before-closing field
+    await expect(page.getByText(/dias antes.*fechamento/i)).toBeVisible({ timeout: 10000 })
 
-      // Should show CALCULATED closing day (read-only preview)
-      await expect(page.getByText(/fechamento calculado|dia de fechamento.*calculado/i)).toBeVisible()
-    }
+    // Should show CALCULATED closing day (read-only preview)
+    await expect(page.getByText(/fechamento calculado|dia de fechamento.*calculado/i)).toBeVisible({ timeout: 10000 })
   })
 })
 
