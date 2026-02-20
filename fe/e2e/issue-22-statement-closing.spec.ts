@@ -187,8 +187,8 @@ test.describe('Issue #22 — UI: Payment day + days before closing', () => {
     // The form should ask for:
     // 1. "Dia de pagamento" (payment day) — NOT "Dia de fechamento"
     // 2. "Dias antes do pagamento para fechamento" — NOT "Dias após fechamento"
-    await expect(page.getByText(/dia de pagamento/i)).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText(/dias antes.*fechamento|dias.*antes.*pagamento.*fecha/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Dia de pagamento')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Dias antes do pagamento para fechamento')).toBeVisible({ timeout: 10000 })
 
     // Should NOT show the old "Dia de fechamento da fatura" as primary input
     // (closing day should be CALCULATED, not manually entered)
@@ -207,13 +207,13 @@ test.describe('Issue #22 — UI: Payment day + days before closing', () => {
     await page.waitForTimeout(1000)
 
     // Should show payment day field
-    await expect(page.getByText(/dia de pagamento/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Dia de pagamento')).toBeVisible({ timeout: 10000 })
 
-    // Should show days-before-closing field
-    await expect(page.getByText(/dias antes.*fechamento/i)).toBeVisible({ timeout: 10000 })
+    // Should show days-before-closing field  
+    await expect(page.getByText('Dias antes do pagamento para fechamento')).toBeVisible({ timeout: 10000 })
 
     // Should show CALCULATED closing day (read-only preview)
-    await expect(page.getByText(/fechamento calculado|dia de fechamento.*calculado/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Fechamento calculado')).toBeVisible({ timeout: 10000 })
   })
 })
 
