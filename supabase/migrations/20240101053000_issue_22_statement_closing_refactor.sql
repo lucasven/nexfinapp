@@ -145,10 +145,10 @@ BEGIN
   IF p_reference_date > current_closing THEN
     -- Move to next month for closing
     prev_closing := current_closing;
-    current_closing := calculate_closing_date(p_payment_day, p_days_before, p_reference_date + INTERVAL '1 month');
+    current_closing := calculate_closing_date(p_payment_day, p_days_before, (p_reference_date + INTERVAL '1 month')::DATE);
   ELSE
     -- Calculate previous closing (one month back)
-    prev_closing := calculate_closing_date(p_payment_day, p_days_before, p_reference_date - INTERVAL '1 month');
+    prev_closing := calculate_closing_date(p_payment_day, p_days_before, (p_reference_date - INTERVAL '1 month')::DATE);
   END IF;
 
   -- Period: (prev_closing + 1) to current_closing
