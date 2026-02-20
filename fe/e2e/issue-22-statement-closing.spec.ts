@@ -34,8 +34,12 @@ async function login(page: Page) {
   await page.goto(`/${LOCALE}/auth/login`)
   await page.getByRole('textbox', { name: 'E-mail' }).fill(TEST_USER.email)
   await page.getByRole('textbox', { name: 'Senha' }).fill(TEST_USER.password)
+  
+  // Click login and wait for successful navigation away from login page
   await page.getByRole('button', { name: 'Entrar' }).click()
-  await page.waitForTimeout(3000)
+  
+  // Wait for redirect to home (login page will navigate to /)
+  await page.waitForURL((url) => !url.pathname.includes('/auth/login'), { timeout: 10000 })
   await page.waitForLoadState('networkidle', { timeout: 15000 })
 }
 
