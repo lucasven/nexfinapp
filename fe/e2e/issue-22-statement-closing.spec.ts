@@ -184,6 +184,10 @@ test.describe('Issue #22 — UI: Payment day + days before closing', () => {
     // Wait for dialog to open
     await page.waitForTimeout(1000)
 
+    // Select Credit Mode (fields only appear when credit mode is selected)
+    await page.getByRole('radio', { name: 'Modo Crédito' }).click()
+    await page.waitForTimeout(500)
+
     // The form should ask for:
     // 1. "Dia de pagamento" (payment day) — NOT "Dia de fechamento"
     // 2. "Dias antes do pagamento para fechamento" — NOT "Dias após fechamento"
