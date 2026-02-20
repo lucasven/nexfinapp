@@ -231,12 +231,11 @@ test.describe('Issue #22 — Statement period uses dynamic closing', () => {
     const db = await getDbClient()
     try {
       // With payment_day=1 and days_before_closing=7:
-      // For a reference date in January 2026:
-      // - Closing: Dec 25 (31 - 7 + 1 = 25)
-      // - Period: Nov 26 to Dec 25
-      // For a reference date in March 2026:
-      // - Closing: Feb 22 (28 - 7 + 1 = 22)
-      // - Period: Jan 23 to Feb 22
+      // For a reference date in January 2026 (Jan 15):
+      // - Payment: Feb 1
+      // - Closing: Jan 25 (7 days before Feb 1)
+      // - Period: Dec 26 to Jan 25
+      // The function returns the CURRENT/ACTIVE period for the reference date
 
       // The calculate_statement_period RPC should accept the new model
       const { rows } = await db.query(
@@ -248,9 +247,13 @@ test.describe('Issue #22 — Statement period uses dynamic closing', () => {
       )
 
       expect(rows.length).toBe(1)
-      // Period end (closing) should be Dec 25 for January billing
+      // On Jan 15, the active period closes Jan 25 (for Feb 1 payment)
       const periodEnd = new Date(rows[0].period_end)
-      expect(periodEnd.getMonth()).toBe(11) // December (0-indexed)
+      const periodStart = new Date(rows[0].period_start)
+      
+      expect(periodStart.getMonth()).toBe(11) // December (0-indexed)
+      expect(periodStart.getDate()).toBe(26)
+      expect(periodEnd.getMonth()).toBe(0) // January (0-indexed)
       expect(periodEnd.getDate()).toBe(25)
 
     } finally {
