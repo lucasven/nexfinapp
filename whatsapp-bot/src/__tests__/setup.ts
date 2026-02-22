@@ -55,3 +55,30 @@ global.console = {
   warn: jest.fn(),
   error: jest.fn()
 }
+
+// Mock Supabase client - this will be used by handlers that create client directly
+// Tests can override this by calling mockSupabaseClient with different return values
+const mockEq = jest.fn()
+const mockSelect = jest.fn()
+const mockFrom = jest.fn()
+const mockOrder = jest.fn()
+
+const mockSupabaseClient = {
+  from: mockFrom,
+  select: mockSelect,
+  eq: mockEq,
+  order: mockOrder
+}
+
+// Set up default chain behavior - all functions return the client for chaining
+mockFrom.mockReturnValue(mockSupabaseClient)
+mockSelect.mockReturnValue(mockSupabaseClient)
+mockEq.mockReturnValue(mockSupabaseClient)
+mockOrder.mockResolvedValue({ data: [], error: null })
+
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: jest.fn(() => mockSupabaseClient)
+}))
+
+// Export for tests to configure
+export { mockSupabaseClient, mockFrom, mockSelect, mockEq, mockOrder }

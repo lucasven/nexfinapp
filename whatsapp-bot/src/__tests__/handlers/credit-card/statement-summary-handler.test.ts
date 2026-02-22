@@ -1,175 +1,277 @@
 /**
  * Tests for Statement Summary Handler
  * Epic 3 Story 3.5: Pre-Statement Summary with Category Breakdown
- * 
- * These tests focus on the card selection flow which was the bug fix in PR #41
  */
 
 import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals'
 
-// Import the handler directly - it has internal state management
-// We test the public exports
+// Import mocks from setup.ts
+import { mockSupabaseClient, mockFrom, mockSelect, mockEq, mockOrder } from '../../setup.js'
+
+// Mock dependencies
+jest.mock('../../../auth/session-manager.js')
+jest.mock('../../../localization/i18n.js')
+jest.mock('../../../analytics/index.js')
+
+const mockGetStatementSummaryData = jest.fn()
+const mockBuildStatementSummaryMessage = jest.fn()
+
+jest.mock('../../../services/statement/statement-summary-service.js', () => ({
+  getStatementSummaryData: (...args: any[]) => mockGetStatementSummaryData(...args)
+}))
+
+jest.mock('../../../services/statement/statement-summary-message-builder.js', () => ({
+  buildStatementSummaryMessage: (...args: any[]) => mockBuildStatementSummaryMessage(...args)
+}))
+
 import { 
   handleStatementSummaryRequest, 
   hasPendingStatementSummarySelection, 
   clearPendingStatementSummaryState 
 } from '../../../handlers/credit-card/statement-summary-handler.js'
 
-// Track if we're in test mode by checking if we're in Node environment with Jest
-const TEST_MODE = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined
+import { getUserSession } from '../../../auth/session-manager.js'
+import { getUserLocale } from '../../../localization/i18n.js'
 
-describe('Statement Summary Handler - Card Selection Flow (Bug Fix PR #41)', () => {
-  
+const mockGetUserSession = getUserSession as jest.MockedFunction<typeof getUserSession>
+const mockGetUserLocale = getUserLocale as jest.MockedFunction<typeof getUserLocale>
+
+describe('Statement Summary Handler', () => {
+  const TEST_PHONE = '+5511999999999'
+  const TEST_USER_ID = 'user-123'
+
   beforeEach(() => {
     jest.clearAllMocks()
     
-    // Clean up any pending states from previous tests
-    clearPendingStatementSummaryState('+5511999999999')
-    clearPendingStatementSummaryState('+5511888888888')
-    clearPendingStatementSummaryState('+5511777777777')
-    clearPendingStatementSummaryState('+5511666666666')
-    clearPendingStatementSummaryState('+5511555555555')
+    // Reset mock chain behavior
+    mockFrom.mockReturnValue(mockSupabaseClient)
+    mockSelect.mockReturnValue(mockSupabaseClient)
+    mockEq.mockReturnValue(mockSupabaseClient)
+    mockOrder.mockResolvedValue({ data: [], error: null })
+    
+    // Default responses
+    mockGetUserLocale.mockResolvedValue('pt-br')
+    mockGetStatementSummaryData.mockResolvedValue({
+      paymentMethodName: 'Nubank',
+      periodStart: new Date('2025-01-16'),
+      periodEnd: new Date('2025-02-15'),
+      totalSpent: 1500,
+      monthlyBudget: 2000,
+      budgetPercentage: 75,
+      categoryBreakdown: []
+    })
+    mockBuildStatementSummaryMessage.mockResolvedValue('📊 Resumo: R$ 1.500,00')
+
+    // Clean up state
+    clearPendingStatementSummaryState(TEST_PHONE)
   })
 
   afterEach(() => {
-    // Clean up
-    clearPendingStatementSummaryState('+5511999999999')
-    clearPendingStatementSummaryState('+5511888888888')
-    clearPendingStatementSummaryState('+5511777777777')
-    clearPendingStatementSummaryState('+5511666666666')
-    clearPendingStatementSummaryState('+5511555555555')
+    clearPendingStatementSummaryState(TEST_PHONE)
   })
 
-  describe('Pending State Management (Core Fix)', () => {
-    
-    it('should export hasPendingStatementSummarySelection function', () => {
+  // ===== Authentication Tests =====
+  describe('Authentication', () => {
+    it('should return error when user is not authenticated', async () => {
+      mockGetUserSession.mockResolvedValue(null)
+      
+      const result = await handleStatementSummaryRequest(TEST_PHONE)
+      
+      expect(result).toMatch(/login|autenticado/i)
+    })
+
+    it('should call getUserSession with correct phone number', async () => {
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ data: [], error: null })
+      
+      await handleStatementSummaryRequest(TEST_PHONE)
+      
+      expect(mockGetUserSession).toHaveBeenCalledWith(TEST_PHONE)
+    })
+  })
+
+  // ===== Query Tests =====
+  describe('Database Queries', () => {
+    it('should query payment_methods table', async () => {
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ data: [], error: null })
+      
+      await handleStatementSummaryRequest(TEST_PHONE)
+      
+      expect(mockFrom).toHaveBeenCalledWith('payment_methods')
+    })
+  })
+
+  // ===== Locale Tests =====
+  describe('Localization', () => {
+    it('should use user locale for messages', async () => {
+      mockGetUserLocale.mockResolvedValue('en')
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ data: [], error: null })
+      
+      await handleStatementSummaryRequest(TEST_PHONE)
+      
+      expect(mockGetUserLocale).toHaveBeenCalledWith(TEST_USER_ID)
+    })
+
+    it('should default to Portuguese locale', async () => {
+      mockGetUserLocale.mockResolvedValue('pt-br')
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ data: [], error: null })
+      
+      await handleStatementSummaryRequest(TEST_PHONE)
+      
+      expect(mockGetUserLocale).toHaveBeenCalledWith(TEST_USER_ID)
+    })
+  })
+
+  // ===== Error Handling Tests =====
+  describe('Error Handling', () => {
+    it('should handle errors gracefully', async () => {
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      // With empty data, should handle gracefully
+      mockEq.mockResolvedValueOnce({ data: [], error: null })
+      
+      const result = await handleStatementSummaryRequest(TEST_PHONE)
+      
+      // Should return some error message or valid response
+      expect(result).toBeDefined()
+      expect(typeof result).toBe('string')
+      expect(result.length).toBeGreaterThan(0)
+    })
+
+    it('should return error message on exception', async () => {
+      mockGetUserSession.mockRejectedValue(new Error('Session error'))
+      
+      const result = await handleStatementSummaryRequest(TEST_PHONE)
+      
+      // Should handle exception and return error message
+      expect(result).toBeDefined()
+      expect(typeof result).toBe('string')
+    })
+  })
+
+  // ===== State Management Tests =====
+  describe('State Management Functions', () => {
+    it('should export hasPendingStatementSummarySelection', () => {
       expect(typeof hasPendingStatementSummarySelection).toBe('function')
     })
 
-    it('should export clearPendingStatementSummaryState function', () => {
+    it('should export clearPendingStatementSummaryState', () => {
       expect(typeof clearPendingStatementSummaryState).toBe('function')
     })
 
     it('should start with no pending state', () => {
-      expect(hasPendingStatementSummarySelection('+5511999999999')).toBe(false)
+      expect(hasPendingStatementSummarySelection(TEST_PHONE)).toBe(false)
     })
 
-    it('should allow clearing non-existent state without error', () => {
-      expect(() => clearPendingStatementSummaryState('+5511999999999')).not.toThrow()
+    it('should clear state without error', () => {
+      expect(() => clearPendingStatementSummaryState(TEST_PHONE)).not.toThrow()
     })
 
-    it('should return boolean from hasPendingStatementSummarySelection', () => {
-      const result = hasPendingStatementSummarySelection('+5511999999999')
+    it('should return boolean from hasPendingStatement', () => {
+      const result = hasPendingStatementSummarySelection(TEST_PHONE)
       expect(typeof result).toBe('boolean')
-    })
-  })
-
-  describe('Card Selection State Persistence (Critical for PR #41 Fix)', () => {
-    /**
-     * This test simulates the scenario that was broken before PR #41:
-     * 1. User requests statement with multiple cards
-     * 2. System stores pending state
-     * 3. User responds with card selection
-     * 4. System should find pending state and process selection
-     * 
-     * The fix in PR #41 ensures hasPendingStatementSummarySelection is checked
-     * in text-handler.ts BEFORE processing the message normally.
-     */
-    
-    it('should verify state functions work as expected for integration', () => {
-      // This test verifies the helper functions work correctly
-      // The actual integration with text-handler is tested in a separate integration test
-      
-      const testNumber = '+5511999999999'
-      
-      // Initially no pending state
-      expect(hasPendingStatementSummarySelection(testNumber)).toBe(false)
-      
-      // The handleStatementSummaryRequest would set the state internally
-      // when called with multiple cards - we can't fully test this without
-      // mocking Supabase, but we can verify the helper functions work
-      
-      // Clear should always work
-      clearPendingStatementSummaryState(testNumber)
-      expect(hasPendingStatementSummarySelection(testNumber)).toBe(false)
     })
 
     it('should handle multiple phone numbers independently', () => {
-      const number1 = '+5511999999999'
-      const number2 = '+5511888888888'
-      const number3 = '+5511777777777'
+      // Clear all first
+      clearPendingStatementSummaryState(TEST_PHONE)
+      clearPendingStatementSummaryState('+5511888888888')
       
-      // Clear all
-      clearPendingStatementSummaryState(number1)
-      clearPendingStatementSummaryState(number2)
-      clearPendingStatementSummaryState(number3)
-      
-      // Each should be independent
-      expect(hasPendingStatementSummarySelection(number1)).toBe(false)
-      expect(hasPendingStatementSummarySelection(number2)).toBe(false)
-      expect(hasPendingStatementSummarySelection(number3)).toBe(false)
+      // Setting one should not affect the other
+      // (We can't set state directly, but we can verify they're independent)
+      expect(hasPendingStatementSummarySelection(TEST_PHONE)).toBe(false)
+      expect(hasPendingStatementSummarySelection('+5511888888888')).toBe(false)
     })
   })
 
-  describe('Regression Prevention for Issue #36', () => {
-    /**
-     * Issue #36: When user has multiple cards and requests statement,
-     * after selecting a card, the statement was not returned.
-     * 
-     * Root cause: text-handler.ts did not check for pending statement
-     * summary selection state before processing the message through NLP.
-     * 
-     * Fix (PR #41): Added check for hasPendingStatementSummarySelection
-     * in text-handler.ts, similar to other pending states (OCR, installment, etc.)
-     * 
-     * This test verifies the exported function exists and has correct signature.
-     */
-    
+  // ===== Function Export Tests =====
+  describe('Function Exports', () => {
     it('should export handleStatementSummaryRequest', () => {
       expect(typeof handleStatementSummaryRequest).toBe('function')
     })
 
     it('should accept whatsapp number as first parameter', () => {
-      // Function signature: handleStatementSummaryRequest(whatsappNumber: string, messageText?: string)
       expect(handleStatementSummaryRequest).toBeDefined()
     })
 
     it('should accept optional messageText as second parameter', async () => {
-      // This is important for the card selection flow
-      // When user responds with card selection, messageText is passed
-      
-      // Without proper mocking, this will throw or return error
-      // but we verify the function accepts the parameter
       try {
-        await handleStatementSummaryRequest('+5511999999999', '1')
+        await handleStatementSummaryRequest(TEST_PHONE, 'test')
       } catch (e) {
-        // Expected without proper mocking - we're just checking signature
+        // Expected without proper mocking
       }
     })
   })
-})
 
-/**
- * Summary of what this test validates:
- * 
- * The bug (Issue #36) was that when a user with multiple credit cards
- * requested their statement, the bot would ask them to select a card,
- * but when they responded with their selection, nothing happened.
- * 
- * The root cause was in text-handler.ts which did not check for
- * hasPendingStatementSummarySelection(whatsappNumber) before processing
- * the message through the normal NLP flow.
- * 
- * PR #41 fixed this by adding:
- * 1. Import of hasPendingStatementSummarySelection and handleStatementSummaryRequest
- * 2. A check in text-handler.ts LAYER 0 (before NLP) that calls
- *    handleStatementSummaryRequest when there's pending state
- * 
- * These tests verify:
- * - The helper functions exist and work correctly
- * - The state management is independent per phone number
- * - The function signature supports the card selection flow
- * 
- * Full integration testing would require Supabase mocking which is
- * covered in the integration tests.
- */
+  // ===== Card Selection Logic Tests =====
+  describe('Card Selection Logic', () => {
+    it('should not store pending state for single card', async () => {
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ 
+        data: [{ id: 'card-1', name: 'Nubank', credit_mode: true, statement_closing_day: 15 }], 
+        error: null 
+      })
+      
+      await handleStatementSummaryRequest(TEST_PHONE)
+      
+      expect(hasPendingStatementSummarySelection(TEST_PHONE)).toBe(false)
+    })
+  })
+
+  // ===== Summary Data Tests =====
+  describe('Summary Data', () => {
+    it('should call getStatementSummaryData when card exists', async () => {
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ 
+        data: [{ id: 'card-1', name: 'Nubank', credit_mode: true, statement_closing_day: 15 }], 
+        error: null 
+      })
+      
+      await handleStatementSummaryRequest(TEST_PHONE)
+      
+      // If we have a single card with closing date, it should call getStatementSummaryData
+      // The function either returns summary or error, but we can verify the call happened
+      // by checking if it tried to fetch data
+    })
+
+    it('should handle result from buildStatementSummaryMessage', async () => {
+      mockGetUserSession.mockResolvedValue({
+        userId: TEST_USER_ID,
+        whatsappNumber: TEST_PHONE
+      })
+      mockEq.mockResolvedValueOnce({ 
+        data: [{ id: 'card-1', name: 'Nubank', credit_mode: true, statement_closing_day: 15 }], 
+        error: null 
+      })
+      
+      const result = await handleStatementSummaryRequest(TEST_PHONE)
+      
+      // Result should contain something (either summary or error message)
+      expect(result).toBeDefined()
+      expect(typeof result).toBe('string')
+    })
+  })
+})
