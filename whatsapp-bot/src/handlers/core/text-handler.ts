@@ -15,6 +15,7 @@ import { hasPendingPayoff } from '../../services/conversation/pending-payoff-sta
 import { handleModeSelection } from '../credit-card/mode-selection.js'
 import { handleCardSelection } from '../credit-card/installment-handler.js'
 import { handlePayoffRequest } from '../credit-card/installment-payoff-handler.js'
+import { hasPendingStatementSummarySelection, handleStatementSummaryRequest } from '../credit-card/statement-summary-handler.js'
 import { handleModeSwitchWarningResponse, handleModeSwitchCardSelection } from '../credit-card/mode-switch.js'
 import { getConversationState } from '../../services/conversation/state-manager.js'
 import { getUserLocale } from '../../localization/i18n.js'
@@ -200,6 +201,25 @@ export async function handleTextMessage(
         logger.info('User has pending payoff conversation', { whatsappNumber, message })
 
         const result = await handlePayoffRequest(whatsappNumber, message)
+
+        await recordParsingMetric({
+          whatsappNumber,
+          messageText: message,
+          messageType: 'text',
+          strategyUsed: strategy,
+          success: true,
+          parseDurationMs: Date.now() - startTime
+        })
+
+        return result
+      }
+
+      // Check for statement summary card selection (Story 3.5)
+      if (hasPendingStatementSummarySelection(whatsappNumber)) {
+        strategy = 'statement_summary_card_selection'
+        logger.info('User has pending statement summary card selection', { whatsappNumber, message })
+
+        const result = await handleStatementSummaryRequest(whatsappNumber, message)
 
         await recordParsingMetric({
           whatsappNumber,
