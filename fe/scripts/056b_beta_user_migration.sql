@@ -9,6 +9,7 @@
 --   WHERE created_at < '2026-02-01'
 --     AND id NOT IN (SELECT user_id FROM subscriptions WHERE status = 'active');
 
+-- Issue #6: Use NOT EXISTS instead of ON CONFLICT DO NOTHING (no UNIQUE on user_id)
 INSERT INTO subscriptions (user_id, tier, type, status, started_at)
 SELECT
   id,
@@ -17,8 +18,9 @@ SELECT
   'active',
   now()
 FROM auth.users
-WHERE created_at < '2026-02-01'   -- users created before public launch
-  AND id NOT IN (
-    SELECT user_id FROM subscriptions WHERE status = 'active'
-  )
-ON CONFLICT DO NOTHING;
+WHERE created_at < '2026-02-01'
+  AND NOT EXISTS (
+    SELECT 1 FROM subscriptions
+    WHERE subscriptions.user_id = auth.users.id
+      AND subscriptions.status = 'active'
+  );

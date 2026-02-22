@@ -73,9 +73,18 @@ export function PricingClient({ currentTier, lifetimeSpotsRemaining }: Props) {
         Escolha o plano ideal para você
       </p>
 
-      {lifetimeSpotsRemaining > 0 && (
+      {lifetimeSpotsRemaining === 0 ? (
+        <div className="text-center mb-8 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          ❌ Vagas para acesso vitalício esgotadas! Apenas planos mensais disponíveis.
+        </div>
+      ) : lifetimeSpotsRemaining <= 10 ? (
         <div className="text-center mb-8 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
           🎉 Oferta de lançamento: apenas{' '}
+          <strong>{lifetimeSpotsRemaining} vagas</strong> restantes para acesso vitalício!
+        </div>
+      ) : (
+        <div className="text-center mb-8 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          🎉 Oferta de lançamento:{' '}
           <strong>{lifetimeSpotsRemaining} vagas</strong> para acesso vitalício!
         </div>
       )}

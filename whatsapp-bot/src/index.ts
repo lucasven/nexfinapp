@@ -314,7 +314,7 @@ async function handleGroupInvite(
       if (!tierAllowsGroups(tier)) {
         console.log('[GROUP INVITE] User tier does not allow groups:', tier)
         await sock.sendMessage(from, {
-          text: '🔒 Grupos são exclusivos para o plano *Casais* ou superior.\n\nAcesse o app para fazer upgrade: https://nexfinapp.com/pricing'
+          text: '🔒 *Ops! Você precisa fazer upgrade*\n\nGrupos do WhatsApp são exclusivos para o plano *Casais*.\n\n💰 *R$ 19,90/mês* ou *R$ 159,90 vitalício* (apenas 50 vagas!)\n\n👉 Faça upgrade agora: https://nexfinapp.com/pricing'
         })
         return
       }

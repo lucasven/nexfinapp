@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { mpPayment, mpPreApproval } from "@/lib/mercadopago"
+import crypto from "crypto"
 
 // Use service key — webhooks run outside user session
 const supabase = createClient(
@@ -8,8 +9,54 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 )
 
+const VALID_TIERS = ['whatsapp', 'couples', 'openfinance'] as const
+
+// Issue #1: Webhook signature validation
+function verifyWebhookSignature(req: NextRequest, rawBody: string): boolean {
+  const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET
+  if (!secret) {
+    console.error('[MP Webhook] MERCADO_PAGO_WEBHOOK_SECRET not configured')
+    return false
+  }
+
+  const xSignature = req.headers.get('x-signature')
+  const xRequestId = req.headers.get('x-request-id')
+
+  if (!xSignature || !xRequestId) {
+    return false
+  }
+
+  // Parse signature parts: ts=...,v1=...
+  const parts: Record<string, string> = {}
+  xSignature.split(',').forEach(part => {
+    const [key, value] = part.split('=')
+    if (key && value) parts[key.trim()] = value.trim()
+  })
+
+  const ts = parts['ts']
+  const v1 = parts['v1']
+  if (!ts || !v1) return false
+
+  // Build manifest according to MP docs
+  const dataId = new URL(req.url).searchParams.get('data.id') ?? ''
+  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`
+
+  const hmac = crypto.createHmac('sha256', secret)
+  const expectedHash = hmac.update(manifest).digest('hex')
+
+  return v1 === expectedHash
+}
+
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  const rawBody = await req.text()
+
+  // Issue #1: Validate signature
+  if (!verifyWebhookSignature(req, rawBody)) {
+    console.error('[MP Webhook] Invalid or missing signature')
+    return NextResponse.json({ error: 'invalid_signature' }, { status: 403 })
+  }
+
+  const body = JSON.parse(rawBody)
   const { type, data } = body
 
   console.log('[MP Webhook]', type, data)
@@ -22,6 +69,12 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error('[MP Webhook] Error:', err)
+
+    // Issue #11: Distinguish retriable vs non-retriable errors
+    if (err instanceof TypeError || (err instanceof Error && err.message.includes('Invalid tier'))) {
+      return NextResponse.json({ error: 'invalid_data' }, { status: 400 })
+    }
+
     return NextResponse.json({ error: 'processing_error' }, { status: 500 })
   }
 
@@ -41,12 +94,37 @@ async function handlePayment(paymentId: string) {
     return
   }
 
-  // Check lifetime purchase limit
-  const { count } = await supabase
-    .from('lifetime_purchases')
-    .select('*', { count: 'exact', head: true })
+  // Issue #7: Validate tier before insert
+  if (!VALID_TIERS.includes(tier as typeof VALID_TIERS[number])) {
+    console.error('[MP Webhook] Invalid tier in payment metadata:', tier, 'paymentId:', paymentId)
+    throw new Error(`Invalid tier: ${tier}`)
+  }
 
-  if ((count ?? 0) >= 50) {
+  // Issue #2: Idempotency — check if payment already processed
+  const { data: existing } = await supabase
+    .from('lifetime_purchases')
+    .select('id')
+    .eq('mercado_pago_payment_id', paymentId)
+    .maybeSingle()
+
+  if (existing) {
+    console.log('[MP Webhook] Payment already processed:', paymentId)
+    return
+  }
+
+  // Issue #3: purchase_number uses DB sequence (auto-incremented)
+  // No manual count needed — column has DEFAULT nextval('lifetime_purchase_number_seq')
+
+  // Check lifetime purchase limit using MAX(purchase_number)
+  const { data: maxData } = await supabase
+    .from('lifetime_purchases')
+    .select('purchase_number')
+    .order('purchase_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const currentMax = maxData?.purchase_number ?? 0
+  if (currentMax >= 50) {
     console.error('[MP Webhook] Lifetime purchases exhausted — refund required for payment:', paymentId)
     return
   }
@@ -54,8 +132,9 @@ async function handlePayment(paymentId: string) {
   await supabase.from('lifetime_purchases').insert({
     user_id: userId,
     tier,
-    purchase_number: (count ?? 0) + 1,
+    mercado_pago_payment_id: paymentId,
     amount_paid: amount,
+    // purchase_number auto-incremented via sequence
   })
 
   await supabase.from('subscriptions').insert({
@@ -78,6 +157,12 @@ async function handleSubscription(subscriptionId: string) {
   if (!userId || !tier) {
     console.error('[MP Webhook] Missing userId or tier in subscription', { userId, tier })
     return
+  }
+
+  // Issue #7: Validate tier
+  if (!VALID_TIERS.includes(tier as typeof VALID_TIERS[number])) {
+    console.error('[MP Webhook] Invalid tier in subscription reason:', sub.reason)
+    throw new Error(`Invalid tier: ${tier}`)
   }
 
   const status =

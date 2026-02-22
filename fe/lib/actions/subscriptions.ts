@@ -15,6 +15,7 @@ export interface Subscription {
   created_at: string
 }
 
+// Issue #5: Use get_user_tier RPC for correct tier (highest wins), then fetch matching subscription
 export async function getMySubscription(): Promise<{
   tier: Tier
   subscription: Subscription | null
@@ -23,23 +24,36 @@ export async function getMySubscription(): Promise<{
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { tier: 'free', subscription: null }
 
+  // 1. Get tier from RPC (highest tier wins, consistent with SQL logic)
+  const { data: tierData } = await supabase.rpc('get_user_tier', { p_user_id: user.id })
+  const tier = (tierData as Tier) ?? 'free'
+
+  if (tier === 'free') return { tier, subscription: null }
+
+  // 2. Get subscription matching that tier
   const { data } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('user_id', user.id)
+    .eq('tier', tier)
     .eq('status', 'active')
-    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  if (!data) return { tier: 'free', subscription: null }
-  return { tier: data.tier as Tier, subscription: data as Subscription }
+  return { tier, subscription: data as Subscription | null }
 }
 
+// Issue #9: Use MAX(purchase_number) instead of COUNT to handle deletions
 export async function getLifetimeSpotsRemaining(): Promise<number> {
   const supabase = await getSupabaseServerClient()
-  const { count } = await supabase
+
+  const { data } = await supabase
     .from('lifetime_purchases')
-    .select('*', { count: 'exact', head: true })
-  return Math.max(0, 50 - (count ?? 0))
+    .select('purchase_number')
+    .order('purchase_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const maxPurchaseNumber = data?.purchase_number ?? 0
+  return Math.max(0, 50 - maxPurchaseNumber)
 }
