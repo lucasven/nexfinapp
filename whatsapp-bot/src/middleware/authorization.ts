@@ -3,6 +3,7 @@ import type { UserIdentifiers, WhatsAppUserIdentifiers } from '../utils/user-ide
 import { isWhatsAppUser, isTelegramUser } from '../utils/user-identifiers.js'
 import { syncUserIdentifiers, shouldSyncIdentifiers } from '../services/user/identifier-sync.js'
 import { queueGreetingForNewUser, shouldReceiveGreeting } from '../services/onboarding/queue-greeting.js'
+import { getUserTier, tierAllowsWhatsApp, type Tier } from '../services/subscription/tier-service.js'
 
 /**
  * Telegram allowlist for development/testing
@@ -23,6 +24,7 @@ const TELEGRAM_ALLOWED_IDS: Record<string, string> = (() => {
 export interface AuthorizationResult {
   authorized: boolean
   userId?: string
+  tier?: Tier
   permissions?: {
     can_view: boolean
     can_add: boolean
@@ -128,9 +130,22 @@ export async function checkAuthorizationWithIdentifiers(
           console.error('[Authorization] Failed to queue greeting (non-critical):', greetError)
         })
 
+      // Check subscription tier — WhatsApp access requires a paid plan
+      const tier = await getUserTier(result.user_id)
+      if (!tierAllowsWhatsApp(tier)) {
+        console.log('[Authorization] User on free tier, WhatsApp access blocked')
+        return {
+          authorized: false,
+          userId: result.user_id,
+          tier,
+          error: 'whatsapp_tier_required',
+        }
+      }
+
       return {
         authorized: true,
         userId: result.user_id,
+        tier,
         permissions: result.permissions as AuthorizationResult['permissions'],
       }
     }

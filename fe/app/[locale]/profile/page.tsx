@@ -7,14 +7,25 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { ArrowLeftIcon } from "lucide-react"
 import { Link } from "@/lib/localization/link"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { getTranslations } from 'next-intl/server'
+import { getMySubscription } from "@/lib/actions/subscriptions"
+
+const TIER_LABELS: Record<string, string> = {
+  free: 'Gratuito',
+  whatsapp: 'WhatsApp',
+  couples: 'Casais',
+  openfinance: 'Open Finance',
+}
 
 export default async function ProfilePage() {
   const t = await getTranslations()
   const supabase = await getSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [{ data: { user } }, { tier, subscription }] = await Promise.all([
+    supabase.auth.getUser(),
+    getMySubscription(),
+  ])
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,16 +43,51 @@ export default async function ProfilePage() {
           <UserMenu userEmail={user?.email} displayName={user?.user_metadata?.display_name} />
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           <ProfileSettingsCard />
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Minha Assinatura</CardTitle>
+                <Badge variant={tier === 'free' ? 'secondary' : 'default'}>
+                  {TIER_LABELS[tier]}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                {subscription ? (
+                  <>
+                    <p>
+                      Tipo:{' '}
+                      <span className="font-medium text-foreground">
+                        {subscription.type === 'lifetime' ? 'Vitalício' : 'Mensal'}
+                      </span>
+                    </p>
+                    {subscription.expires_at && (
+                      <p>
+                        Próxima cobrança:{' '}
+                        <span className="font-medium text-foreground">
+                          {new Date(subscription.expires_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p>Você está no plano gratuito.</p>
+                )}
+              </div>
+              <Button asChild size="sm" variant="outline" className="w-full">
+                <Link href="/pricing">Ver planos</Link>
+              </Button>
+            </CardContent>
+          </Card>
           <WhatsAppNumbersCard />
         </div>
 
         <div className="mt-6">
           <AuthorizedGroupsCard />
         </div>
-
-        {/* CreditCardSettingsWrapper removed - settings now only in /credit-cards */}
 
         <div className="mt-8">
           <AccountSettingsSection
@@ -54,4 +100,3 @@ export default async function ProfilePage() {
     </div>
   )
 }
-
