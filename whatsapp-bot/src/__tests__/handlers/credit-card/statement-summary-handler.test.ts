@@ -212,11 +212,12 @@ describe('Statement Summary Handler', () => {
     })
 
     it('should accept optional messageText as second parameter', async () => {
-      try {
-        await handleStatementSummaryRequest(TEST_PHONE, 'test')
-      } catch (e) {
-        // Expected without proper mocking
-      }
+      mockGetUserSession.mockResolvedValue(null)
+
+      const result = await handleStatementSummaryRequest(TEST_PHONE, 'test message')
+
+      expect(result).toBeDefined()
+      expect(typeof result).toBe('string')
     })
   })
 
@@ -245,16 +246,14 @@ describe('Statement Summary Handler', () => {
         userId: TEST_USER_ID,
         whatsappNumber: TEST_PHONE
       })
-      mockEq.mockResolvedValueOnce({ 
-        data: [{ id: 'card-1', name: 'Nubank', credit_mode: true, statement_closing_day: 15 }], 
-        error: null 
+      mockOrder.mockResolvedValueOnce({
+        data: [{ id: 'card-1', name: 'Nubank', credit_mode: true, statement_closing_day: 15 }],
+        error: null
       })
-      
+
       await handleStatementSummaryRequest(TEST_PHONE)
-      
-      // If we have a single card with closing date, it should call getStatementSummaryData
-      // The function either returns summary or error, but we can verify the call happened
-      // by checking if it tried to fetch data
+
+      expect(mockGetStatementSummaryData).toHaveBeenCalledWith(TEST_USER_ID, 'card-1')
     })
 
     it('should handle result from buildStatementSummaryMessage', async () => {

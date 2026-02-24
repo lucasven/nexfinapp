@@ -2,7 +2,7 @@
  * Tests for OCR Confirmation Handler
  */
 
-import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals'
+import { describe, it, expect, beforeEach, beforeAll, afterAll, jest, afterEach } from '@jest/globals'
 
 jest.mock('../../../auth/session-manager.js')
 jest.mock('../../../services/monitoring/logger.js')
@@ -24,6 +24,14 @@ const mockHandleAddExpense = handleAddExpense as jest.MockedFunction<typeof hand
 describe('OCR Confirmation Handler', () => {
   const TEST_PHONE = '+5511999999999'
   const TEST_USER_ID = 'user-123'
+
+  beforeAll(() => {
+    jest.useFakeTimers()
+  })
+
+  afterAll(() => {
+    jest.useRealTimers()
+  })
 
   beforeEach(() => {
     jest.clearAllMocks()
