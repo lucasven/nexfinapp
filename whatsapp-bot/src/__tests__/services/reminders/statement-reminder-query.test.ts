@@ -51,6 +51,8 @@ describe('Statement Reminder Query', () => {
             id: 'pm-1',
             name: 'Nubank Roxinho',
             statement_closing_day: 5,
+            payment_due_day: null,
+            days_before_closing: null,
             monthly_budget: 2000,
             credit_mode: true,
             user_id: 'user-1'
@@ -118,6 +120,8 @@ describe('Statement Reminder Query', () => {
             id: 'pm-1',
             name: 'Card 1',
             statement_closing_day: 1,
+            payment_due_day: null,
+            days_before_closing: null,
             monthly_budget: 2000,
             credit_mode: true,
             user_id: 'user-1'
