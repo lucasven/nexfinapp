@@ -85,11 +85,18 @@ export async function getEligibleUsersForStatementReminders(): Promise<EligibleU
     // Old model: use statement_closing_day directly
     const filteredMethods = paymentMethods.filter(pm => {
       if (pm.days_before_closing !== null && pm.payment_due_day !== null) {
-        // New model: calculate closing date dynamically
-        const paymentDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), pm.payment_due_day)
-        const closingDate = new Date(paymentDate)
-        closingDate.setDate(closingDate.getDate() - pm.days_before_closing)
-        return closingDate.getDate() === targetDay && closingDate.getMonth() === targetDate.getMonth()
+        // New model: calculate closing date dynamically.
+        // The payment day may fall in the next month relative to targetDate (e.g. closing Jan 31,
+        // payment due Feb 10), so try both current and next month for payment_due_day.
+        for (let monthOffset = 0; monthOffset <= 1; monthOffset++) {
+          const paymentDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + monthOffset, pm.payment_due_day)
+          const closingDate = new Date(paymentDate)
+          closingDate.setDate(closingDate.getDate() - pm.days_before_closing)
+          if (closingDate.toDateString() === targetDate.toDateString()) {
+            return true
+          }
+        }
+        return false
       } else if (pm.statement_closing_day !== null) {
         // Old model: fixed closing day
         return pm.statement_closing_day === targetDay

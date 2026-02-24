@@ -59,8 +59,8 @@ export async function updateCreditCardSettings(data: {
     }
 
     if (data.paymentDueDay !== undefined) {
-      if (data.paymentDueDay < 1 || data.paymentDueDay > 60) {
-        return { success: false, error: 'Payment due day must be between 1 and 60' }
+      if (data.paymentDueDay < 1 || data.paymentDueDay > 31) {
+        return { success: false, error: 'Payment due day must be between 1 and 31' }
       }
     }
 

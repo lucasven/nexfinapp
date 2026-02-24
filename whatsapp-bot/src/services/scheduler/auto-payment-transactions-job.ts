@@ -22,7 +22,6 @@ import {
   type TransactionCreationResult,
 } from './transaction-creator.js'
 import { getStatementPeriod } from '../../utils/statement-period-helpers.js'
-import { addDays } from 'date-fns'
 
 export interface EligibleStatement {
   payment_method_id: string
@@ -197,9 +196,14 @@ async function processStatement(statement: EligibleStatement): Promise<Transacti
     })
 
     // Step 3: Calculate payment due date
-    // closing_date + payment_due_day
+    // payment_due_day is now day-of-month (1–31), not an offset from closing.
+    // Find the occurrence of payment_due_day in the same month as closingDate;
+    // if that day has already passed (≤ closingDate), use the following month.
     const closingDate = period.periodEnd
-    const paymentDueDate = addDays(closingDate, statement.payment_due_day)
+    const sameMonthDue = new Date(closingDate.getFullYear(), closingDate.getMonth(), statement.payment_due_day)
+    const paymentDueDate = sameMonthDue > closingDate
+      ? sameMonthDue
+      : new Date(closingDate.getFullYear(), closingDate.getMonth() + 1, statement.payment_due_day)
 
     logger.debug('Payment due date calculated', {
       userId: statement.user_id,

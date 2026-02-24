@@ -382,7 +382,7 @@ export async function getBudgetProgress(
     }
 
     // Require either new model (payment_due_day + days_before_closing) or old model (statement_closing_day)
-    if (!paymentMethod.days_before_closing && !paymentMethod.statement_closing_day) {
+    if (paymentMethod.days_before_closing === null && !paymentMethod.statement_closing_day) {
       return null
     }
 
