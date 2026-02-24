@@ -5,69 +5,81 @@ import makeWASocket, {
   WASocket,
   proto,
   downloadMediaMessage,
-  Browsers
-} from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
-import qrcodeTerminal from 'qrcode-terminal'
-import QRCode from 'qrcode'
-import pino from 'pino'
-import * as dotenv from 'dotenv'
-import * as fs from 'fs'
-import * as path from 'path'
-import http from 'http'
-import { handleMessage } from './handlers/core/message-handler.js'
-import { authorizeGroup } from './services/groups/group-manager.js'
-import { checkAuthorization, checkAuthorizationWithIdentifiers, checkAuthorizationFromJid } from './middleware/authorization.js'
-import { processOnboardingMessages } from './services/onboarding/greeting-sender.js'
-import { initializePostHog, shutdownPostHog } from './analytics/index.js'
-import { extractUserIdentifiers, formatIdentifiersForLog } from './utils/user-identifiers.js'
-import { startScheduler, stopScheduler } from './scheduler.js'
-import { initTelegram, handleTelegramWebhook, shutdownTelegram } from './telegram-integration.js'
+  Browsers,
+} from "@whiskeysockets/baileys";
+import { Boom } from "@hapi/boom";
+import qrcodeTerminal from "qrcode-terminal";
+import QRCode from "qrcode";
+import pino from "pino";
+import * as dotenv from "dotenv";
+import * as fs from "fs";
+import * as path from "path";
+import http from "http";
+import { handleMessage } from "./handlers/core/message-handler.js";
+import { authorizeGroup } from "./services/groups/group-manager.js";
+import {
+  checkAuthorization,
+  checkAuthorizationWithIdentifiers,
+  checkAuthorizationFromJid,
+} from "./middleware/authorization.js";
+import { processOnboardingMessages } from "./services/onboarding/greeting-sender.js";
+import { initializePostHog, shutdownPostHog } from "./analytics/index.js";
+import {
+  extractUserIdentifiers,
+  formatIdentifiersForLog,
+} from "./utils/user-identifiers.js";
+import { startScheduler, stopScheduler } from "./scheduler.js";
+import {
+  initTelegram,
+  handleTelegramWebhook,
+  shutdownTelegram,
+} from "./telegram-integration.js";
 
-dotenv.config()
+dotenv.config();
 
 // Initialize PostHog analytics
-initializePostHog()
+initializePostHog();
 
-const logger = pino({ level: 'silent' }) // Silent by default, only show our custom logs
-const authStatePath = process.env.AUTH_STATE_PATH || './auth-state'
+const logger = pino({ level: "silent" }); // Silent by default, only show our custom logs
+const authStatePath = process.env.AUTH_STATE_PATH || "./auth-state";
 
 // Ensure auth state directory exists
 if (!fs.existsSync(authStatePath)) {
-  fs.mkdirSync(authStatePath, { recursive: true })
+  fs.mkdirSync(authStatePath, { recursive: true });
 }
 
 // Store socket instance to prevent multiple connections
-let sock: WASocket | null = null
+let sock: WASocket | null = null;
 
 // Store current QR code for web endpoint
-let currentQR: string | null = null
+let currentQR: string | null = null;
 
 // Track WhatsApp connection state for health endpoint
-let whatsappConnectionState: 'disconnected' | 'connecting' | 'connected' = 'disconnected'
-let whatsappConnectedAt: Date | null = null
-let whatsappLastError: string | null = null
+let whatsappConnectionState: "disconnected" | "connecting" | "connected" =
+  "disconnected";
+let whatsappConnectedAt: Date | null = null;
+let whatsappLastError: string | null = null;
 
 // Message tracking for health endpoint (48h window for NexFinApp)
-let lastMessageAt: Date | null = null
-let messageCountLast48h: number = 0
-let messageCountResetAt: number = Date.now()
+let lastMessageAt: Date | null = null;
+let messageCountLast48h: number = 0;
+let messageCountResetAt: number = Date.now();
 
 function trackMessageReceived(): void {
-  lastMessageAt = new Date()
-  
+  lastMessageAt = new Date();
+
   // Reset counter if more than 48h since last reset
-  const now = Date.now()
+  const now = Date.now();
   if (now - messageCountResetAt > 48 * 60 * 60 * 1000) {
-    messageCountLast48h = 0
-    messageCountResetAt = now
+    messageCountLast48h = 0;
+    messageCountResetAt = now;
   }
-  
-  messageCountLast48h++
+
+  messageCountLast48h++;
 }
 
 async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState(authStatePath)
+  const { state, saveCreds } = await useMultiFileAuthState(authStatePath);
 
   sock = makeWASocket({
     auth: state,
@@ -75,166 +87,183 @@ async function connectToWhatsApp() {
     // getMessage is required for message retries
     getMessage: async (key) => {
       return {
-        conversation: 'Mensagem não disponível'
-      }
+        conversation: "Mensagem não disponível",
+      };
     },
     // Use appropriate browser - matches official examples
-    browser: Browsers.macOS('Desktop'),
+    browser: Browsers.macOS("Desktop"),
     // Don't print QR in terminal - we handle it manually
     printQRInTerminal: false,
-    version: [2, 3000, 1028401180] as [number, number, number],
-  })
+    version: [2, 3000, 1033893291] as [number, number, number],
+  });
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
       // Store QR code for web endpoint
-      currentQR = qr
-      
-      console.log('\n📱 ═══════════════════════════════════════════════')
-      console.log('   QR CODE DISPONÍVEL PARA AUTENTICAÇÃO')
-      console.log('═══════════════════════════════════════════════\n')
-      console.log(`   🌐 Acesse: http://localhost:${PORT}/qr`)
-      console.log(`   🌐 Ou no Railway: https://seu-app.railway.app/qr\n`)
-      
+      currentQR = qr;
+
+      console.log("\n📱 ═══════════════════════════════════════════════");
+      console.log("   QR CODE DISPONÍVEL PARA AUTENTICAÇÃO");
+      console.log("═══════════════════════════════════════════════\n");
+      console.log(`   🌐 Acesse: http://localhost:${PORT}/qr`);
+      console.log(`   🌐 Ou no Railway: https://seu-app.railway.app/qr\n`);
+
       // Also print to terminal for local development
-      qrcodeTerminal.generate(qr, { small: true })
-      
-      console.log('\n📱 Passos para conectar:')
-      console.log('   1. Acesse o link /qr no navegador')
-      console.log('   2. Abra WhatsApp no seu celular')
-      console.log('   3. Toque em Mais opções (⋮) > Aparelhos conectados')
-      console.log('   4. Toque em Conectar um aparelho')
-      console.log('   5. Escaneie o QR code da página web\n')
+      qrcodeTerminal.generate(qr, { small: true });
+
+      console.log("\n📱 Passos para conectar:");
+      console.log("   1. Acesse o link /qr no navegador");
+      console.log("   2. Abra WhatsApp no seu celular");
+      console.log("   3. Toque em Mais opções (⋮) > Aparelhos conectados");
+      console.log("   4. Toque em Conectar um aparelho");
+      console.log("   5. Escaneie o QR code da página web\n");
     }
 
-    if (connection === 'open') {
+    if (connection === "open") {
       // Clear QR code when connected
-      currentQR = null
+      currentQR = null;
       // Track connection state
-      whatsappConnectionState = 'connected'
-      whatsappConnectedAt = new Date()
-      whatsappLastError = null
+      whatsappConnectionState = "connected";
+      whatsappConnectedAt = new Date();
+      whatsappLastError = null;
     }
 
-    if (connection === 'connecting') {
-      whatsappConnectionState = 'connecting'
+    if (connection === "connecting") {
+      whatsappConnectionState = "connecting";
     }
 
-    if (connection === 'close') {
-      whatsappConnectionState = 'disconnected'
-      whatsappLastError = lastDisconnect?.error?.message || 'Unknown error'
+    if (connection === "close") {
+      whatsappConnectionState = "disconnected";
+      whatsappLastError = lastDisconnect?.error?.message || "Unknown error";
       // According to Baileys docs, check the error properly
-      const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
-      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
-      
-      console.log('\n❌ Conexão fechada devido a:', lastDisconnect?.error)
-      console.log('   Status Code:', statusCode)
-      console.log('   Deve reconectar?', shouldReconnect)
-      
+      const shouldReconnect =
+        (lastDisconnect?.error as Boom)?.output?.statusCode !==
+        DisconnectReason.loggedOut;
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+
+      console.log("\n❌ Conexão fechada devido a:", lastDisconnect?.error);
+      console.log("   Status Code:", statusCode);
+      console.log("   Deve reconectar?", shouldReconnect);
+
       // Only reconnect if not logged out
       if (shouldReconnect) {
-        console.log('   ⏳ Reconectando...')
+        console.log("   ⏳ Reconectando...");
         setTimeout(() => {
-          connectToWhatsApp()
-        }, 3000)
+          connectToWhatsApp();
+        }, 3000);
       } else {
-        console.log('\n🛑 Desconectado. Não reconectando.')
-        console.log('   Para reconectar, delete auth-state e reinicie:')
-        console.log('   rm -rf whatsapp-bot/auth-state && npm run dev\n')
+        console.log("\n🛑 Desconectado. Não reconectando.");
+        console.log("   Para reconectar, delete auth-state e reinicie:");
+        console.log("   rm -rf whatsapp-bot/auth-state && npm run dev\n");
       }
-    } else if (connection === 'open') {
-      console.log('\n✅ ═══════════════════════════════════════════════')
-      console.log('   CONECTADO AO WHATSAPP!')
-      console.log('   ═══════════════════════════════════════════════')
-      console.log('   🤖 Bot pronto para receber mensagens!')
-      console.log('   📱 Envie "ajuda" para testar\n')
+    } else if (connection === "open") {
+      console.log("\n✅ ═══════════════════════════════════════════════");
+      console.log("   CONECTADO AO WHATSAPP!");
+      console.log("   ═══════════════════════════════════════════════");
+      console.log("   🤖 Bot pronto para receber mensagens!");
+      console.log('   📱 Envie "ajuda" para testar\n');
 
       // Start polling for onboarding messages every 30 seconds
       setInterval(async () => {
-        processOnboardingMessages(sock)
-      }, 30000) // 30 seconds
+        processOnboardingMessages(sock);
+      }, 30000); // 30 seconds
 
       // Process immediately on connection
-      processOnboardingMessages(sock)
-      console.log('   📬 Serviço de mensagens de onboarding iniciado\n')
+      processOnboardingMessages(sock);
+      console.log("   📬 Serviço de mensagens de onboarding iniciado\n");
     }
-  })
+  });
 
   // Save credentials whenever they update
-  sock.ev.on('creds.update', saveCreds)
+  sock.ev.on("creds.update", saveCreds);
 
   // Listen for new messages
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
     // Only process new messages (not from history)
-    if (type !== 'notify') return
+    if (type !== "notify") return;
 
     for (const message of messages) {
       // Ignore messages from myself (IMPORTANT: prevents infinite loops!)
       //if (message.key.fromMe) continue
-      
+
       // Ignore messages without content
-      if (!message.message) continue
+      if (!message.message) continue;
 
       // Track message for health metrics
-      trackMessageReceived()
+      trackMessageReceived();
 
-      await handleIncomingMessage(sock!, message)
+      await handleIncomingMessage(sock!, message);
     }
-  })
+  });
 
   // Listen for group participant updates (when bot is added/removed from groups)
-  sock.ev.on('group-participants.update', async (update) => {
+  sock.ev.on("group-participants.update", async (update) => {
     try {
-      if (!sock) return // Safety check
-      
-      const { id: groupJid, participants, action } = update
-      
-      console.log('[group-participants.update] Event:', { groupJid, action, participants: participants.length })
-      
+      if (!sock) return; // Safety check
+
+      const { id: groupJid, participants, action } = update;
+
+      console.log("[group-participants.update] Event:", {
+        groupJid,
+        action,
+        participants: participants.length,
+      });
+
       // Check if bot was added to a group
-      if (action === 'add') {
+      if (action === "add") {
         // Get bot's JID
-        const botJid = sock.user?.id
-        if (!botJid) return
-        
+        const botJid = sock.user?.id;
+        if (!botJid) return;
+
         // Check if the bot is one of the added participants
-        const botWasAdded = participants.some(p => {
-          const participantNumber = p.split('@')[0].split(':')[0]
-          const botNumber = botJid.split(':')[0]
-          return participantNumber === botNumber
-        })
-        
+        const botWasAdded = participants.some((p) => {
+          const participantNumber = p.split("@")[0].split(":")[0];
+          const botNumber = botJid.split(":")[0];
+          return participantNumber === botNumber;
+        });
+
         if (botWasAdded) {
-          console.log('[group-participants.update] Bot was added to group:', groupJid)
-          
+          console.log(
+            "[group-participants.update] Bot was added to group:",
+            groupJid,
+          );
+
           try {
             // Get group metadata
-            const groupMetadata = await sock.groupMetadata(groupJid)
-            const groupName = groupMetadata.subject
-            
+            const groupMetadata = await sock.groupMetadata(groupJid);
+            const groupName = groupMetadata.subject;
+
             // Get the person who added the bot (author of the action)
-            const adderJid = update.author
+            const adderJid = update.author;
             if (!adderJid) {
-              console.log('[group-participants.update] No author found for add action')
-              return
+              console.log(
+                "[group-participants.update] No author found for add action",
+              );
+              return;
             }
-            
-            console.log('[group-participants.update] Bot added by JID:', adderJid)
+
+            console.log(
+              "[group-participants.update] Bot added by JID:",
+              adderJid,
+            );
 
             // Check if the person who added the bot is authorized
             // Use checkAuthorizationFromJid to properly handle LIDs (Business accounts)
-            const authResult = await checkAuthorizationFromJid(adderJid)
+            const authResult = await checkAuthorizationFromJid(adderJid);
 
             // Extract identifier for group authorization (phone if available, otherwise JID)
-            const [localPart, domain] = adderJid.split('@')
-            const adderIdentifier = domain === 's.whatsapp.net'
-              ? localPart.split(':')[0]  // Phone number
-              : adderJid  // Use full JID for LID accounts
+            const [localPart, domain] = adderJid.split("@");
+            const adderIdentifier =
+              domain === "s.whatsapp.net"
+                ? localPart.split(":")[0] // Phone number
+                : adderJid; // Use full JID for LID accounts
 
             if (authResult.authorized && authResult.userId) {
-              console.log('[group-participants.update] Adder is authorized, auto-authorizing group')
+              console.log(
+                "[group-participants.update] Adder is authorized, auto-authorizing group",
+              );
 
               // Auto-authorize the group
               const result = await authorizeGroup(
@@ -242,44 +271,59 @@ async function connectToWhatsApp() {
                 groupName,
                 authResult.userId,
                 adderIdentifier,
-                true // auto_authorized = true
-              )
-              
+                true, // auto_authorized = true
+              );
+
               if (result.success) {
                 // Send welcome message to the group
                 await sock.sendMessage(groupJid, {
-                  text: `✅ Grupo autorizado automaticamente!\n\n` +
-                        `Olá! Fui adicionado por um usuário autorizado.\n` +
-                        `Todos no grupo podem usar minhas funcionalidades.\n\n` +
-                        `Envie "ajuda" para ver o que posso fazer! 🤖`
-                })
-                console.log('[group-participants.update] Group auto-authorized successfully')
+                  text:
+                    `✅ Grupo autorizado automaticamente!\n\n` +
+                    `Olá! Fui adicionado por um usuário autorizado.\n` +
+                    `Todos no grupo podem usar minhas funcionalidades.\n\n` +
+                    `Envie "ajuda" para ver o que posso fazer! 🤖`,
+                });
+                console.log(
+                  "[group-participants.update] Group auto-authorized successfully",
+                );
               } else {
-                console.error('[group-participants.update] Failed to authorize group:', result.error)
+                console.error(
+                  "[group-participants.update] Failed to authorize group:",
+                  result.error,
+                );
               }
             } else {
-              console.log('[group-participants.update] Adder is not authorized, group not auto-authorized')
-              
+              console.log(
+                "[group-participants.update] Adder is not authorized, group not auto-authorized",
+              );
+
               // Send message explaining authorization is needed
               await sock.sendMessage(groupJid, {
-                text: `⚠️ Olá! Fui adicionado a este grupo, mas ainda não estou autorizado.\n\n` +
-                      `Para me usar aqui, a pessoa que me adicionou precisa:\n` +
-                      `1. Me enviar uma mensagem direta primeiro\n` +
-                      `2. Fazer login com: login: email senha\n` +
-                      `3. Então eu poderei funcionar neste grupo automaticamente.`
-              })
+                text:
+                  `⚠️ Olá! Fui adicionado a este grupo, mas ainda não estou autorizado.\n\n` +
+                  `Para me usar aqui, a pessoa que me adicionou precisa:\n` +
+                  `1. Me enviar uma mensagem direta primeiro\n` +
+                  `2. Fazer login com: login: email senha\n` +
+                  `3. Então eu poderei funcionar neste grupo automaticamente.`,
+              });
             }
           } catch (error) {
-            console.error('[group-participants.update] Error processing group add:', error)
+            console.error(
+              "[group-participants.update] Error processing group add:",
+              error,
+            );
           }
         }
       }
     } catch (error) {
-      console.error('[group-participants.update] Error in event handler:', error)
+      console.error(
+        "[group-participants.update] Error in event handler:",
+        error,
+      );
     }
-  })
+  });
 
-  return sock
+  return sock;
 }
 
 async function handleGroupInvite(
@@ -287,209 +331,232 @@ async function handleGroupInvite(
   from: string,
   inviteCode: string,
   groupJid?: string | null,
-  groupName?: string | null
+  groupName?: string | null,
 ): Promise<void> {
   try {
-    console.log('[GROUP INVITE] Processing invite:', {
+    console.log("[GROUP INVITE] Processing invite:", {
       inviteCode,
       groupJid,
       groupName,
-      from
-    })
+      from,
+    });
 
     // Check if sender is authorized using multi-identifier lookup
     // This properly handles LIDs (Business accounts) that don't expose phone numbers
-    const authResult = await checkAuthorizationFromJid(from)
+    const authResult = await checkAuthorizationFromJid(from);
 
     // Extract identifier for group authorization (phone if available, otherwise JID)
-    const [localPart, domain] = from.split('@')
-    const senderIdentifier = domain === 's.whatsapp.net'
-      ? localPart.split(':')[0]  // Phone number
-      : from  // Use full JID for LID accounts
-    
+    const [localPart, domain] = from.split("@");
+    const senderIdentifier =
+      domain === "s.whatsapp.net"
+        ? localPart.split(":")[0] // Phone number
+        : from; // Use full JID for LID accounts
+
     if (authResult.authorized && authResult.userId) {
-      console.log('[GROUP INVITE] Sender is authorized, accepting invite')
-      
+      console.log("[GROUP INVITE] Sender is authorized, accepting invite");
+
       try {
         // Accept the group invite
-        const joinResult = await sock.groupAcceptInvite(inviteCode)
-        console.log('[GROUP INVITE] Joined group:', joinResult)
-        
+        const joinResult = await sock.groupAcceptInvite(inviteCode);
+        console.log("[GROUP INVITE] Joined group:", joinResult);
+
         // Get group JID (prefer from invite message, fallback to join result)
-        const groupJidFinal = groupJid || joinResult
+        const groupJidFinal = groupJid || joinResult;
         if (!groupJidFinal) {
-          throw new Error('Could not determine group JID')
+          throw new Error("Could not determine group JID");
         }
-        
+
         // Fetch group metadata to get the name if not provided
-        let finalGroupName = groupName
+        let finalGroupName = groupName;
         if (!finalGroupName) {
           try {
-            const metadata = await sock.groupMetadata(groupJidFinal)
-            finalGroupName = metadata.subject
+            const metadata = await sock.groupMetadata(groupJidFinal);
+            finalGroupName = metadata.subject;
           } catch (error) {
-            console.error('[GROUP INVITE] Error fetching group metadata:', error)
-            finalGroupName = 'Unknown Group'
+            console.error(
+              "[GROUP INVITE] Error fetching group metadata:",
+              error,
+            );
+            finalGroupName = "Unknown Group";
           }
         }
-        
+
         // Auto-authorize the group
         const result = await authorizeGroup(
           groupJidFinal,
-          finalGroupName || 'Unknown Group',
+          finalGroupName || "Unknown Group",
           authResult.userId,
           senderIdentifier,
-          true // auto_authorized = true
-        )
-        
+          true, // auto_authorized = true
+        );
+
         if (result.success) {
           // Send confirmation to user
           await sock.sendMessage(from, {
-            text: `✅ Entrei no grupo "${finalGroupName}" e autorizei automaticamente!\n\n` +
-                  `O grupo agora está ativo e todos podem usar minhas funcionalidades.\n\n` +
-                  `Você pode gerenciar grupos autorizados no app web em Profile Settings.`
-          })
-          
+            text:
+              `✅ Entrei no grupo "${finalGroupName}" e autorizei automaticamente!\n\n` +
+              `O grupo agora está ativo e todos podem usar minhas funcionalidades.\n\n` +
+              `Você pode gerenciar grupos autorizados no app web em Profile Settings.`,
+          });
+
           // Send welcome message to the group
           try {
             await sock.sendMessage(groupJidFinal, {
-              text: `👋 Olá! Fui convidado e estou pronto para ajudar!\n\n` +
-                    `Todos no grupo podem usar minhas funcionalidades.\n` +
-                    `Envie "ajuda" para ver o que posso fazer! 🤖`
-            })
+              text:
+                `👋 Olá! Fui convidado e estou pronto para ajudar!\n\n` +
+                `Todos no grupo podem usar minhas funcionalidades.\n` +
+                `Envie "ajuda" para ver o que posso fazer! 🤖`,
+            });
           } catch (error) {
-            console.error('[GROUP INVITE] Error sending welcome message:', error)
+            console.error(
+              "[GROUP INVITE] Error sending welcome message:",
+              error,
+            );
           }
-          
-          console.log('[GROUP INVITE] Group auto-authorized successfully')
+
+          console.log("[GROUP INVITE] Group auto-authorized successfully");
         } else {
           await sock.sendMessage(from, {
-            text: `⚠️ Entrei no grupo mas houve um erro ao autorizar: ${result.error}`
-          })
+            text: `⚠️ Entrei no grupo mas houve um erro ao autorizar: ${result.error}`,
+          });
         }
       } catch (error) {
-        console.error('[GROUP INVITE] Error accepting invite:', error)
+        console.error("[GROUP INVITE] Error accepting invite:", error);
         await sock.sendMessage(from, {
-          text: `❌ Erro ao aceitar o convite do grupo.\n\n` +
-                `Possíveis causas:\n` +
-                `• Link expirado ou inválido\n` +
-                `• Grupo cheio\n` +
-                `• Você não tem permissão para adicionar membros\n\n` +
-                `Tente gerar um novo link de convite.`
-        })
+          text:
+            `❌ Erro ao aceitar o convite do grupo.\n\n` +
+            `Possíveis causas:\n` +
+            `• Link expirado ou inválido\n` +
+            `• Grupo cheio\n` +
+            `• Você não tem permissão para adicionar membros\n\n` +
+            `Tente gerar um novo link de convite.`,
+        });
       }
     } else {
-      console.log('[GROUP INVITE] Sender not authorized')
+      console.log("[GROUP INVITE] Sender not authorized");
       await sock.sendMessage(from, {
-        text: `⚠️ Você precisa estar autenticado primeiro!\n\n` +
-              `Envie: login: seuemail@email.com suasenha\n\n` +
-              `Depois disso, envie o convite novamente e eu entrarei automaticamente.`
-      })
+        text:
+          `⚠️ Você precisa estar autenticado primeiro!\n\n` +
+          `Envie: login: seuemail@email.com suasenha\n\n` +
+          `Depois disso, envie o convite novamente e eu entrarei automaticamente.`,
+      });
     }
   } catch (error) {
-    console.error('[GROUP INVITE] Error processing invite:', error)
+    console.error("[GROUP INVITE] Error processing invite:", error);
     await sock.sendMessage(from, {
-      text: `❌ Erro ao processar convite do grupo. Tente novamente.`
-    })
+      text: `❌ Erro ao processar convite do grupo. Tente novamente.`,
+    });
   }
 }
 
 async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
   try {
-    const from = message.key.remoteJid
-    if (!from) return
+    const from = message.key.remoteJid;
+    if (!from) return;
 
-    const isGroup = from.endsWith('@g.us')
-    
+    const isGroup = from.endsWith("@g.us");
+
     // Get group metadata if this is a group message
-    let groupName: string | null = null
-    let groupJid: string | null = null
-    
+    let groupName: string | null = null;
+    let groupJid: string | null = null;
+
     if (isGroup) {
-      groupJid = from
+      groupJid = from;
       try {
-        const groupMetadata = await sock.groupMetadata(from)
-        groupName = groupMetadata.subject
+        const groupMetadata = await sock.groupMetadata(from);
+        groupName = groupMetadata.subject;
         //console.log('[DEBUG] Group metadata:', { groupJid, groupName })
       } catch (error) {
-        console.error('Error fetching group metadata:', error)
+        console.error("Error fetching group metadata:", error);
       }
     }
-    
+
     // Extract message text - handle different message types
-    let messageText = ''
-    const msg = message.message
-    
+    let messageText = "";
+    const msg = message.message;
+
     if (msg?.conversation) {
-      messageText = msg.conversation
+      messageText = msg.conversation;
     } else if (msg?.extendedTextMessage?.text) {
-      messageText = msg.extendedTextMessage.text
+      messageText = msg.extendedTextMessage.text;
     } else if (msg?.imageMessage?.caption) {
-      messageText = msg.imageMessage.caption || ''
+      messageText = msg.imageMessage.caption || "";
     } else if (msg?.videoMessage?.caption) {
-      messageText = msg.videoMessage.caption || ''
+      messageText = msg.videoMessage.caption || "";
     }
-    
+
     // Check for group invite in DMs (both as groupInviteMessage and as text URL)
     if (!isGroup) {
       // Check for groupInviteMessage object first
       if (msg?.groupInviteMessage) {
-        const inviteCode = msg.groupInviteMessage.inviteCode
-        const groupJidInvite = msg.groupInviteMessage.groupJid
-        const groupNameInvite = msg.groupInviteMessage.groupName
-        
+        const inviteCode = msg.groupInviteMessage.inviteCode;
+        const groupJidInvite = msg.groupInviteMessage.groupJid;
+        const groupNameInvite = msg.groupInviteMessage.groupName;
+
         if (inviteCode) {
-          await handleGroupInvite(sock, from, inviteCode, groupJidInvite, groupNameInvite)
-          return
+          await handleGroupInvite(
+            sock,
+            from,
+            inviteCode,
+            groupJidInvite,
+            groupNameInvite,
+          );
+          return;
         }
       }
-      
+
       // Check for WhatsApp group invite URL in text
-      const groupInviteRegex = /https?:\/\/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/
-      const match = messageText.match(groupInviteRegex)
-      
+      const groupInviteRegex = /https?:\/\/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/;
+      const match = messageText.match(groupInviteRegex);
+
       if (match && match[1]) {
-        const inviteCode = match[1]
-        console.log('[GROUP INVITE URL] Detected invite link in text:', inviteCode)
-        await handleGroupInvite(sock, from, inviteCode)
-        return // Don't process as regular message
+        const inviteCode = match[1];
+        console.log(
+          "[GROUP INVITE URL] Detected invite link in text:",
+          inviteCode,
+        );
+        await handleGroupInvite(sock, from, inviteCode);
+        return; // Don't process as regular message
       }
     }
 
     // Extract quoted message if present (for reply context)
-    let quotedMessage: string | undefined
+    let quotedMessage: string | undefined;
     if (msg?.extendedTextMessage?.contextInfo?.quotedMessage) {
-      const quoted = msg.extendedTextMessage.contextInfo.quotedMessage
+      const quoted = msg.extendedTextMessage.contextInfo.quotedMessage;
       if (quoted.conversation) {
-        quotedMessage = quoted.conversation
+        quotedMessage = quoted.conversation;
       } else if (quoted.extendedTextMessage?.text) {
-        quotedMessage = quoted.extendedTextMessage.text
+        quotedMessage = quoted.extendedTextMessage.text;
       }
     }
 
     // Extract all user identifiers using new multi-identifier system
-    const userIdentifiers = extractUserIdentifiers(message, isGroup)
+    const userIdentifiers = extractUserIdentifiers(message, isGroup);
 
     // Use phone number for backward compatibility (if available)
     // Otherwise, use the full JID as the identifier
-    const sender = userIdentifiers.phoneNumber || userIdentifiers.jid
+    const sender = userIdentifiers.phoneNumber || userIdentifiers.jid;
 
     // Log identifier info for debugging (sanitized)
-    console.log('[User Identification]', formatIdentifiersForLog(userIdentifiers))
+    console.log(
+      "[User Identification]",
+      formatIdentifiersForLog(userIdentifiers),
+    );
 
     // Check for image
-    const hasImage = !!msg?.imageMessage
-    let imageBuffer: Buffer | undefined
+    const hasImage = !!msg?.imageMessage;
+    let imageBuffer: Buffer | undefined;
 
     if (hasImage) {
       try {
-        imageBuffer = await downloadMediaMessage(
-          message, 
-          'buffer', 
-          {}
-        ) as Buffer
+        imageBuffer = (await downloadMediaMessage(
+          message,
+          "buffer",
+          {},
+        )) as Buffer;
       } catch (error) {
-        console.error('Error downloading image:', error)
+        console.error("Error downloading image:", error);
       }
     }
 
@@ -503,8 +570,8 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       hasImage,
       imageBuffer,
       quotedMessage,
-      userIdentifiers // Pass full identifiers for multi-identifier support
-    })
+      userIdentifiers, // Pass full identifiers for multi-identifier support
+    });
 
     // Send response if we have one
     if (response) {
@@ -512,73 +579,81 @@ async function handleIncomingMessage(sock: WASocket, message: WAMessage) {
       if (Array.isArray(response)) {
         // Send each message individually with a small delay
         for (let i = 0; i < response.length; i++) {
-          await sock.sendMessage(from, { 
-            text: response[i] 
-          }, {
-            quoted: i === 0 ? message : undefined // Only quote the first message
-          })
-          
+          await sock.sendMessage(
+            from,
+            {
+              text: response[i],
+            },
+            {
+              quoted: i === 0 ? message : undefined, // Only quote the first message
+            },
+          );
+
           // Small delay between messages to avoid rate limiting
           if (i < response.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
       } else {
         // Single message
-        await sock.sendMessage(from, { 
-          text: response 
-        }, {
-          quoted: message // Quote the original message
-        })
+        await sock.sendMessage(
+          from,
+          {
+            text: response,
+          },
+          {
+            quoted: message, // Quote the original message
+          },
+        );
       }
     }
   } catch (error) {
-    console.error('Error handling message:', error)
-    
+    console.error("Error handling message:", error);
+
     // Try to send error message
     try {
       if (message.key.remoteJid) {
-        await sock.sendMessage(message.key.remoteJid, { 
-          text: '❌ Ocorreu um erro ao processar sua mensagem. Tente novamente.' 
-        })
+        await sock.sendMessage(message.key.remoteJid, {
+          text: "❌ Ocorreu um erro ao processar sua mensagem. Tente novamente.",
+        });
       }
     } catch (sendError) {
-      console.error('Error sending error message:', sendError)
+      console.error("Error sending error message:", sendError);
     }
   }
 }
 
 // HTTP server for health checks and API endpoints
 // Start this FIRST so Railway health checks pass even if WhatsApp connection fails
-const PORT = parseInt(process.env.PORT || '3001', 10)
+const PORT = parseInt(process.env.PORT || "3001", 10);
 
 const server = http.createServer(async (req: any, res: any) => {
   // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-  
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
   // Handle preflight
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200)
-    res.end()
-    return
+  if (req.method === "OPTIONS") {
+    res.writeHead(200);
+    res.end();
+    return;
   }
 
   // Health check endpoint
-  if (req.url === '/health') {
-    const uptime = whatsappConnectedAt 
-      ? Math.floor((Date.now() - whatsappConnectedAt.getTime()) / 1000) 
-      : 0
+  if (req.url === "/health") {
+    const uptime = whatsappConnectedAt
+      ? Math.floor((Date.now() - whatsappConnectedAt.getTime()) / 1000)
+      : 0;
     const lastMessageAgeSeconds = lastMessageAt
       ? Math.floor((Date.now() - lastMessageAt.getTime()) / 1000)
-      : -1
-    
+      : -1;
+
     const healthStatus = {
-      status: whatsappConnectionState === 'connected' ? 'ok' : 'degraded',
+      status: whatsappConnectionState === "connected" ? "ok" : "degraded",
       timestamp: new Date().toISOString(),
-      service: 'nexfinapp',
-      telegram: !!process.env.TELEGRAM_BOT_TOKEN ? 'enabled' : 'disabled',
+      service: "nexfinapp",
+      telegram: !!process.env.TELEGRAM_BOT_TOKEN ? "enabled" : "disabled",
       whatsapp: {
         state: whatsappConnectionState,
         connectedAt: whatsappConnectedAt?.toISOString() || null,
@@ -586,25 +661,25 @@ const server = http.createServer(async (req: any, res: any) => {
         lastError: whatsappLastError,
         lastMessageAt: lastMessageAt?.toISOString() || null,
         lastMessageAgeSeconds,
-        messagesLast48h: messageCountLast48h
-      }
-    }
-    
-    const statusCode = whatsappConnectionState === 'connected' ? 200 : 503
-    res.writeHead(statusCode, { 
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    })
-    res.end(JSON.stringify(healthStatus))
-    return
+        messagesLast48h: messageCountLast48h,
+      },
+    };
+
+    const statusCode = whatsappConnectionState === "connected" ? 200 : 503;
+    res.writeHead(statusCode, {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    });
+    res.end(JSON.stringify(healthStatus));
+    return;
   }
 
   // QR Code endpoint
-  if (req.url === '/qr') {
+  if (req.url === "/qr") {
     if (currentQR) {
       try {
-        const qrDataURL = await QRCode.toDataURL(currentQR, { width: 400 })
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        const qrDataURL = await QRCode.toDataURL(currentQR, { width: 400 });
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(`
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -727,7 +802,7 @@ const server = http.createServer(async (req: any, res: any) => {
     <div class="emoji">📱</div>
     <h1>WhatsApp QR Code</h1>
     <p class="subtitle">Escaneie para conectar o bot</p>
-    
+
     <div class="qr-container">
       <img src="${qrDataURL}" alt="QR Code do WhatsApp" />
     </div>
@@ -790,14 +865,14 @@ const server = http.createServer(async (req: any, res: any) => {
   </script>
 </body>
 </html>
-        `)
+        `);
       } catch (error) {
-        console.error('Error generating QR code:', error)
-        res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end('<html><body><h1>❌ Erro ao gerar QR Code</h1></body></html>')
+        console.error("Error generating QR code:", error);
+        res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+        res.end("<html><body><h1>❌ Erro ao gerar QR Code</h1></body></html>");
       }
     } else {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(`
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -882,111 +957,117 @@ const server = http.createServer(async (req: any, res: any) => {
   </script>
 </body>
 </html>
-      `)
+      `);
     }
-    return
+    return;
   }
 
   // Clear auth endpoint
-  if (req.url === '/clear-auth' && req.method === 'DELETE') {
+  if (req.url === "/clear-auth" && req.method === "DELETE") {
     try {
       // Check if auth state directory exists
       if (fs.existsSync(authStatePath)) {
         // Remove all files in the directory
-        const files = fs.readdirSync(authStatePath)
+        const files = fs.readdirSync(authStatePath);
         for (const file of files) {
-          fs.unlinkSync(path.join(authStatePath, file))
+          fs.unlinkSync(path.join(authStatePath, file));
         }
-        
-        console.log('\n🗑️  Auth state cleared. Reconnecting...\n')
-        
+
+        console.log("\n🗑️  Auth state cleared. Reconnecting...\n");
+
         // Close current connection if exists
         if (sock) {
-          sock.end(undefined)
-          sock = null
+          sock.end(undefined);
+          sock = null;
         }
-        
+
         // Reconnect after a short delay
         setTimeout(() => {
-          connectToWhatsApp().catch(error => {
-            console.error('⚠️ Error reconnecting:', error)
-          })
-        }, 2000)
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ 
-          success: true, 
-          message: 'Autenticação limpa com sucesso. Reconectando...' 
-        }))
+          connectToWhatsApp().catch((error) => {
+            console.error("⚠️ Error reconnecting:", error);
+          });
+        }, 2000);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            success: true,
+            message: "Autenticação limpa com sucesso. Reconectando...",
+          }),
+        );
       } else {
-        res.writeHead(404, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ 
-          success: false, 
-          error: 'Pasta de autenticação não encontrada' 
-        }))
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            success: false,
+            error: "Pasta de autenticação não encontrada",
+          }),
+        );
       }
     } catch (error) {
-      console.error('Error clearing auth state:', error)
-      res.writeHead(500, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ 
-        success: false, 
-        error: 'Erro ao limpar autenticação: ' + (error as Error).message 
-      }))
+      console.error("Error clearing auth state:", error);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          success: false,
+          error: "Erro ao limpar autenticação: " + (error as Error).message,
+        }),
+      );
     }
-    return
+    return;
   }
 
   // Telegram webhook
   if (handleTelegramWebhook(req, res)) {
-    return
+    return;
   }
 
   // 404 for other routes
-  res.writeHead(404, { 'Content-Type': 'text/plain' })
-  res.end('Not Found')
-})
+  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.end("Not Found");
+});
 
 // Only start the HTTP server in non-test environments
 // This prevents port conflicts and resource usage during test runs
-if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🏥 HTTP server running on port ${PORT}`)
-    console.log(`   Health check: http://0.0.0.0:${PORT}/health`)
+if (process.env.NODE_ENV !== "test") {
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🏥 HTTP server running on port ${PORT}`);
+    console.log(`   Health check: http://0.0.0.0:${PORT}/health`);
 
     // Start the cron scheduler
-    startScheduler()
+    startScheduler();
 
     // Start Telegram bot (if configured)
-    initTelegram().catch(error => {
-      console.error('⚠️ Error starting Telegram bot:', error)
-      console.error('   WhatsApp bot will still start normally')
-    })
+    initTelegram().catch((error) => {
+      console.error("⚠️ Error starting Telegram bot:", error);
+      console.error("   WhatsApp bot will still start normally");
+    });
 
     // Start the WhatsApp bot AFTER the health check server is ready
-    connectToWhatsApp().catch(error => {
-      console.error('⚠️ Error starting WhatsApp bot:', error)
-      console.error('   Health check server is still running')
+    connectToWhatsApp().catch((error) => {
+      console.error("⚠️ Error starting WhatsApp bot:", error);
+      console.error("   Health check server is still running");
       // Don't exit - keep the server running for health checks
-    })
-  })
+    });
+  });
 }
 
 // Graceful shutdown handling
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down gracefully...')
-  stopScheduler()
-  await shutdownTelegram()
-  await shutdownPostHog()
-  process.exit(0)
-})
+process.on("SIGINT", async () => {
+  console.log("\n🛑 Shutting down gracefully...");
+  stopScheduler();
+  await shutdownTelegram();
+  await shutdownPostHog();
+  process.exit(0);
+});
 
-process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down gracefully...')
-  stopScheduler()
-  await shutdownTelegram()
-  await shutdownPostHog()
-  process.exit(0)
-})
+process.on("SIGTERM", async () => {
+  console.log("\n🛑 Shutting down gracefully...");
+  stopScheduler();
+  await shutdownTelegram();
+  await shutdownPostHog();
+  process.exit(0);
+});
 
 /**
  * Get the Baileys socket instance
@@ -994,6 +1075,5 @@ process.on('SIGTERM', async () => {
  * @returns The Baileys socket instance or null if not connected
  */
 export function getSocket(): WASocket | null {
-  return sock
+  return sock;
 }
-
