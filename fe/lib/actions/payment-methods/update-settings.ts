@@ -24,6 +24,7 @@ export async function updateCreditCardSettings(data: {
   name?: string
   statementClosingDay?: number
   paymentDueDay?: number
+  daysBeforeClosing?: number
   monthlyBudget?: number
 }): Promise<{ success: boolean; error?: string }> {
   const supabase = await getSupabaseServerClient()
@@ -58,8 +59,8 @@ export async function updateCreditCardSettings(data: {
     }
 
     if (data.paymentDueDay !== undefined) {
-      if (data.paymentDueDay < 1 || data.paymentDueDay > 60) {
-        return { success: false, error: 'Payment due day must be between 1 and 60' }
+      if (data.paymentDueDay < 1 || data.paymentDueDay > 31) {
+        return { success: false, error: 'Payment due day must be between 1 and 31' }
       }
     }
 
@@ -72,7 +73,7 @@ export async function updateCreditCardSettings(data: {
     // Get current payment method to verify ownership and prerequisites
     const { data: paymentMethod, error: fetchError } = await supabase
       .from('payment_methods')
-      .select('id, name, type, credit_mode, statement_closing_day, payment_due_day, monthly_budget')
+      .select('id, name, type, credit_mode, statement_closing_day, payment_due_day, days_before_closing, monthly_budget')
       .eq('id', data.paymentMethodId)
       .eq('user_id', user.id)
       .single()
@@ -98,14 +99,17 @@ export async function updateCreditCardSettings(data: {
     }
 
     if (data.paymentDueDay !== undefined) {
-      // Verify Credit Mode and closing day for payment due day
       if (!paymentMethod.credit_mode) {
         return { success: false, error: 'Payment due date only available for Credit Mode cards' }
       }
-      if (!paymentMethod.statement_closing_day && !data.statementClosingDay) {
-        return { success: false, error: 'Statement closing day must be set before setting payment due day' }
-      }
       updateData.payment_due_day = data.paymentDueDay
+    }
+
+    if (data.daysBeforeClosing !== undefined) {
+      if (!paymentMethod.credit_mode) {
+        return { success: false, error: 'Days before closing only available for Credit Mode cards' }
+      }
+      updateData.days_before_closing = data.daysBeforeClosing
     }
 
     if (data.monthlyBudget !== undefined) {

@@ -176,22 +176,24 @@ export function CreditCardsList({ creditCards }: CreditCardsListProps) {
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">{t('creditCards.closingDay')}</p>
                           <p className="text-sm font-medium">
-                            {card.statement_closing_day
-                              ? t('creditCards.day', { day: card.statement_closing_day })
-                              : t('creditCards.notConfigured')}
+                            {card.days_before_closing !== null && card.payment_due_day
+                              ? (() => {
+                                  const today = new Date()
+                                  const pDate = new Date(today.getFullYear(), today.getMonth(), card.payment_due_day)
+                                  const cDate = new Date(pDate)
+                                  cDate.setDate(cDate.getDate() - card.days_before_closing!)
+                                  return t('creditCards.day', { day: cDate.getDate() })
+                                })()
+                              : card.statement_closing_day
+                                ? t('creditCards.day', { day: card.statement_closing_day })
+                                : t('creditCards.notConfigured')}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">{t('creditCards.dueDay')}</p>
                           <p className="text-sm font-medium">
-                            {card.payment_due_day && card.statement_closing_day
-                              ? formatPaymentDueDate(
-                                  calculatePaymentDueDate(
-                                    card.statement_closing_day,
-                                    card.payment_due_day
-                                  ).nextDueDate,
-                                  locale
-                                )
+                            {card.payment_due_day
+                              ? t('creditCards.day', { day: card.payment_due_day })
                               : t('creditCards.notConfigured')}
                           </p>
                         </div>

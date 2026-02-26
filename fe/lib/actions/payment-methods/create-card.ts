@@ -14,7 +14,7 @@ import { AnalyticsEvent } from "@/lib/analytics/events"
  * @param data.name - Name of the credit card
  * @param data.creditMode - true = Credit Mode, false = Simple Mode
  * @param data.statementClosingDay - Day of month statement closes (1-31), only for Credit Mode
- * @param data.paymentDueDay - Days after closing when payment is due (1-60), only for Credit Mode
+ * @param data.paymentDueDay - Day of month when payment is due (1-31), only for Credit Mode
  * @returns Promise with success status and created card ID
  */
 export async function createCreditCard(data: {
@@ -22,6 +22,7 @@ export async function createCreditCard(data: {
   creditMode: boolean
   statementClosingDay?: number
   paymentDueDay?: number
+  daysBeforeClosing?: number
 }): Promise<{ success: boolean; paymentMethodId?: string; error?: string }> {
   const supabase = await getSupabaseServerClient()
 
@@ -48,12 +49,8 @@ export async function createCreditCard(data: {
 
   // Validate payment due day if provided
   if (data.paymentDueDay !== undefined) {
-    if (data.paymentDueDay < 1 || data.paymentDueDay > 60) {
-      return { success: false, error: 'Payment due day must be between 1 and 60' }
-    }
-    // Payment due day requires closing day
-    if (!data.statementClosingDay) {
-      return { success: false, error: 'Statement closing day is required when setting payment due day' }
+    if (data.paymentDueDay < 1 || data.paymentDueDay > 31) {
+      return { success: false, error: 'Payment due day must be between 1 and 31' }
     }
   }
 
@@ -85,11 +82,15 @@ export async function createCreditCard(data: {
 
     // Only add statement settings if Credit Mode
     if (data.creditMode) {
-      if (data.statementClosingDay) {
-        insertData.statement_closing_day = data.statementClosingDay
-      }
       if (data.paymentDueDay) {
         insertData.payment_due_day = data.paymentDueDay
+      }
+      if (data.daysBeforeClosing !== undefined) {
+        insertData.days_before_closing = data.daysBeforeClosing
+      }
+      // Calculate and cache statement_closing_day for backward compat
+      if (data.statementClosingDay) {
+        insertData.statement_closing_day = data.statementClosingDay
       }
     }
 

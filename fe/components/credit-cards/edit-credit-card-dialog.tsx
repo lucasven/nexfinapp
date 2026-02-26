@@ -60,6 +60,8 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
   const [cardName, setCardName] = useState(card.name)
   const [creditMode, setCreditMode] = useState(card.credit_mode || false)
   const [closingDay, setClosingDay] = useState<number | null>(card.statement_closing_day)
+  const [paymentDay, setPaymentDay] = useState<number | null>(card.payment_due_day)
+  const [daysBeforeClosing, setDaysBeforeClosing] = useState<string>(card.days_before_closing?.toString() || '')
   const [dueDay, setDueDay] = useState<string>(card.payment_due_day?.toString() || '')
   const [monthlyBudget, setMonthlyBudget] = useState<string>(card.monthly_budget?.toString() || '')
 
@@ -85,6 +87,8 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
       setCardName(card.name)
       setCreditMode(card.credit_mode || false)
       setClosingDay(card.statement_closing_day)
+      setPaymentDay(card.payment_due_day)
+      setDaysBeforeClosing(card.days_before_closing?.toString() || '')
       setDueDay(card.payment_due_day?.toString() || '')
       setMonthlyBudget(card.monthly_budget?.toString() || '')
       setNameError('')
@@ -162,11 +166,12 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
       const dueDayNum = parseInt(dueDay)
       const budgetNum = parseFloat(monthlyBudget)
 
+      const daysBeforeNum = parseInt(daysBeforeClosing)
       const result = await updateCreditCardSettings({
         paymentMethodId: card.id,
         name: trimmedName !== card.name ? trimmedName : undefined,
-        statementClosingDay: creditMode && closingDay ? closingDay : undefined,
-        paymentDueDay: creditMode && closingDay && !isNaN(dueDayNum) ? dueDayNum : undefined,
+        paymentDueDay: creditMode && paymentDay ? paymentDay : undefined,
+        daysBeforeClosing: creditMode && paymentDay && !isNaN(daysBeforeNum) ? daysBeforeNum : undefined,
         monthlyBudget: creditMode && !isNaN(budgetNum) ? budgetNum : undefined,
       })
 
@@ -195,15 +200,15 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
         setShowWarningDialog(false)
 
         // Update other settings
-        const dueDayNum = parseInt(dueDay)
+        const daysBeforeNum = parseInt(daysBeforeClosing)
         const budgetNum = parseFloat(monthlyBudget)
         const trimmedName = cardName.trim()
 
         const result = await updateCreditCardSettings({
           paymentMethodId: card.id,
           name: trimmedName !== card.name ? trimmedName : undefined,
-          statementClosingDay: creditMode && closingDay ? closingDay : undefined,
-          paymentDueDay: creditMode && closingDay && !isNaN(dueDayNum) ? dueDayNum : undefined,
+          paymentDueDay: creditMode && paymentDay ? paymentDay : undefined,
+          daysBeforeClosing: creditMode && paymentDay && !isNaN(daysBeforeNum) ? daysBeforeNum : undefined,
           monthlyBudget: creditMode && !isNaN(budgetNum) ? budgetNum : undefined,
         })
 
@@ -313,16 +318,16 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
                   <Label className="text-base font-medium">Configurações de Fatura</Label>
                 </div>
 
-                {/* Closing Day */}
+                {/* Payment Day (NEW) */}
                 <div className="space-y-2">
-                  <Label>{t('closing_day_label')}</Label>
+                  <Label>{tDue('paymentDay')}</Label>
                   <Select
-                    value={closingDay?.toString() || ''}
-                    onValueChange={(value) => setClosingDay(parseInt(value))}
+                    value={paymentDay?.toString() || ''}
+                    onValueChange={(value) => setPaymentDay(parseInt(value))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t('closing_day_select_placeholder')}>
-                        {closingDay ? `${tCommon('day')} ${closingDay}` : ''}
+                      <SelectValue placeholder={tDue('paymentDayPlaceholder')}>
+                        {paymentDay ? `${tCommon('day')} ${paymentDay}` : ''}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -333,58 +338,38 @@ export function EditCreditCardDialog({ card, open, onOpenChange, onSuccess }: Ed
                       ))}
                     </SelectContent>
                   </Select>
-
-                  {/* Period Preview */}
-                  {closingDay && (
-                    <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
-                      {isFetchingPreview ? (
-                        <p className="text-sm text-muted-foreground">{tCommon('loading')}</p>
-                      ) : periodPreview ? (
-                        <>
-                          <p className="text-sm font-medium">
-                            {tSettings('currentPeriod', {
-                              start: format(periodPreview.periodStart, dateFormat, { locale: dateLocale }),
-                              end: format(periodPreview.periodEnd, dateFormat, { locale: dateLocale })
-                            })}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {tSettings('nextClosing', {
-                              date: format(periodPreview.nextClosing, dateFormat, { locale: dateLocale }),
-                              days: periodPreview.daysUntilClosing
-                            })}
-                          </p>
-                        </>
-                      ) : null}
-                    </div>
-                  )}
                 </div>
 
-                {/* Due Day */}
+                {/* Days Before Closing (NEW) */}
                 <div className="space-y-2">
-                  <Label>{t('due_day_label')}</Label>
+                  <Label>{tDue('daysBeforeClosing')}</Label>
                   <Input
                     type="number"
-                    min={1}
-                    max={60}
-                    value={dueDay}
-                    onChange={(e) => setDueDay(e.target.value)}
-                    placeholder={t('due_day_placeholder')}
-                    disabled={!closingDay}
+                    min={0}
+                    max={30}
+                    value={daysBeforeClosing}
+                    onChange={(e) => setDaysBeforeClosing(e.target.value)}
+                    placeholder={tDue('daysBeforeClosingPlaceholder')}
+                    disabled={!paymentDay}
                   />
-                  {!closingDay && (
+                  {!paymentDay && (
                     <div className="flex items-start gap-2 text-xs text-muted-foreground">
                       <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
                       <p>{tDue('closingDayRequired')}</p>
                     </div>
                   )}
 
-                  {/* Due Date Preview */}
-                  {closingDay && dueDay && dueDatePreview && (
-                    <div className="rounded-lg border bg-muted/50 p-3">
+                  {/* Calculated Closing Preview */}
+                  {paymentDay && daysBeforeClosing && (
+                    <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
                       <p className="text-sm font-medium">
-                        {tDue('nextPayment', {
-                          date: format(dueDatePreview, dateFormat, { locale: dateLocale })
-                        })}
+                        {tDue('calculatedClosing')}: {(() => {
+                          const today = new Date()
+                          const pDate = new Date(today.getFullYear(), today.getMonth(), paymentDay)
+                          const cDate = new Date(pDate)
+                          cDate.setDate(cDate.getDate() - parseInt(daysBeforeClosing))
+                          return format(cDate, dateFormat, { locale: dateLocale })
+                        })()}
                       </p>
                     </div>
                   )}

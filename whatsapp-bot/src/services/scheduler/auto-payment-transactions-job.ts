@@ -22,7 +22,6 @@ import {
   type TransactionCreationResult,
 } from './transaction-creator.js'
 import { getStatementPeriod } from '../../utils/statement-period-helpers.js'
-import { addDays } from 'date-fns'
 
 export interface EligibleStatement {
   payment_method_id: string
@@ -30,6 +29,7 @@ export interface EligibleStatement {
   payment_method_name: string
   statement_closing_day: number
   payment_due_day: number
+  days_before_closing: number | null
   user_locale: 'pt-BR' | 'en'
 }
 
@@ -71,7 +71,8 @@ async function getEligibleStatements(): Promise<EligibleStatement[]> {
 
   logger.debug('Querying eligible statements', { closingDay })
 
-  // Query for eligible payment methods first
+  // Query for eligible payment methods
+  // With new model, we calculate which cards closed yesterday dynamically
   const { data: paymentMethods, error: pmError } = await supabase
     .from('payment_methods')
     .select(`
@@ -79,10 +80,10 @@ async function getEligibleStatements(): Promise<EligibleStatement[]> {
       user_id,
       name,
       statement_closing_day,
-      payment_due_day
+      payment_due_day,
+      days_before_closing
     `)
     .eq('credit_mode', true)
-    .eq('statement_closing_day', closingDay)
     .not('payment_due_day', 'is', null)
 
   if (pmError) {
@@ -94,8 +95,27 @@ async function getEligibleStatements(): Promise<EligibleStatement[]> {
     return []
   }
 
+  // Filter cards that closed yesterday
+  const filteredMethods = paymentMethods.filter(pm => {
+    if (pm.days_before_closing !== null && pm.payment_due_day !== null) {
+      // New model: calculate closing date
+      const paymentDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), pm.payment_due_day)
+      const closingDate = new Date(paymentDate)
+      closingDate.setDate(closingDate.getDate() - pm.days_before_closing)
+      return closingDate.getDate() === closingDay
+    } else if (pm.statement_closing_day !== null) {
+      // Old model
+      return pm.statement_closing_day === closingDay
+    }
+    return false
+  })
+
+  if (filteredMethods.length === 0) {
+    return []
+  }
+
   // Get unique user IDs
-  const userIds = [...new Set(paymentMethods.map(pm => pm.user_id))]
+  const userIds = [...new Set(filteredMethods.map(pm => pm.user_id))]
 
   // Query user_profiles for locale
   const { data: profiles, error: profileError } = await supabase
@@ -115,12 +135,13 @@ async function getEligibleStatements(): Promise<EligibleStatement[]> {
   }
 
   // Transform data to expected format
-  return paymentMethods.map((pm) => ({
+  return filteredMethods.map((pm) => ({
     payment_method_id: pm.id,
     user_id: pm.user_id,
     payment_method_name: pm.name || 'Cartão de Crédito',
-    statement_closing_day: pm.statement_closing_day,
-    payment_due_day: pm.payment_due_day,
+    statement_closing_day: pm.statement_closing_day ?? closingDay,
+    payment_due_day: pm.payment_due_day!,
+    days_before_closing: pm.days_before_closing,
     user_locale: (localeMap.get(pm.user_id) || 'pt-BR') as 'pt-BR' | 'en',
   }))
 }
@@ -175,9 +196,14 @@ async function processStatement(statement: EligibleStatement): Promise<Transacti
     })
 
     // Step 3: Calculate payment due date
-    // closing_date + payment_due_day
+    // payment_due_day is now day-of-month (1–31), not an offset from closing.
+    // Find the occurrence of payment_due_day in the same month as closingDate;
+    // if that day has already passed (≤ closingDate), use the following month.
     const closingDate = period.periodEnd
-    const paymentDueDate = addDays(closingDate, statement.payment_due_day)
+    const sameMonthDue = new Date(closingDate.getFullYear(), closingDate.getMonth(), statement.payment_due_day)
+    const paymentDueDate = sameMonthDue > closingDate
+      ? sameMonthDue
+      : new Date(closingDate.getFullYear(), closingDate.getMonth() + 1, statement.payment_due_day)
 
     logger.debug('Payment due date calculated', {
       userId: statement.user_id,

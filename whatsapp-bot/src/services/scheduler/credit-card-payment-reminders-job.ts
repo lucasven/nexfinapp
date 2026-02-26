@@ -73,6 +73,8 @@ async function processBatch(reminders: EligiblePaymentReminder[]): Promise<SendR
           whatsapp_number: reminder.whatsapp_number,
           locale: reminder.user_locale,
           statement_closing_day: reminder.statement_closing_day,
+          payment_due_day: reminder.payment_due_day,
+          days_before_closing: null,
           monthly_budget: null,
         },
         message
